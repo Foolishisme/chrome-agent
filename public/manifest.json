@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Browser Agent MVP",
+  "version": "0.1.0",
+  "description": "JD shopping browser agent MVP with side panel, runtime orchestration, and Gemini-based decisions.",
+  "permissions": ["sidePanel", "tabs", "activeTab"],
+  "host_permissions": ["https://www.jd.com/*", "https://search.jd.com/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Open Browser Agent MVP"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.jd.com/*", "https://search.jd.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
