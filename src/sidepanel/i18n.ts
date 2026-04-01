@@ -16,15 +16,16 @@ type MessageBundle = {
   runtime: string;
   step: string;
   items: string;
+  rawItems: string;
   session: string;
   timelineTitle: string;
   timelineWaiting: string;
   timelinePlan: string;
-  timelineLatest: string;
   timelineAction: string;
   timelineResult: string;
   timelineExpected: string;
   timelineSteps: string;
+  timelineSnapshot: string;
   resultOk: string;
   resultFail: string;
   resultsTitle: string;
@@ -49,9 +50,17 @@ type MessageBundle = {
   searchBox: string;
   searchButton: string;
   resultList: string;
+  queryTitle: string;
+  querySource: string;
+  queryCategory: string;
+  queryBudget: string;
+  queryTopK: string;
+  querySearch: string;
+  filterTitle: string;
+  filterBudget: string;
+  filterFinal: string;
   recoveryTitle: string;
   recoveryEmpty: string;
-  timelineSnapshot: string;
   emptyValue: string;
   statusLabels: Record<RuntimeStatus, string>;
 };
@@ -60,7 +69,7 @@ const messages: Record<Locale, MessageBundle> = {
   "zh-CN": {
     appTitle: "浏览器 Agent MVP",
     heroTitle: "浏览器 Agent MVP",
-    heroDescription: "固定演示链路：从京东首页搜索目标商品，提取结果并给出简短推荐。",
+    heroDescription: "规则主线：解析目标、编译搜索词、提取结果、过滤候选，再由模型生成最终推荐。",
     sessionTitle: "任务会话",
     goalPlaceholder: "输入购物目标",
     start: "开始",
@@ -69,16 +78,17 @@ const messages: Record<Locale, MessageBundle> = {
     statusTitle: "运行状态",
     runtime: "运行态",
     step: "步骤",
-    items: "商品数",
+    items: "结果数",
+    rawItems: "原始候选",
     session: "会话",
     timelineTitle: "执行时间线",
     timelineWaiting: "等待任务启动。",
     timelinePlan: "计划",
-    timelineLatest: "最新进展",
     timelineAction: "动作",
     timelineResult: "结果",
     timelineExpected: "预期",
     timelineSteps: "步",
+    timelineSnapshot: "快照摘要",
     resultOk: "成功",
     resultFail: "失败",
     resultsTitle: "结果对比",
@@ -88,7 +98,7 @@ const messages: Record<Locale, MessageBundle> = {
     summary: "摘要",
     recommendation: "推荐理由",
     noItems: "还没有提取到商品。",
-    resultsHint: "提取到足够商品后，这里会展示结构化对比结果和推荐理由。",
+    resultsHint: "提取并过滤到足够商品后，这里会展示结构化结果和最终推荐。",
     unknownShop: "-",
     unknownSummary: "-",
     logsTitle: "调试日志",
@@ -97,15 +107,23 @@ const messages: Record<Locale, MessageBundle> = {
     debugTitle: "页面调试",
     pageTitle: "页面",
     pageType: "页面类型",
-    pageReady: "Ready",
-    pageReadyReason: "Ready 原因",
+    pageReady: "页面可用",
+    pageReadyReason: "原因",
     pageChecks: "检查项",
     searchBox: "搜索框",
     searchButton: "搜索按钮",
     resultList: "结果列表",
+    queryTitle: "结构化任务",
+    querySource: "搜索词来源",
+    queryCategory: "品类",
+    queryBudget: "预算",
+    queryTopK: "目标数量",
+    querySearch: "搜索词",
+    filterTitle: "过滤诊断",
+    filterBudget: "预算范围",
+    filterFinal: "最终保留",
     recoveryTitle: "恢复状态",
     recoveryEmpty: "当前没有恢复分支。",
-    timelineSnapshot: "快照摘要",
     emptyValue: "-",
     statusLabels: {
       idle: "空闲",
@@ -120,7 +138,7 @@ const messages: Record<Locale, MessageBundle> = {
   "en-US": {
     appTitle: "Browser Agent MVP",
     heroTitle: "Browser Agent MVP",
-    heroDescription: "Run the fixed JD demo flow: search a target product, extract results, and return a concise recommendation.",
+    heroDescription: "Rule-first flow: compile query, extract results, filter candidates, then let the model write the final recommendation.",
     sessionTitle: "Session",
     goalPlaceholder: "Describe the shopping goal",
     start: "Start",
@@ -130,15 +148,16 @@ const messages: Record<Locale, MessageBundle> = {
     runtime: "Runtime",
     step: "Step",
     items: "Items",
+    rawItems: "Raw Items",
     session: "Session",
     timelineTitle: "Timeline",
     timelineWaiting: "Waiting for session start.",
     timelinePlan: "Plan",
-    timelineLatest: "Latest",
     timelineAction: "Action",
     timelineResult: "Result",
     timelineExpected: "Expected",
     timelineSteps: "steps",
+    timelineSnapshot: "Snapshot",
     resultOk: "OK",
     resultFail: "FAIL",
     resultsTitle: "Results",
@@ -148,7 +167,7 @@ const messages: Record<Locale, MessageBundle> = {
     summary: "Summary",
     recommendation: "Recommendation",
     noItems: "No extracted items yet.",
-    resultsHint: "When enough products are extracted, the structured comparison and recommendation will appear here.",
+    resultsHint: "Filtered products and recommendation will appear here once enough candidates are available.",
     unknownShop: "-",
     unknownSummary: "-",
     logsTitle: "Debug Logs",
@@ -157,15 +176,23 @@ const messages: Record<Locale, MessageBundle> = {
     debugTitle: "Page Debug",
     pageTitle: "Page",
     pageType: "Page Type",
-    pageReady: "Ready",
-    pageReadyReason: "Ready Reason",
+    pageReady: "Usable",
+    pageReadyReason: "Reason",
     pageChecks: "Checks",
     searchBox: "Search Box",
     searchButton: "Search Button",
     resultList: "Result List",
+    queryTitle: "Structured Task",
+    querySource: "Query Source",
+    queryCategory: "Category",
+    queryBudget: "Budget",
+    queryTopK: "Top K",
+    querySearch: "Search Query",
+    filterTitle: "Filter Diagnostics",
+    filterBudget: "Budget Range",
+    filterFinal: "Final Count",
     recoveryTitle: "Recovery",
     recoveryEmpty: "No active recovery branch.",
-    timelineSnapshot: "Snapshot",
     emptyValue: "-",
     statusLabels: {
       idle: "Idle",

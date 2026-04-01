@@ -124,18 +124,14 @@ function buildPageFacts(pageType: PageType): PageFacts {
 function buildPageReady(pageType: PageType, facts: PageFacts): PageReadyState {
   const checks: string[] = [];
 
-  if (document.readyState !== "complete") {
-    checks.push("document 未完成加载");
-  }
-
   if (pageType === "home") {
     if (!facts.searchBox.present || !facts.searchBox.visible) {
-      checks.push("首页搜索框未就绪");
+      checks.push("首页搜索框未识别");
     }
 
     return {
       ready: checks.length === 0,
-      reason: checks.length === 0 ? "首页搜索入口已就绪" : "首页搜索入口尚未就绪",
+      reason: checks.length === 0 ? "首页搜索入口可用" : "首页搜索入口尚未可用",
       checks,
     };
   }
@@ -156,19 +152,15 @@ function buildPageReady(pageType: PageType, facts: PageFacts): PageReadyState {
 
     return {
       ready: checks.length === 0,
-      reason: checks.length === 0 ? "搜索结果页已就绪" : "搜索结果页尚未就绪",
+      reason: checks.length === 0 ? "搜索结果页可用" : "搜索结果页尚未可用",
       checks,
     };
   }
 
-  if (checks.length === 0) {
-    checks.push("当前页面不在支持范围内");
-  }
-
   return {
     ready: false,
-    reason: "当前页面暂不支持",
-    checks,
+    reason: "当前页面不在支持范围内",
+    checks: ["当前页面不在支持范围内"],
   };
 }
 

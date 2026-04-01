@@ -1,4 +1,4 @@
-import { LIMITS } from "../shared/constants";
+import { DEFAULT_PLAN, LIMITS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
 import type { ExecuteActionResponse, RequestSnapshotMessage, SnapshotResponse, StartSessionResponse } from "../shared/protocol";
 import { toolResultSchema } from "../shared/schema";
@@ -6,29 +6,24 @@ import type {
   AgentAction,
   DebugLogEntry,
   DebugLogLevel,
-  LlmDecision,
+  ExtractedItem,
   SessionMemory,
   SessionPublicState,
   SnapshotData,
   StepRecord,
   ToolResult,
 } from "../shared/types";
-import {
-  compareExpectedOutcome,
-  ensureActionAllowed,
-  ensureDoneAllowed,
-  isRepeatedAction,
-  normalizeDecision,
-  summarizeSnapshot,
-} from "./guards";
-import { requestDecision, requestPlan } from "./llm-client";
+import { summarizeSnapshot } from "./guards";
+import { generateFinalSummary, refineSearchQuery } from "./llm-client";
+import { compileSearchTask } from "./query-compiler";
+import { filterExtractedItems } from "./result-filter";
 
 const JD_HOME_URL = "https://www.jd.com/";
 const NAVIGATION_TIMEOUT_MS = 20_000;
 const MAX_LOG_ENTRIES = 80;
 const TIMELINE_LIMIT = 8;
 const POST_ACTION_SETTLE_MS = {
-  navigateLike: 1_000,
+  navigateLike: LIMITS.PAGE_READY_WAIT_MS,
   scroll: 400,
 } as const;
 
@@ -81,6 +76,7 @@ function toPublicState(memory: SessionMemory): SessionPublicState {
   return {
     sessionId: memory.runtimeMeta.sessionId,
     goal: memory.goal,
+    taskSpec: memory.taskSpec,
     status: memory.runtimeMeta.status,
     currentStep: memory.runtimeMeta.currentStep,
     plan: memory.plan,
@@ -88,6 +84,8 @@ function toPublicState(memory: SessionMemory): SessionPublicState {
     lastAction: lastStep?.action,
     lastActionResult: lastStep?.actionResult,
     items: memory.extractedItems,
+    rawItemCount: memory.rawExtractedItems.length,
+    filterDiagnostics: memory.filterDiagnostics,
     logs: memory.logs,
     timeline: memory.stepHistory.slice(-TIMELINE_LIMIT),
     pageSnapshot: memory.pageSnapshot,
@@ -141,6 +139,7 @@ async function getOrPrepareSessionTab(): Promise<{ tab: chrome.tabs.Tab; navigat
   if (!updated?.id) {
     throw new RuntimeError("跳转京东首页失败。", "TAB_UPDATE_FAILED");
   }
+
   const readyTab = await waitForTabComplete(updated.id);
   return { tab: readyTab, navigatedToHome: true, fromUrl };
 }
@@ -191,15 +190,29 @@ function getPostActionSettleDelay(action: AgentAction) {
     return POST_ACTION_SETTLE_MS.scroll;
   }
 
-  if (action.type === "CLICK") {
-    return POST_ACTION_SETTLE_MS.navigateLike;
-  }
-
-  if (action.type === "TYPE" && action.submit) {
+  if (action.type === "CLICK" || (action.type === "TYPE" && action.submit)) {
     return POST_ACTION_SETTLE_MS.navigateLike;
   }
 
   return 0;
+}
+
+function normalizeText(text: string | undefined) {
+  return (text ?? "").replace(/\s+/g, "").toLowerCase();
+}
+
+function hasMatchingQuery(snapshot: SnapshotData, searchQuery: string) {
+  return normalizeText(snapshot.pageFacts.searchBox.text).includes(normalizeText(searchQuery));
+}
+
+function buildFallbackSummary(goal: string, items: ExtractedItem[]) {
+  const first = items[0];
+  if (!first) {
+    return `已完成目标“${goal}”的搜索，但没有拿到足够可用的商品结果。`;
+  }
+
+  const priceList = items.map((item) => item.priceText).join(" / ");
+  return `已根据“${goal}”筛出 ${items.length} 个候选商品。当前首个推荐是 ${first.title}，价格参考为 ${first.priceText}，其余候选价格依次为 ${priceList}。`;
 }
 
 export class BrowserAgentRuntime {
@@ -228,9 +241,10 @@ export class BrowserAgentRuntime {
     const sessionId = createSessionId();
     const memory: SessionMemory = {
       goal,
-      plan: [],
+      plan: [...DEFAULT_PLAN],
       stepHistory: [],
       logs: [],
+      rawExtractedItems: [],
       extractedItems: [],
       liveStepSummary: navigatedToHome ? "检测到当前不在京东页面，已自动打开京东首页。" : "准备启动任务。",
       runtimeMeta: {
@@ -243,6 +257,7 @@ export class BrowserAgentRuntime {
         actionRetryCount: 0,
         pageReadyRetryCount: 0,
         recoveryCount: 0,
+        queryRefineTried: false,
         startedAt: Date.now(),
       },
     };
@@ -318,6 +333,8 @@ export class BrowserAgentRuntime {
   }
 
   private async runLoop(session: ActiveSession) {
+    await this.prepareTask(session);
+
     while (!session.stopped) {
       throwIfStopped(session);
 
@@ -325,150 +342,94 @@ export class BrowserAgentRuntime {
         throw new RuntimeError("超过最大执行步数限制。", "MAX_STEPS_REACHED");
       }
 
-      const beforeSnapshot = await this.scanPage(session);
+      const snapshot = await this.ensureUsableSnapshot(session);
       throwIfStopped(session);
 
-      const pageReady = await this.ensurePageReady(session, beforeSnapshot);
-      if (!pageReady) {
+      if (!session.memory.taskSpec) {
+        throw new RuntimeError("结构化任务不存在。", "TASK_SPEC_MISSING");
+      }
+
+      if (snapshot.pageType === "home" || !hasMatchingQuery(snapshot, session.memory.taskSpec.searchQuery)) {
+        await this.performSearch(session, session.memory.taskSpec.searchQuery);
         continue;
       }
 
-      if (session.memory.plan.length === 0) {
-        session.memory.runtimeMeta.status = "planning";
-        await this.pushState(session, "生成最短执行计划。");
-        const plan = await requestPlan(session.memory, { signal: session.abortController.signal });
-        throwIfStopped(session);
-        session.memory.plan = plan.plan;
-        appendLog(session, "llm", "info", "模型已生成执行计划。", plan.plan);
-        await this.pushState(session, `计划已生成：${plan.plan.join(" / ")}`);
+      if (snapshot.pageType !== "search") {
+        throw new RuntimeError(`当前页面类型不支持继续执行：${snapshot.pageType}`, "UNSUPPORTED_PAGE");
       }
 
-      const decision = await this.getDecision(session);
-      throwIfStopped(session);
-      const normalizedDecision = normalizeDecision(decision);
-      appendLog(session, "llm", "info", "模型返回下一步动作。", {
-        action: normalizedDecision.action,
-        expectedOutcome: normalizedDecision.expectedOutcome,
-        nextIntent: normalizedDecision.nextIntent,
-        done: normalizedDecision.done,
-      });
-
-      ensureActionAllowed(session.memory.pageSnapshot, normalizedDecision.action);
-      if (isRepeatedAction(session.memory, normalizedDecision.action)) {
-        throw new RuntimeError("检测到重复失败动作，任务已终止。", "REPEATED_ACTION");
-      }
-      ensureDoneAllowed(session.memory, normalizedDecision);
-
-      if (normalizedDecision.action.type === "DONE") {
-        session.memory.extractedItems = normalizedDecision.action.items?.length
-          ? normalizedDecision.action.items
-          : session.memory.extractedItems;
-        session.memory.finalSummary = normalizedDecision.action.summary;
-        session.memory.runtimeMeta.status = "done";
-        session.memory.liveStepSummary = normalizedDecision.stepSummary;
-        session.memory.recoveryHint = undefined;
-        appendLog(session, "runtime", "info", "任务结束。", {
-          itemCount: session.memory.extractedItems.length,
-          summary: normalizedDecision.action.summary,
-        });
-        this.recordStep(session, {
-          stepSummary: normalizedDecision.stepSummary,
-          nextIntent: normalizedDecision.nextIntent,
-          expectedOutcome: normalizedDecision.expectedOutcome,
-          action: normalizedDecision.action,
-          snapshot: beforeSnapshot,
-        });
-        session.lastPublicState = toPublicState(session.memory);
-        await broadcastUpdate(session.lastPublicState);
+      const completed = await this.extractFilterAndFinalize(session, snapshot);
+      if (completed) {
         return;
       }
-
-      const result = await this.executeAction(session, normalizedDecision.action, normalizedDecision.stepSummary);
-      throwIfStopped(session);
-      await this.settleAfterAction(session, normalizedDecision.action);
-      throwIfStopped(session);
-      const afterSnapshot = await this.scanPage(session);
-      throwIfStopped(session);
-
-      const compareResult = compareExpectedOutcome(
-        beforeSnapshot,
-        afterSnapshot,
-        normalizedDecision.expectedOutcome,
-        normalizedDecision.action,
-        result,
-      );
-
-      appendLog(session, "content", result.success ? "info" : "warn", `动作执行结果：${result.actionType}`, {
-        message: result.message,
-        errorCode: result.errorCode,
-        observation: result.observation,
-        itemCount: result.items?.length,
-      });
-
-      appendLog(session, "runtime", compareResult.matched ? "info" : "warn", "执行结果比对完成。", compareResult);
-
-      if (result.items?.length) {
-        session.memory.extractedItems = result.items;
-      }
-
-      session.memory.nextIntent = normalizedDecision.nextIntent;
-      session.memory.runtimeMeta.currentStep += 1;
-      session.memory.runtimeMeta.actionRetryCount = 0;
-      session.memory.runtimeMeta.status = "observing";
-      session.memory.liveStepSummary = normalizedDecision.stepSummary;
-      session.memory.lastError =
-        !compareResult.matched && normalizedDecision.action.type !== "SCROLL"
-          ? compareResult.reason
-          : undefined;
-      this.recordStep(session, {
-        stepSummary: normalizedDecision.stepSummary,
-        nextIntent: normalizedDecision.nextIntent,
-        expectedOutcome: normalizedDecision.expectedOutcome,
-        action: normalizedDecision.action,
-        actionResult: {
-          ...result,
-          message: `${result.message}；${compareResult.reason}`,
-        },
-        snapshot: afterSnapshot,
-      });
-
-      session.lastPublicState = toPublicState(session.memory);
-      await broadcastUpdate(session.lastPublicState);
-
-      const recovered = await this.maybeRecover(session, afterSnapshot, normalizedDecision.action, result, compareResult);
-      if (recovered) {
-        continue;
-      }
-
-      await sleep(400);
     }
   }
 
-  private async getDecision(session: ActiveSession): Promise<LlmDecision> {
+  private async prepareTask(session: ActiveSession) {
     session.memory.runtimeMeta.status = "planning";
-    await this.pushState(session, "请求模型生成下一步动作。");
+    session.memory.liveStepSummary = "解析任务并生成搜索词。";
+    session.lastPublicState = toPublicState(session.memory);
+    await broadcastUpdate(session.lastPublicState);
 
-    try {
-      const decision = await requestDecision(session.memory, { signal: session.abortController.signal });
-      session.memory.runtimeMeta.llmRetryCount = 0;
-      return decision;
-    } catch (error) {
-      if (error instanceof RuntimeError && error.code === "SESSION_STOPPED") {
-        throw error;
-      }
+    const taskSpec = await compileSearchTask(session.memory.goal, {
+      refineWithLiteModel: async (goal, draftQuery) => {
+        session.memory.runtimeMeta.queryRefineTried = true;
+        const refined = await refineSearchQuery(goal, draftQuery, { signal: session.abortController.signal });
+        appendLog(session, "llm", "info", "已使用轻量模型补全搜索词。", {
+          model: refined.model,
+          draftQuery,
+          searchQuery: refined.searchQuery,
+          reason: refined.reason,
+        });
+        return {
+          searchQuery: refined.searchQuery,
+          reason: refined.reason,
+        };
+      },
+    });
 
-      session.memory.runtimeMeta.llmRetryCount += 1;
-      if (session.memory.runtimeMeta.llmRetryCount >= LIMITS.MAX_LLM_RETRIES) {
-        throw error;
-      }
-      const message = error instanceof Error ? error.message : "模型决策失败。";
-      appendLog(session, "llm", "warn", "模型决策失败，准备重试。", {
-        retryCount: session.memory.runtimeMeta.llmRetryCount,
-        message,
-      });
-      session.memory.lastError = message;
-      return this.getDecision(session);
+    session.memory.taskSpec = taskSpec;
+    session.memory.nextIntent = "提交搜索词并进入搜索结果页";
+    this.recordStep(session, {
+      stepSummary: "已完成任务解析与搜索词编译。",
+      nextIntent: session.memory.nextIntent,
+      expectedOutcome: "获得稳定的站内搜索词",
+      snapshotSummary: `${taskSpec.searchQuery} | ${taskSpec.querySource}`,
+    });
+
+    appendLog(session, "runtime", "info", "结构化任务已生成。", taskSpec);
+    session.lastPublicState = toPublicState(session.memory);
+    await broadcastUpdate(session.lastPublicState);
+  }
+
+  private async ensureUsableSnapshot(session: ActiveSession) {
+    let snapshot = await this.scanPage(session);
+    if (snapshot.pageReady.ready) {
+      return snapshot;
     }
+
+    appendLog(session, "runtime", "warn", "页面暂未达到可用状态，进入短等待。", snapshot.pageReady);
+    session.memory.recoveryHint = snapshot.pageReady.reason;
+    session.memory.liveStepSummary = "页面暂未可用，等待后重试。";
+    session.lastPublicState = toPublicState(session.memory);
+    await broadcastUpdate(session.lastPublicState);
+
+    await sleep(LIMITS.PAGE_READY_WAIT_MS);
+    snapshot = await this.scanPage(session);
+    if (snapshot.pageReady.ready) {
+      session.memory.recoveryHint = undefined;
+      return snapshot;
+    }
+
+    appendLog(session, "runtime", "warn", "页面仍未可用，进入最后一次短重试。", snapshot.pageReady);
+    await sleep(LIMITS.PAGE_READY_SECOND_WAIT_MS);
+    snapshot = await this.scanPage(session);
+    if (snapshot.pageReady.ready) {
+      session.memory.recoveryHint = undefined;
+      return snapshot;
+    }
+
+    throw new RuntimeError(`页面持续未就绪：${snapshot.pageReady.reason}`, "PAGE_NOT_READY");
   }
 
   private async scanPage(session: ActiveSession): Promise<SnapshotData> {
@@ -483,6 +444,7 @@ export class BrowserAgentRuntime {
         const response = await sendMessageToTab<SnapshotResponse>(session.memory.runtimeMeta.tabId, {
           type: "REQUEST_SNAPSHOT",
         });
+
         if (!response.ok || !response.snapshot) {
           throw new RuntimeError(response.error ?? "页面快照为空。", "SNAPSHOT_ERROR");
         }
@@ -493,7 +455,7 @@ export class BrowserAgentRuntime {
           url: response.snapshot.url,
           title: response.snapshot.title,
           pageType: response.snapshot.pageType,
-          ready: response.snapshot.pageReady,
+          pageReady: response.snapshot.pageReady,
           pageFacts: response.snapshot.pageFacts,
         });
         return response.snapshot;
@@ -510,25 +472,196 @@ export class BrowserAgentRuntime {
     throw new RuntimeError(lastError instanceof Error ? lastError.message : "页面扫描失败。", "SNAPSHOT_FAILED");
   }
 
-  private async ensurePageReady(session: ActiveSession, snapshot: SnapshotData): Promise<boolean> {
-    if (snapshot.pageReady.ready) {
-      session.memory.runtimeMeta.pageReadyRetryCount = 0;
+  private async performSearch(session: ActiveSession, searchQuery: string) {
+    const snapshotBefore = session.memory.pageSnapshot;
+    const action: AgentAction = {
+      type: "TYPE",
+      agentId: "el_search_input",
+      text: searchQuery,
+      submit: true,
+    };
+
+    const result = await this.executeAction(session, action, `提交搜索词：${searchQuery}`);
+    await this.settleAfterAction(session, action);
+    const snapshotAfter = await this.scanPage(session);
+
+    session.memory.rawExtractedItems = [];
+    session.memory.extractedItems = [];
+    session.memory.filterDiagnostics = undefined;
+    session.memory.nextIntent = "进入搜索结果页并提取商品";
+    session.memory.recoveryHint = undefined;
+    session.memory.lastError = result.success ? undefined : result.message;
+    session.memory.runtimeMeta.recoveryCount = 0;
+    session.memory.runtimeMeta.currentStep += 1;
+    this.recordStep(session, {
+      stepSummary: `已提交搜索词：${searchQuery}`,
+      nextIntent: session.memory.nextIntent,
+      expectedOutcome: "页面跳转到搜索结果页",
+      action,
+      actionResult: result,
+      snapshot: snapshotAfter,
+    });
+
+    appendLog(session, "runtime", "info", "已执行规则化搜索动作。", {
+      fromPage: snapshotBefore?.pageType,
+      toPage: snapshotAfter.pageType,
+      searchQuery,
+      resultMessage: result.message,
+    });
+
+    session.lastPublicState = toPublicState(session.memory);
+    await broadcastUpdate(session.lastPublicState);
+  }
+
+  private async extractFilterAndFinalize(session: ActiveSession, snapshot: SnapshotData) {
+    const extractAction: AgentAction = { type: "EXTRACT_LIST" };
+    const extractResult = await this.executeAction(session, extractAction, "提取搜索结果列表。");
+    const afterExtractSnapshot = await this.scanPage(session);
+
+    session.memory.runtimeMeta.currentStep += 1;
+    session.memory.rawExtractedItems = extractResult.items ?? [];
+    session.memory.lastError = extractResult.success ? undefined : extractResult.message;
+    this.recordStep(session, {
+      stepSummary: "已执行商品提取。",
+      nextIntent: "过滤候选商品并判断是否足够生成推荐",
+      expectedOutcome: "拿到至少 3 个候选商品",
+      action: extractAction,
+      actionResult: extractResult,
+      snapshot: afterExtractSnapshot,
+    });
+
+    appendLog(session, "content", extractResult.success ? "info" : "warn", "提取工具执行完成。", {
+      message: extractResult.message,
+      itemCount: extractResult.items?.length ?? 0,
+      observation: extractResult.observation,
+    });
+
+    if (!extractResult.items?.length) {
+      return this.maybeRecoverByScroll(session, afterExtractSnapshot, "当前提取结果为空。");
+    }
+
+    if (!session.memory.taskSpec) {
+      throw new RuntimeError("结构化任务不存在。", "TASK_SPEC_MISSING");
+    }
+
+    const filtered = filterExtractedItems(extractResult.items, session.memory.taskSpec);
+    session.memory.filterDiagnostics = filtered.diagnostics;
+    session.memory.extractedItems = filtered.items;
+    session.memory.lastError = undefined;
+    session.memory.recoveryHint = undefined;
+    this.recordStep(session, {
+      stepSummary: "已完成候选商品过滤。",
+      nextIntent: "判断结果数量是否满足最终总结条件",
+      expectedOutcome: "获得预算内且去重后的候选列表",
+      snapshotSummary: JSON.stringify(filtered.diagnostics),
+    });
+
+    appendLog(session, "runtime", "info", "结果过滤完成。", {
+      rawCount: extractResult.items.length,
+      filterDiagnostics: filtered.diagnostics,
+    });
+
+    const requiredCount = Math.max(3, session.memory.taskSpec.topK);
+    session.lastPublicState = toPublicState(session.memory);
+    await broadcastUpdate(session.lastPublicState);
+
+    if (filtered.items.length >= requiredCount) {
+      await this.finalize(session);
       return true;
     }
 
-    session.memory.runtimeMeta.pageReadyRetryCount += 1;
-    session.memory.recoveryHint = snapshot.pageReady.reason;
-    appendLog(session, "runtime", "warn", "页面尚未 ready。", snapshot.pageReady);
+    return this.maybeRecoverByScroll(
+      session,
+      afterExtractSnapshot,
+      `过滤后只有 ${filtered.items.length} 个候选商品，未达到 ${requiredCount} 个。`,
+    );
+  }
 
-    if (session.memory.runtimeMeta.pageReadyRetryCount > LIMITS.PAGE_READY_RETRIES) {
-      throw new RuntimeError(`页面持续未就绪：${snapshot.pageReady.reason}`, "PAGE_NOT_READY");
+  private async maybeRecoverByScroll(session: ActiveSession, snapshot: SnapshotData, reason: string) {
+    const resultList = snapshot.pageFacts.resultList;
+    if (!resultList?.present || resultList.emptyState) {
+      throw new RuntimeError(reason, "NO_RECOVERABLE_RESULTS");
     }
 
-    session.memory.liveStepSummary = `页面未就绪，等待稳定后重试。`;
+    if (session.memory.runtimeMeta.recoveryCount >= LIMITS.MAX_RUNTIME_RECOVERY) {
+      throw new RuntimeError(`${reason}，且恢复次数已达上限。`, "RECOVERY_EXHAUSTED");
+    }
+
+    session.memory.runtimeMeta.recoveryCount += 1;
+    session.memory.runtimeMeta.lastRecoveryAction = "SCROLL";
+    session.memory.recoveryHint = `当前结果不足，执行第 ${session.memory.runtimeMeta.recoveryCount} 次滚动恢复。`;
+    appendLog(session, "runtime", "warn", "触发运行时恢复分支。", {
+      reason,
+      recoveryCount: session.memory.runtimeMeta.recoveryCount,
+      resultList,
+    });
+
+    const action: AgentAction = { type: "SCROLL", direction: "down", amount: 920 };
+    const result = await this.executeAction(session, action, "结果不足，向下滚动加载更多商品。");
+    await this.settleAfterAction(session, action);
+    const snapshotAfter = await this.scanPage(session);
+
+    session.memory.runtimeMeta.currentStep += 1;
+    this.recordStep(session, {
+      stepSummary: "已执行滚动恢复。",
+      nextIntent: "重新提取搜索结果",
+      expectedOutcome: "页面出现更多商品卡片",
+      action,
+      actionResult: result,
+      snapshot: snapshotAfter,
+    });
+
     session.lastPublicState = toPublicState(session.memory);
     await broadcastUpdate(session.lastPublicState);
-    await sleep(LIMITS.PAGE_READY_WAIT_MS);
     return false;
+  }
+
+  private async finalize(session: ActiveSession) {
+    if (!session.memory.taskSpec || session.memory.extractedItems.length === 0) {
+      throw new RuntimeError("没有足够的结果可用于生成总结。", "FINALIZE_BLOCKED");
+    }
+
+    let summary = "";
+    try {
+      const response = await generateFinalSummary(
+        session.memory.goal,
+        session.memory.taskSpec,
+        session.memory.extractedItems,
+        { signal: session.abortController.signal },
+      );
+      summary = response.summary;
+      appendLog(session, "llm", "info", "已生成最终推荐总结。", {
+        model: response.model,
+        itemCount: session.memory.extractedItems.length,
+      });
+    } catch (error) {
+      summary = buildFallbackSummary(session.memory.goal, session.memory.extractedItems);
+      appendLog(session, "llm", "warn", "最终总结生成失败，已回退到规则摘要。", {
+        message: error instanceof Error ? error.message : "未知错误",
+      });
+    }
+
+    session.memory.finalSummary = summary;
+    session.memory.runtimeMeta.status = "done";
+    session.memory.runtimeMeta.currentStep += 1;
+    session.memory.liveStepSummary = "任务完成，已生成最终推荐。";
+    session.memory.recoveryHint = undefined;
+    session.memory.lastError = undefined;
+
+    this.recordStep(session, {
+      stepSummary: "已完成最终推荐总结。",
+      nextIntent: "结束任务",
+      expectedOutcome: "输出最终推荐说明",
+      snapshotSummary: `${session.memory.extractedItems.length} items -> final summary`,
+      action: {
+        type: "DONE",
+        summary,
+        items: session.memory.extractedItems,
+      },
+    });
+
+    session.lastPublicState = toPublicState(session.memory);
+    await broadcastUpdate(session.lastPublicState);
   }
 
   private async executeAction(
@@ -548,6 +681,7 @@ export class BrowserAgentRuntime {
       if (!response.ok || !response.result) {
         throw new RuntimeError(response.error ?? "动作执行失败。", "ACTION_EXECUTION_ERROR");
       }
+      session.memory.runtimeMeta.actionRetryCount = 0;
       return toolResultSchema.parse(response.result);
     } catch (error) {
       if (session.stopped) {
@@ -558,6 +692,7 @@ export class BrowserAgentRuntime {
       if (session.memory.runtimeMeta.actionRetryCount > LIMITS.MAX_ACTION_RETRIES) {
         throw error;
       }
+
       const message = error instanceof Error ? error.message : "动作执行失败。";
       appendLog(session, "runtime", "warn", "动作执行失败，准备重试。", {
         action,
@@ -565,7 +700,7 @@ export class BrowserAgentRuntime {
         message,
       });
       session.memory.lastError = message;
-      await sleep(500);
+      await sleep(300);
       return this.executeAction(session, action, stepSummary);
     }
   }
@@ -578,15 +713,10 @@ export class BrowserAgentRuntime {
       return;
     }
 
-    session.memory.runtimeMeta.pageReadyRetryCount = 0;
-    session.memory.liveStepSummary = delayMs > 0 ? `动作已完成，等待页面稳定（${delayMs}ms）。` : "动作已完成，等待页面稳定。";
     appendLog(session, "runtime", "info", "动作执行后等待页面稳定。", {
       actionType: action.type,
       delayMs,
-      submit: action.type === "TYPE" ? !!action.submit : undefined,
     });
-    session.lastPublicState = toPublicState(session.memory);
-    await broadcastUpdate(session.lastPublicState);
 
     if (delayMs > 0) {
       await sleep(delayMs);
@@ -599,109 +729,11 @@ export class BrowserAgentRuntime {
     try {
       await waitForTabComplete(session.memory.runtimeMeta.tabId);
     } catch (error) {
-      appendLog(session, "runtime", "warn", "等待页面加载完成失败，继续进入扫描阶段。", {
+      appendLog(session, "runtime", "warn", "等待页面加载完成失败，继续进入下一轮扫描。", {
         actionType: action.type,
         message: error instanceof Error ? error.message : "未知错误",
       });
     }
-  }
-
-  private async maybeRecover(
-    session: ActiveSession,
-    snapshot: SnapshotData,
-    action: AgentAction,
-    result: ToolResult,
-    compareResult: { matched: boolean; reason: string },
-  ) {
-    if (!compareResult.matched && !snapshot.pageReady.ready) {
-      session.memory.recoveryHint = snapshot.pageReady.reason;
-      appendLog(session, "runtime", "warn", "观察结果未达预期，等待页面稳定。", snapshot.pageReady);
-      await sleep(LIMITS.PAGE_READY_WAIT_MS);
-      return true;
-    }
-
-    if (action.type !== "EXTRACT_LIST") {
-      if (!compareResult.matched) {
-        if (session.memory.runtimeMeta.recoveryCount >= LIMITS.MAX_RUNTIME_RECOVERY) {
-          throw new RuntimeError("页面变化始终未达到预期，恢复次数已达上限。", "RECOVERY_EXHAUSTED");
-        }
-
-        session.memory.runtimeMeta.recoveryCount += 1;
-        session.memory.recoveryHint = `页面变化未达预期，等待后重试（第 ${session.memory.runtimeMeta.recoveryCount} 次）。`;
-        appendLog(session, "runtime", "warn", "普通动作未达到预期，进入等待恢复分支。", {
-          recoveryCount: session.memory.runtimeMeta.recoveryCount,
-          reason: compareResult.reason,
-          action,
-        });
-        await sleep(LIMITS.PAGE_READY_WAIT_MS);
-        return true;
-      }
-
-      session.memory.runtimeMeta.recoveryCount = 0;
-      session.memory.recoveryHint = undefined;
-      return false;
-    }
-
-    const extractedCount = result.items?.length ?? 0;
-    if (extractedCount >= 3) {
-      session.memory.runtimeMeta.recoveryCount = 0;
-      session.memory.recoveryHint = undefined;
-      return false;
-    }
-
-    const resultList = snapshot.pageFacts.resultList;
-    if (!resultList) {
-      return false;
-    }
-
-    if (!resultList.loaded) {
-      session.memory.recoveryHint = "搜索结果仍在加载，等待后继续提取。";
-      appendLog(session, "runtime", "warn", "搜索结果尚未加载完成，等待下一轮扫描。");
-      await sleep(LIMITS.PAGE_READY_WAIT_MS);
-      return true;
-    }
-
-    if (session.memory.runtimeMeta.recoveryCount >= LIMITS.MAX_RUNTIME_RECOVERY) {
-      throw new RuntimeError("商品提取不足，且恢复次数已达上限。", "RECOVERY_EXHAUSTED");
-    }
-
-    const shouldScroll = resultList.cardCount > extractedCount || extractedCount === 0;
-    if (!shouldScroll) {
-      session.memory.recoveryHint = extractedCount > 0 ? `已提取 ${extractedCount} 个商品，但仍不足 3 个。` : compareResult.reason;
-      return false;
-    }
-
-    session.memory.runtimeMeta.recoveryCount += 1;
-    session.memory.runtimeMeta.lastRecoveryAction = "SCROLL";
-    session.memory.recoveryHint = `提取结果不足，执行恢复动作：向下滚动加载更多结果（第 ${session.memory.runtimeMeta.recoveryCount} 次）。`;
-    session.memory.lastError = undefined;
-    appendLog(session, "runtime", "warn", "触发运行时恢复分支。", {
-      recoveryCount: session.memory.runtimeMeta.recoveryCount,
-      reason: compareResult.reason,
-      resultList,
-    });
-
-    const recoverySummary = "提取结果不足，向下滚动加载更多结果。";
-    const recoveryAction: AgentAction = { type: "SCROLL", direction: "down", amount: 920 };
-    const recoveryResult = await this.executeAction(session, recoveryAction, recoverySummary);
-    await this.settleAfterAction(session, recoveryAction);
-    const recoverySnapshot = await this.scanPage(session);
-
-    session.memory.runtimeMeta.currentStep += 1;
-    session.memory.runtimeMeta.status = "observing";
-    session.memory.liveStepSummary = recoverySummary;
-    this.recordStep(session, {
-      stepSummary: recoverySummary,
-      nextIntent: "滚动后重新扫描并继续提取",
-      expectedOutcome: "页面出现更多商品卡片",
-      action: recoveryAction,
-      actionResult: recoveryResult,
-      snapshot: recoverySnapshot,
-    });
-
-    session.lastPublicState = toPublicState(session.memory);
-    await broadcastUpdate(session.lastPublicState);
-    return true;
   }
 
   private recordStep(
@@ -712,7 +744,8 @@ export class BrowserAgentRuntime {
       expectedOutcome?: string;
       action?: AgentAction;
       actionResult?: ToolResult;
-      snapshot: SnapshotData;
+      snapshot?: SnapshotData;
+      snapshotSummary?: string;
     },
   ) {
     const record: StepRecord = {
@@ -723,7 +756,7 @@ export class BrowserAgentRuntime {
       expectedOutcome: options.expectedOutcome,
       action: options.action,
       actionResult: options.actionResult,
-      snapshotSummary: summarizeSnapshot(options.snapshot),
+      snapshotSummary: options.snapshotSummary ?? (options.snapshot ? summarizeSnapshot(options.snapshot) : undefined),
       timestamp: Date.now(),
     };
 

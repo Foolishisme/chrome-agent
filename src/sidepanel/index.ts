@@ -116,6 +116,68 @@ function renderSnapshot(snapshot: SnapshotData | undefined) {
   `;
 }
 
+function renderTaskSpec() {
+  const taskSpec = currentState.taskSpec;
+  if (!taskSpec) {
+    return `<div class="muted">${escapeHtml(messages.timelineWaiting)}</div>`;
+  }
+
+  return `
+    <div class="debug-grid">
+      <div class="debug-card">
+        <span class="status-label">${escapeHtml(messages.queryCategory)}</span>
+        <div class="debug-value">${escapeHtml(taskSpec.category)}</div>
+      </div>
+      <div class="debug-card">
+        <span class="status-label">${escapeHtml(messages.queryBudget)}</span>
+        <div class="debug-value">${escapeHtml(taskSpec.budget ? `${taskSpec.budget} 元` : messages.emptyValue)}</div>
+      </div>
+      <div class="debug-card">
+        <span class="status-label">${escapeHtml(messages.queryTopK)}</span>
+        <div class="debug-value">${escapeHtml(String(taskSpec.topK))}</div>
+      </div>
+      <div class="debug-card">
+        <span class="status-label">${escapeHtml(messages.querySource)}</span>
+        <div class="debug-value">${escapeHtml(taskSpec.querySource)}</div>
+      </div>
+      <div class="debug-card" style="grid-column: 1 / -1;">
+        <span class="status-label">${escapeHtml(messages.querySearch)}</span>
+        <div class="debug-value">${escapeHtml(taskSpec.searchQuery)}</div>
+        <div class="muted">${escapeHtml(taskSpec.notes.join(" / ") || messages.emptyValue)}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderFilterDiagnostics() {
+  const diagnostics = currentState.filterDiagnostics;
+  if (!diagnostics) {
+    return `<div class="muted">${escapeHtml(messages.timelineWaiting)}</div>`;
+  }
+
+  return `
+    <div class="debug-grid">
+      <div class="debug-card">
+        <span class="status-label">${escapeHtml(messages.rawItems)}</span>
+        <div class="debug-value">${escapeHtml(String(currentState.rawItemCount ?? 0))}</div>
+      </div>
+      <div class="debug-card">
+        <span class="status-label">Deduped</span>
+        <div class="debug-value">${escapeHtml(String(diagnostics.dedupedCount))}</div>
+      </div>
+      <div class="debug-card">
+        <span class="status-label">${escapeHtml(messages.filterBudget)}</span>
+        <div class="debug-value">${escapeHtml(diagnostics.budgetRangeText ?? messages.emptyValue)}</div>
+      </div>
+      <div class="debug-card">
+        <span class="status-label">${escapeHtml(messages.filterFinal)}</span>
+        <div class="debug-value">${escapeHtml(String(diagnostics.finalCount))}</div>
+        <div class="muted">budget matched=${escapeHtml(String(diagnostics.budgetMatchedCount))} topK=${escapeHtml(String(diagnostics.appliedTopK))}</div>
+      </div>
+    </div>
+  `;
+}
+
 function render() {
   const itemsRows =
     currentState.items.length > 0
@@ -189,6 +251,10 @@ function render() {
             <span class="status-value">${currentState.items.length}</span>
           </div>
           <div class="status-card">
+            <span class="status-label">${escapeHtml(messages.rawItems)}</span>
+            <span class="status-value">${currentState.rawItemCount ?? 0}</span>
+          </div>
+          <div class="status-card">
             <span class="status-label">${escapeHtml(messages.session)}</span>
             <span class="status-value">${escapeHtml(currentState.sessionId?.slice(0, 8) ?? "-")}</span>
           </div>
@@ -198,6 +264,16 @@ function render() {
       <section class="section">
         <h2>${escapeHtml(messages.timelineTitle)}</h2>
         <div class="timeline">${timeline || `<div class="muted">${escapeHtml(messages.timelineWaiting)}</div>`}</div>
+      </section>
+
+      <section class="section">
+        <h2>${escapeHtml(messages.queryTitle)}</h2>
+        ${renderTaskSpec()}
+      </section>
+
+      <section class="section">
+        <h2>${escapeHtml(messages.filterTitle)}</h2>
+        ${renderFilterDiagnostics()}
       </section>
 
       <section class="section">

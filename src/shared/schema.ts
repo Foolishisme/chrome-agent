@@ -54,7 +54,16 @@ export const llmDecisionSchema = z.object({
 });
 
 export const planningResultSchema = z.object({
-  plan: z.array(z.string().min(1)).min(2).max(4),
+  plan: z.array(z.string().min(1)).min(2).max(5),
+});
+
+export const queryRefinementSchema = z.object({
+  searchQuery: z.string().min(1),
+  reason: z.string().min(1),
+});
+
+export const summaryResultSchema = z.object({
+  summary: z.string().min(1),
 });
 
 export const toolResultSchema = z.object({

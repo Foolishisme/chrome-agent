@@ -1,69 +1,52 @@
-# Browser Agent 文档与协作约定
+# Browser Agent 新线程索引
 
-本仓库当前采用“索引 + 规范 + 状态 + 验收”四类文档组织。
+本文件服务于“线程重启后的新设计主线”。
 
-## 文档索引
+核心定义：
 
-- [规范：spec.md](/D:/code/browser-agent-mvp/doc/spec.md)
-- [状态：status.md](/D:/code/browser-agent-mvp/doc/status.md)
-- [验收：acceptance.md](/D:/code/browser-agent-mvp/doc/acceptance.md)
-- [历史版本：browser_agent_mvp_v1.md](/D:/code/browser-agent-mvp/doc/browser_agent_mvp_v1.md)
+`Agent = LLM + Tools + Memory + Runtime`
 
-## 各文档职责
+当前新主线强调：
 
-- `AGENTS.md`
-  - 仓库级协作规则
-  - 文档索引
-  - 更新策略
-- `doc/spec.md`
-  - 当前有效的产品与架构规范
-  - 目标、边界、核心模型、流程、接口职责
-- `doc/status.md`
-  - 当前代码实现状态
-  - 已实现、未实现、已知偏差、下一步
-- `doc/acceptance.md`
-  - 当前验收项
-  - 验证方式
-  - 通过状态
-- `doc/browser_agent_mvp_v1.md`
-  - 历史迁移文档
-  - 不再作为唯一动态真相来源
+- LLM 负责规划、调度、选择高阶 tool、生成最终结果
+- Tools 封装规则、等待、重试、提取等脏活
+- Memory 只保留高价值结构化上下文
+- Runtime 负责循环、状态、校验、容错
+
+## 新线程推荐入口
+
+- [新规范：spec.md](/D:/code/browser-agent-mvp/doc/spec.md)
+- [新线程启动词：thread_bootstrap.md](/D:/code/browser-agent-mvp/doc/thread_bootstrap.md)
+- [当前代码现状：status.md](/D:/code/browser-agent-mvp/doc/status.md)
+- [当前验收：acceptance.md](/D:/code/browser-agent-mvp/doc/acceptance.md)
+
+## 历史文档
+
+- [历史总入口：browser_agent_mvp_v1.md](/D:/code/browser-agent-mvp/doc/browser_agent_mvp_v1.md)
+- [线程重启前快照目录](/D:/code/browser-agent-mvp/doc/history/2026-04-01-thread-reset/README.md)
 
 ## Source Of Truth
 
-- 目标与架构：`doc/spec.md`
-- 当前实现现状：`doc/status.md`
-- 当前验收口径：`doc/acceptance.md`
+- 设计真相：`doc/spec.md`
+- 新线程上下文入口：`doc/thread_bootstrap.md`
+- 代码现状：`doc/status.md`
+- 验收口径：`doc/acceptance.md`
 
-如果三者冲突，优先处理顺序为：
+## 更新规则
 
-1. 先确认 `spec.md` 是否过期
-2. 再确认代码是否落后于 `spec.md`
-3. 最后更新 `status.md` 和 `acceptance.md`
-
-## 更新策略
-
-发生以下变化时，必须同步文档：
-
-- 需求或架构变化：更新 `doc/spec.md`
-- 代码实现变化：更新 `doc/status.md`
-- 验收标准或验证结果变化：更新 `doc/acceptance.md`
-
-不允许以下情况长期存在：
-
-- 代码已改，但 `status.md` 仍描述旧实现
-- 验收口径已改，但 `acceptance.md` 未更新
-- 目标已改变，但 `spec.md` 仍保留旧路径
+- 设计改变：更新 `doc/spec.md`
+- 新线程启动上下文改变：更新 `doc/thread_bootstrap.md`
+- 代码现状改变：更新 `doc/status.md`
+- 验收状态改变：更新 `doc/acceptance.md`
+- 设计发生范式切换时，先归档旧文档到 `doc/history/`
 
 ## 当前阶段约定
 
-- 当前阶段仍是内部 MVP
-- 以“能跑通、能定位问题、能持续迭代”为优先目标
-- 文档优先帮助定位问题属于哪一层：
-  - `LLM`
-  - `Memory`
-  - `Tools`
-  - `Runtime`
-  - `UI`
+- 当前阶段不是在旧设计上继续打补丁
+- 当前阶段是在高阶 tool 主线下重新收敛设计
+- 任何新实现都应优先回答：
+  - 这件事该由 `LLM` 做，还是该封进 `Tool`
+  - 这段上下文是否值得给 LLM
+  - 这一步是否必须进入 agent loop
 
 Updated: 2026-04-01

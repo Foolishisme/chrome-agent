@@ -72,6 +72,27 @@ export interface ExtractionDiagnostics {
   missingUrlCount: number;
 }
 
+export interface FilterDiagnostics {
+  inputCount: number;
+  dedupedCount: number;
+  budgetMatchedCount: number;
+  finalCount: number;
+  appliedTopK: number;
+  budgetRangeText?: string;
+}
+
+export interface SearchTaskSpec {
+  originalGoal: string;
+  category: string;
+  budget?: number;
+  budgetMin?: number;
+  budgetMax?: number;
+  topK: number;
+  searchQuery: string;
+  querySource: "rule" | "llm-lite";
+  notes: string[];
+}
+
 export interface SnapshotData {
   url: string;
   title: string;
@@ -126,10 +147,13 @@ export interface DebugLogEntry {
 export interface SessionMemory {
   goal: string;
   plan: string[];
+  taskSpec?: SearchTaskSpec;
   stepHistory: StepRecord[];
   logs: DebugLogEntry[];
   pageSnapshot?: SnapshotData;
+  rawExtractedItems: ExtractedItem[];
   extractedItems: ExtractedItem[];
+  filterDiagnostics?: FilterDiagnostics;
   liveStepSummary?: string;
   nextIntent?: string;
   recoveryHint?: string;
@@ -146,6 +170,7 @@ export interface SessionMemory {
     pageReadyRetryCount: number;
     recoveryCount: number;
     lastRecoveryAction?: string;
+    queryRefineTried: boolean;
     startedAt: number;
   };
 }
@@ -165,6 +190,7 @@ export interface PlanningResult {
 export interface SessionPublicState {
   sessionId?: string;
   goal?: string;
+  taskSpec?: SearchTaskSpec;
   status: RuntimeStatus;
   currentStep: number;
   plan: string[];
@@ -172,6 +198,8 @@ export interface SessionPublicState {
   lastAction?: AgentAction;
   lastActionResult?: ToolResult;
   items: ExtractedItem[];
+  rawItemCount?: number;
+  filterDiagnostics?: FilterDiagnostics;
   logs: DebugLogEntry[];
   timeline: StepRecord[];
   pageSnapshot?: SnapshotData;

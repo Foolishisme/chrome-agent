@@ -6,10 +6,8 @@
 
 - [AGENTS.md](/D:/code/browser-agent-mvp/AGENTS.md)
 - [spec.md](/D:/code/browser-agent-mvp/doc/spec.md)
-- [thread_bootstrap.md](/D:/code/browser-agent-mvp/doc/thread_bootstrap.md)
 - [status.md](/D:/code/browser-agent-mvp/doc/status.md)
 - [acceptance.md](/D:/code/browser-agent-mvp/doc/acceptance.md)
-- [history 快照目录](/D:/code/browser-agent-mvp/doc/history/2026-04-01-thread-reset/README.md)
 
 ## 迁移说明
 
@@ -29,9 +27,7 @@
 因此从 2026-04-01 起，文档拆分为：
 
 - `spec.md`
-  - 当前有效新设计规范
-- `thread_bootstrap.md`
-  - 新线程启动上下文
+  - 当前有效规范
 - `status.md`
   - 当前实现现状
 - `acceptance.md`
@@ -42,10 +38,8 @@
 ## 使用方式
 
 - 想了解当前应该做什么：看 [spec.md](/D:/code/browser-agent-mvp/doc/spec.md)
-- 想在新线程中重建设计：看 [thread_bootstrap.md](/D:/code/browser-agent-mvp/doc/thread_bootstrap.md)
 - 想了解当前代码做到哪里：看 [status.md](/D:/code/browser-agent-mvp/doc/status.md)
 - 想了解当前是否验收通过：看 [acceptance.md](/D:/code/browser-agent-mvp/doc/acceptance.md)
 - 想了解文档如何维护：看 [AGENTS.md](/D:/code/browser-agent-mvp/AGENTS.md)
-- 想回看线程重启前设计：看 [history 快照目录](/D:/code/browser-agent-mvp/doc/history/2026-04-01-thread-reset/README.md)
 
 Updated: 2026-04-01

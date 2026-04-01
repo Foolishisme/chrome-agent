@@ -1,11 +1,14 @@
+import { z } from "zod";
 import { LIMITS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
-import { llmDecisionSchema, planningResultSchema } from "../shared/schema";
-import type { LlmDecision, PlanningResult, SessionMemory } from "../shared/types";
-import { buildDecisionPrompt, buildPlanningPrompt, normalizePlanningResult } from "./prompting";
+import { queryRefinementSchema, summaryResultSchema } from "../shared/schema";
+import type { ExtractedItem, SearchTaskSpec } from "../shared/types";
+import { buildFinalSummaryPrompt, buildSearchQueryRefinementPrompt } from "./prompting";
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL || "gemini-2.0-flash";
+const GEMINI_SIMPLE_MODEL = import.meta.env.VITE_GEMINI_SIMPLE_MODEL || "gemini-3.1-flash-lite-preview";
+const GEMINI_SIMPLE_MODEL_FALLBACK = import.meta.env.VITE_GEMINI_SIMPLE_MODEL_FALLBACK || "gemini-2.5-flash-lite";
 
 interface GeminiResponse {
   candidates?: Array<{
@@ -101,7 +104,15 @@ export function parseModelJson(raw: string) {
   }
 }
 
-async function requestGemini(prompt: string, options: RequestOptions = {}): Promise<string> {
+export function getModelCandidates(task: "simple" | "default") {
+  if (task === "simple") {
+    return Array.from(new Set([GEMINI_SIMPLE_MODEL, GEMINI_SIMPLE_MODEL_FALLBACK, GEMINI_MODEL].filter(Boolean)));
+  }
+
+  return Array.from(new Set([GEMINI_MODEL].filter(Boolean)));
+}
+
+async function requestGemini(prompt: string, modelCandidates: string[], options: RequestOptions = {}): Promise<{ raw: string; model: string }> {
   if (!GEMINI_API_KEY) {
     throw new RuntimeError("缺少 VITE_GEMINI_API_KEY，请先配置环境变量。", "MISSING_API_KEY");
   }
@@ -110,58 +121,120 @@ async function requestGemini(prompt: string, options: RequestOptions = {}): Prom
     throw new RuntimeError("任务已停止。", "SESSION_STOPPED");
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), LIMITS.LLM_TIMEOUT_MS);
-  const abortListener = () => controller.abort();
-  options.signal?.addEventListener("abort", abortListener, { once: true });
+  let lastError: unknown;
 
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+  for (const model of modelCandidates) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), LIMITS.LLM_TIMEOUT_MS);
+    const abortListener = () => controller.abort();
+    options.signal?.addEventListener("abort", abortListener, { once: true });
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(buildGeminiRequestBody(prompt)),
+          signal: controller.signal,
         },
-        body: JSON.stringify(buildGeminiRequestBody(prompt)),
-        signal: controller.signal,
-      },
-    );
+      );
 
-    if (!response.ok) {
-      throw new RuntimeError(`Gemini 请求失败：${response.status}`, "LLM_HTTP_ERROR");
+      if (!response.ok) {
+        const body = await response.text();
+        const error = new RuntimeError(`Gemini 请求失败：${response.status}`, "LLM_HTTP_ERROR");
+        (error as RuntimeError & { cause?: string }).cause = body;
+
+        if ((response.status === 400 || response.status === 404) && model !== modelCandidates.at(-1)) {
+          lastError = error;
+          continue;
+        }
+
+        throw error;
+      }
+
+      const data = (await response.json()) as GeminiResponse;
+      return {
+        raw: extractJsonText(data),
+        model,
+      };
+    } catch (error) {
+      if (error instanceof RuntimeError) {
+        lastError = error;
+        if (error.code === "LLM_HTTP_ERROR" && model !== modelCandidates.at(-1)) {
+          continue;
+        }
+        throw error;
+      }
+
+      if (options.signal?.aborted) {
+        throw new RuntimeError("任务已停止。", "SESSION_STOPPED");
+      }
+
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new RuntimeError("Gemini 请求超时。", "LLM_TIMEOUT");
+      }
+
+      lastError = error;
+      if (model === modelCandidates.at(-1)) {
+        throw new RuntimeError(error instanceof Error ? error.message : "Gemini 请求失败。", "LLM_UNKNOWN_ERROR");
+      }
+    } finally {
+      clearTimeout(timeoutId);
+      options.signal?.removeEventListener("abort", abortListener);
     }
-
-    const data = (await response.json()) as GeminiResponse;
-    return extractJsonText(data);
-  } catch (error) {
-    if (error instanceof RuntimeError) {
-      throw error;
-    }
-
-    if (options.signal?.aborted) {
-      throw new RuntimeError("任务已停止。", "SESSION_STOPPED");
-    }
-
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new RuntimeError("Gemini 请求超时。", "LLM_TIMEOUT");
-    }
-
-    throw new RuntimeError(error instanceof Error ? error.message : "Gemini 请求失败。", "LLM_UNKNOWN_ERROR");
-  } finally {
-    clearTimeout(timeoutId);
-    options.signal?.removeEventListener("abort", abortListener);
   }
+
+  throw lastError instanceof RuntimeError
+    ? lastError
+    : new RuntimeError(lastError instanceof Error ? lastError.message : "Gemini 请求失败。", "LLM_UNKNOWN_ERROR");
 }
 
-export async function requestPlan(memory: SessionMemory, options: RequestOptions = {}): Promise<PlanningResult> {
-  const raw = await requestGemini(buildPlanningPrompt(memory), options);
-  const parsed = planningResultSchema.parse(parseModelJson(raw));
-  return normalizePlanningResult(parsed);
+async function requestGeminiJson<T>(
+  prompt: string,
+  schema: z.ZodType<T>,
+  modelCandidates: string[],
+  options: RequestOptions = {},
+) {
+  const response = await requestGemini(prompt, modelCandidates, options);
+  const parsed = schema.parse(parseModelJson(response.raw));
+  return {
+    data: parsed,
+    model: response.model,
+  };
 }
 
-export async function requestDecision(memory: SessionMemory, options: RequestOptions = {}): Promise<LlmDecision> {
-  const raw = await requestGemini(buildDecisionPrompt(memory), options);
-  const parsed = llmDecisionSchema.parse(parseModelJson(raw));
-  return parsed;
+export async function refineSearchQuery(goal: string, draftQuery: string, options: RequestOptions = {}) {
+  const response = await requestGeminiJson(
+    buildSearchQueryRefinementPrompt(goal, draftQuery),
+    queryRefinementSchema,
+    getModelCandidates("simple"),
+    options,
+  );
+
+  return {
+    ...response.data,
+    model: response.model,
+  };
+}
+
+export async function generateFinalSummary(
+  goal: string,
+  taskSpec: SearchTaskSpec,
+  items: ExtractedItem[],
+  options: RequestOptions = {},
+) {
+  const response = await requestGeminiJson(
+    buildFinalSummaryPrompt(goal, taskSpec, items),
+    summaryResultSchema,
+    getModelCandidates("default"),
+    options,
+  );
+
+  return {
+    ...response.data,
+    model: response.model,
+  };
 }

@@ -11,7 +11,7 @@ function createSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
     productCandidates: [],
     pageReady: {
       ready: true,
-      reason: "搜索结果页已就绪",
+      reason: "搜索结果页可用",
       checks: [],
     },
     pageFacts: {
@@ -36,6 +36,7 @@ function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
     plan: [],
     stepHistory: [],
     logs: [],
+    rawExtractedItems: [],
     extractedItems: [],
     runtimeMeta: {
       sessionId: "session-1",
@@ -47,6 +48,7 @@ function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
       actionRetryCount: 0,
       pageReadyRetryCount: 0,
       recoveryCount: 0,
+      queryRefineTried: false,
       startedAt: Date.now(),
     },
     ...overrides,
