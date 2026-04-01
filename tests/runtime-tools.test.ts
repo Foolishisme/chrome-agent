@@ -139,3 +139,52 @@ describe("runtime recovery path", () => {
     );
   });
 });
+
+describe("search page query matching", () => {
+  it("accepts a matching search result page even when the search input is missing", async () => {
+    const tool = getToolDefinition("searchInSite");
+    const memory = createMemory({
+      currentPhase: "searching",
+      taskSpec: {
+        originalGoal: "macbookair",
+        category: "MacBook",
+        topK: 5,
+        searchQuery: "macbookair",
+        querySource: "rule",
+        notes: [],
+      },
+    });
+    const snapshot = createSnapshot({
+      url: "https://search.jd.com/Search?keyword=macbookair",
+      title: "macbookair - 商品搜索",
+      pageFacts: {
+        searchBox: { present: false, visible: false, text: "" },
+        searchSubmit: { present: true, visible: true, text: "搜索" },
+        resultList: {
+          present: true,
+          loaded: true,
+          cardCount: 29,
+          productLinkCount: 29,
+          emptyState: false,
+        },
+      },
+    });
+    const executeAction = vi.fn();
+
+    const result = await tool.run({
+      memory,
+      signal: new AbortController().signal,
+      scanPage: vi.fn().mockResolvedValue(snapshot),
+      ensureUsableSnapshot: vi.fn().mockResolvedValue(snapshot),
+      executeAction,
+      settleAfterAction: vi.fn().mockResolvedValue(undefined),
+      appendLog: vi.fn(),
+      recordStep: vi.fn(),
+      pushState: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(result.nextPhase).toBe("extracting");
+    expect(executeAction).not.toHaveBeenCalled();
+    expect(memory.currentFacts.searchQueryMatched).toBe(true);
+  });
+});

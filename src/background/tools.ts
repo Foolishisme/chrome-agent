@@ -51,8 +51,38 @@ function normalizeText(text: string | undefined) {
   return (text ?? "").replace(/\s+/g, "").toLowerCase();
 }
 
+function getSearchPageSignals(snapshot: SnapshotData) {
+  const signals = [snapshot.pageFacts.searchBox.text, snapshot.title];
+
+  try {
+    const parsed = new URL(snapshot.url);
+    signals.push(parsed.searchParams.get("keyword") ?? undefined);
+    signals.push(parsed.searchParams.get("q") ?? undefined);
+  } catch {
+    // Ignore malformed URLs and keep the existing signals.
+  }
+
+  return signals.filter((signal): signal is string => !!signal && signal.trim().length > 0);
+}
+
 function hasMatchingQuery(snapshot: SnapshotData, searchQuery: string) {
-  return normalizeText(snapshot.pageFacts.searchBox.text).includes(normalizeText(searchQuery));
+  const normalizedQuery = normalizeText(searchQuery);
+  if (!normalizedQuery) {
+    return false;
+  }
+
+  const queryTokens = searchQuery
+    .split(/\s+/)
+    .map((token) => normalizeText(token))
+    .filter((token) => token.length >= 2);
+
+  return getSearchPageSignals(snapshot).some((signal) => {
+    const normalizedSignal = normalizeText(signal);
+    return (
+      normalizedSignal.includes(normalizedQuery) ||
+      (queryTokens.length > 0 && queryTokens.every((token) => normalizedSignal.includes(token)))
+    );
+  });
 }
 
 export async function compileTaskSpecRuleOnly(goal: string) {

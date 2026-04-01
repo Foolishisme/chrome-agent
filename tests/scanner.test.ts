@@ -137,4 +137,45 @@ describe("collectResultListState", () => {
 
     rectSpy.mockRestore();
   });
+
+  it("allows extraction on search pages even when the search input is missing", () => {
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          x: 0,
+          y: 0,
+          width: 160,
+          height: 36,
+          top: 0,
+          left: 0,
+          right: 160,
+          bottom: 36,
+          toJSON() {
+            return {};
+          },
+        }) as DOMRect,
+    );
+
+    document.title = "macbookair - 商品搜索";
+    document.body.innerHTML = `
+      <div class="search-form">
+        <button class="button">搜索</button>
+      </div>
+      <section class="custom-results">
+        <article class="custom-entry">
+          <div class="sku-name"><a href="https://item.jd.com/3001.html"><span>MacBook Air</span></a></div>
+          <div>到手价 6999.00 元</div>
+        </article>
+      </section>
+    `;
+
+    const snapshot = scanPageAtUrl("https://search.jd.com/Search?keyword=macbookair");
+
+    expect(snapshot.pageFacts.searchBox.present).toBe(false);
+    expect(snapshot.pageFacts.resultList?.productLinkCount).toBe(1);
+    expect(snapshot.pageReady.ready).toBe(true);
+    expect(snapshot.pageReady.checks).toEqual([]);
+
+    rectSpy.mockRestore();
+  });
 });

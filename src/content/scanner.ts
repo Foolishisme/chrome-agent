@@ -137,11 +137,17 @@ function buildPageReady(pageType: PageType, facts: PageFacts): PageReadyState {
   }
 
   if (pageType === "search") {
-    if (!facts.searchBox.present || !facts.searchBox.visible) {
+    const resultList = facts.resultList;
+    const hasExtractableResults =
+      !!resultList &&
+      resultList.present &&
+      resultList.loaded &&
+      (resultList.cardCount > 0 || resultList.productLinkCount > 0 || resultList.emptyState);
+
+    if ((!facts.searchBox.present || !facts.searchBox.visible) && !hasExtractableResults) {
       checks.push("搜索页搜索框未识别");
     }
 
-    const resultList = facts.resultList;
     if (!resultList?.present) {
       checks.push("搜索结果区未出现");
     } else if (!resultList.loaded) {
