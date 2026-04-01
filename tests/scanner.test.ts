@@ -2,8 +2,27 @@ import { describe, expect, it, vi } from "vitest";
 import { collectResultListState, extractStructuredProducts } from "../src/content/extractor";
 import { scanPageAtUrl } from "../src/content/scanner";
 
+function mockVisibleRect() {
+  return vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    () =>
+      ({
+        x: 0,
+        y: 0,
+        width: 160,
+        height: 36,
+        top: 0,
+        left: 0,
+        right: 160,
+        bottom: 36,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect,
+  );
+}
+
 describe("extractStructuredProducts", () => {
-  it("maps JD search result cards into normalized items", () => {
+  it("maps legacy JD search result cards into normalized items", () => {
     document.body.innerHTML = `
       <div id="J_goodsList">
         <div class="gl-item">
@@ -65,6 +84,56 @@ describe("extractStructuredProducts", () => {
     expect(result.items[0].summary).toBe("轻薄高刷屏");
     expect(result.diagnostics.fallbackItemCount).toBeGreaterThanOrEqual(2);
   });
+
+  it("extracts current JD data-sku cards without opening the detail page", () => {
+    const rectSpy = mockVisibleRect();
+
+    document.title = "MacBook Air - 商品搜索 - 京东";
+    document.body.innerHTML = `
+      <div class="jd_pc_search_bar_react_search_wrap">
+        <input class="jd_pc_search_bar_react_search_input" aria-label="搜索" value="MacBook Air" />
+        <button class="jd_pc_search_bar_react_search_btn">搜索</button>
+      </div>
+      <section class="search-list">
+        <div data-sku="1001" class="_wrapper_x plugin_goodsCardWrapper">
+          <div class="_goods_title_container_x">
+            <span>MacBook Air 13 英寸 M4</span>
+          </div>
+          <div class="_container_x">
+            <span class="_price_x">¥7999.00</span>
+          </div>
+          <div class="_tags_x">
+            <div class="_textTag_x"><span>学生优惠</span></div>
+          </div>
+          <div class="_shopFloor_x">
+            <span class="_name_x">Apple 产品京东自营旗舰店</span>
+          </div>
+          <div class="_goods_volume_x">
+            <span>已售 1万+</span>
+          </div>
+        </div>
+      </section>
+    `;
+
+    const snapshot = scanPageAtUrl("https://search.jd.com/Search?keyword=MacBook%20Air");
+    const extracted = extractStructuredProducts(document);
+
+    expect(snapshot.pageFacts.searchBox.present).toBe(true);
+    expect(snapshot.pageFacts.searchSubmit.present).toBe(true);
+    expect(snapshot.pageReady.ready).toBe(true);
+    expect(snapshot.pageFacts.resultList?.cardCount).toBe(1);
+    expect(snapshot.pageFacts.resultList?.productLinkCount).toBe(0);
+    expect(extracted.items).toHaveLength(1);
+    expect(extracted.items[0]).toMatchObject({
+      title: "MacBook Air 13 英寸 M4",
+      url: "https://item.jd.com/1001.html",
+      shopText: "Apple 产品京东自营旗舰店",
+    });
+    expect(extracted.items[0].priceText).toContain("7999");
+    expect(extracted.items[0].tags).toContain("学生优惠");
+
+    rectSpy.mockRestore();
+  });
 });
 
 describe("collectResultListState", () => {
@@ -85,22 +154,7 @@ describe("collectResultListState", () => {
   });
 
   it("treats link-based result sections as ready even when legacy cards are missing", () => {
-    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-      () =>
-        ({
-          x: 0,
-          y: 0,
-          width: 160,
-          height: 36,
-          top: 0,
-          left: 0,
-          right: 160,
-          bottom: 36,
-          toJSON() {
-            return {};
-          },
-        }) as DOMRect,
-    );
+    const rectSpy = mockVisibleRect();
 
     document.title = "MacBook 搜索";
     document.body.innerHTML = `
@@ -139,22 +193,7 @@ describe("collectResultListState", () => {
   });
 
   it("allows extraction on search pages even when the search input is missing", () => {
-    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-      () =>
-        ({
-          x: 0,
-          y: 0,
-          width: 160,
-          height: 36,
-          top: 0,
-          left: 0,
-          right: 160,
-          bottom: 36,
-          toJSON() {
-            return {};
-          },
-        }) as DOMRect,
-    );
+    const rectSpy = mockVisibleRect();
 
     document.title = "macbookair - 商品搜索";
     document.body.innerHTML = `

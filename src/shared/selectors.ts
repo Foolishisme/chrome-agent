@@ -5,6 +5,7 @@ export const JD_SELECTORS = {
     ".search-m input[type='text']",
     "input[id*='key']",
     "input[placeholder*='搜索']",
+    "input[class*='jd_pc_search_bar_react_search_input']",
   ],
   homeSearchButton: [
     ".button",
@@ -13,6 +14,7 @@ export const JD_SELECTORS = {
     ".search-m button",
     ".search-btn",
     "button[aria-label*='搜索']",
+    "button[class*='jd_pc_search_bar_react_search_btn']",
   ],
   searchInput: [
     "#key",
@@ -21,6 +23,7 @@ export const JD_SELECTORS = {
     "input[id*='key']",
     "input[placeholder*='搜索']",
     ".search-form input[type='text']",
+    "input[class*='jd_pc_search_bar_react_search_input']",
   ],
   searchButton: [
     ".button",
@@ -29,6 +32,7 @@ export const JD_SELECTORS = {
     ".search-btn",
     "button[aria-label*='搜索']",
     ".search-form button",
+    "button[class*='jd_pc_search_bar_react_search_btn']",
   ],
   resultCards: [
     "#J_goodsList .gl-item",
@@ -61,6 +65,7 @@ export const JD_SELECTORS = {
     ".p-name em",
     ".p-name a em",
     ".sku-name",
+    "[class*='goods_title_container']",
     "[class*='title'] a",
     "[class*='title'] em",
   ],
@@ -70,7 +75,6 @@ export const JD_SELECTORS = {
     "[class*='title'] a",
     "a[href*='item.jd.com/']",
     "a[href*='item.jd.hk/']",
-    "a[target='_blank']",
   ],
   resultPrice: [
     ".p-price strong",
@@ -79,7 +83,15 @@ export const JD_SELECTORS = {
     "[class*='price'] strong",
     "[class*='price']",
   ],
-  resultShop: [".p-shop a", ".curr-shop a", ".shopname", "[class*='shop'] a"],
-  resultTagSpans: [".p-icons i", ".p-commit a", ".promo-words", "[class*='tag']", "[class*='icon']"],
-  resultSummary: [".p-commit strong", ".p-promotions", ".p-ad", "[class*='summary']", "[class*='desc']"],
+  resultShop: [".p-shop a", ".curr-shop a", ".shopname", "[class*='shopFloor']", "[class*='shop'] a"],
+  resultTagSpans: [".p-icons i", ".p-commit a", ".promo-words", "[class*='textTag']", "[class*='tag']", "[class*='icon']"],
+  resultSummary: [
+    ".p-commit strong",
+    ".p-promotions",
+    ".p-ad",
+    "[class*='text-list']",
+    "[class*='goods_volume']",
+    "[class*='summary']",
+    "[class*='desc']",
+  ],
 };

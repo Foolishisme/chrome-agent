@@ -56,25 +56,43 @@ function createInteractiveElement(agentId: string, role: InteractiveElement["rol
 }
 
 function findFallbackSearchInput() {
-  return Array.from(document.querySelectorAll<HTMLInputElement>("input")).find((input) => {
-    const placeholder = input.placeholder || "";
-    const name = input.name || "";
-    const id = input.id || "";
-    return (
-      isVisible(input) &&
-      (placeholder.includes("搜索") ||
-        placeholder.toLowerCase().includes("search") ||
-        name.includes("keyword") ||
-        id.includes("key"))
-    );
-  }) ?? null;
+  return (
+    Array.from(document.querySelectorAll<HTMLInputElement>("input")).find((input) => {
+      const placeholder = input.placeholder || "";
+      const name = input.name || "";
+      const id = input.id || "";
+      const ariaLabel = input.getAttribute("aria-label") || "";
+      const className = input.className || "";
+
+      return (
+        isVisible(input) &&
+        (placeholder.includes("搜索") ||
+          placeholder.toLowerCase().includes("search") ||
+          ariaLabel.includes("搜索") ||
+          name.includes("keyword") ||
+          id.includes("key") ||
+          className.includes("jd_pc_search_bar_react_search_input"))
+      );
+    }) ?? null
+  );
 }
 
 function findFallbackSearchButton() {
-  return Array.from(document.querySelectorAll<HTMLElement>("button, a")).find((element) => {
-    const text = textOf(element);
-    return isVisible(element) && (text.includes("搜索") || text.toLowerCase().includes("search"));
-  }) ?? null;
+  return (
+    Array.from(document.querySelectorAll<HTMLElement>("button, a")).find((element) => {
+      const text = textOf(element);
+      const ariaLabel = element.getAttribute("aria-label") || "";
+      const className = element.className || "";
+
+      return (
+        isVisible(element) &&
+        (text.includes("搜索") ||
+          text.toLowerCase().includes("search") ||
+          ariaLabel.includes("搜索") ||
+          className.includes("jd_pc_search_bar_react_search_btn"))
+      );
+    }) ?? null
+  );
 }
 
 function findSearchElements(pageType: PageType) {

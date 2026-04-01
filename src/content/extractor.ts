@@ -5,15 +5,14 @@ const PRODUCT_LINK_SELECTOR = [
   "a[href*='item.jd.com/']",
   "a[href*='item.jd.hk/']",
   "a[href*='item.m.jd.com/product/']",
-  "[data-sku] a[href]",
-  "[data-spu] a[href]",
   ".gl-item a[href]",
   ".sku-name a[href]",
   ".p-name a[href]",
   "[class*='title'] a[href]",
   "article[data-sku] a[href]",
 ].join(", ");
-const PRICE_PATTERN = /(?:¥|￥)?\s?(\d{2,6}(?:\.\d{1,2})?)/;
+
+const PRICE_PATTERN = /(?:¥|￥)?\s*(\d{2,6}(?:\.\d{1,2})?)/;
 
 function textOf(element: Element | null | undefined): string {
   return element?.textContent?.replace(/\s+/g, " ").trim() ?? "";
@@ -45,6 +44,15 @@ function normalizeHref(href: string) {
   } catch {
     return href;
   }
+}
+
+function isLikelyProductHref(href: string) {
+  const normalized = normalizeHref(href);
+  return (
+    normalized.includes("item.jd.com/") ||
+    normalized.includes("item.jd.hk/") ||
+    normalized.includes("item.m.jd.com/product/")
+  );
 }
 
 function findCards(root: Document | HTMLElement) {
@@ -95,26 +103,36 @@ function uniqueItems(items: ExtractedItem[]) {
   });
 }
 
+function extractPriceFromText(text: string) {
+  return text.match(PRICE_PATTERN)?.[1] ?? "";
+}
+
 function findBestProductLink(card: HTMLElement): HTMLAnchorElement | null {
   const explicit = pickWithin(card, JD_SELECTORS.resultLink) as HTMLAnchorElement | null;
-  if (explicit?.href) {
+  if (explicit?.href && isLikelyProductHref(explicit.href)) {
     return explicit;
   }
 
-  const anchors = Array.from(card.querySelectorAll<HTMLAnchorElement>("a[href]"));
   return (
-    anchors.find((anchor) => {
+    Array.from(card.querySelectorAll<HTMLAnchorElement>("a[href]")).find((anchor) => {
       const href = normalizeHref(anchor.getAttribute("href") ?? anchor.href);
       const text = textOf(anchor);
-      return (
-        href.length > 0 &&
-        !href.includes("/shop") &&
-        !href.includes("mall.jd.com") &&
-        !href.includes("list.jd.com") &&
-        (text.length >= 4 || !!anchor.querySelector("img"))
-      );
+      return isLikelyProductHref(href) && (text.length >= 4 || !!anchor.querySelector("img"));
     }) ?? null
   );
+}
+
+function buildProductUrl(card: HTMLElement, link: HTMLAnchorElement | null) {
+  if (link?.href && isLikelyProductHref(link.href)) {
+    return normalizeHref(link.href);
+  }
+
+  const sku = card.dataset.sku ?? card.dataset.spu;
+  if (sku && /^\d+$/.test(sku)) {
+    return `https://item.jd.com/${sku}.html`;
+  }
+
+  return link?.href ? normalizeHref(link.href) : "";
 }
 
 function findProductContainer(anchor: HTMLAnchorElement): HTMLElement | null {
@@ -148,50 +166,97 @@ function findPriceText(container: HTMLElement | null) {
     .map((node) => textOf(node));
 
   for (const text of texts) {
-    const matched = text.match(PRICE_PATTERN)?.[1];
+    const matched = extractPriceFromText(text);
     if (matched) {
       return matched;
     }
   }
 
-  return textOf(container).match(PRICE_PATTERN)?.[1] ?? "";
+  return extractPriceFromText(textOf(container));
 }
 
-function findSummary(container: HTMLElement | null) {
+function findTitleText(container: HTMLElement | null, link: HTMLAnchorElement | null) {
+  const linkText = textOf(link?.querySelector("em, span")) || textOf(link);
+  if (linkText.length >= 4) {
+    return linkText;
+  }
+
+  if (!container) {
+    return linkText;
+  }
+
+  const knownNode = pickWithin(container, JD_SELECTORS.resultTitle);
+  const knownText = textOf(knownNode);
+  if (knownText) {
+    return knownText;
+  }
+
+  const candidates = Array.from(container.querySelectorAll<HTMLElement>("div, span, p, em"))
+    .map((node) => textOf(node))
+    .filter((text) => text.length >= 8 && !PRICE_PATTERN.test(text) && !text.includes("已售"));
+
+  return candidates[0] ?? linkText;
+}
+
+function findShopText(container: HTMLElement | null) {
+  if (!container) {
+    return "";
+  }
+
+  const knownNode = pickWithin(container, JD_SELECTORS.resultShop);
+  const knownText = textOf(knownNode);
+  if (knownText) {
+    return knownText;
+  }
+
+  return (
+    Array.from(container.querySelectorAll<HTMLElement>("div, span, a"))
+      .map((node) => textOf(node))
+      .find((text) => text.length >= 3 && text.length <= 32 && (text.endsWith("店") || text.includes("旗舰店"))) ?? ""
+  );
+}
+
+function findSummary(container: HTMLElement | null, title: string, shopText: string) {
   if (!container) {
     return undefined;
   }
 
   const summaryNode = pickWithin(container, JD_SELECTORS.resultSummary);
   const summaryText = textOf(summaryNode);
-  if (summaryText) {
+  if (summaryText && summaryText !== title && summaryText !== shopText) {
     return summaryText;
   }
 
-  const shopText = textOf(pickWithin(container, JD_SELECTORS.resultShop));
   const candidates = Array.from(container.querySelectorAll<HTMLElement>("span, p, div"))
     .filter((node) => !node.closest("a"))
     .map((node) => textOf(node))
-    .filter((text) => text.length >= 4 && text.length <= 48 && !PRICE_PATTERN.test(text) && text !== shopText);
+    .filter((text) => {
+      return (
+        text.length >= 4 &&
+        text.length <= 48 &&
+        !PRICE_PATTERN.test(text) &&
+        text !== title &&
+        text !== shopText &&
+        !text.endsWith("店")
+      );
+    });
 
   return candidates[0];
 }
 
 function mapCard(card: HTMLElement): ExtractedItem {
-  const titleNode = pickWithin(card, JD_SELECTORS.resultTitle);
   const linkNode = findBestProductLink(card);
-  const priceNode = pickWithin(card, JD_SELECTORS.resultPrice);
-  const shopNode = pickWithin(card, JD_SELECTORS.resultShop);
-  const summaryNode = pickWithin(card, JD_SELECTORS.resultSummary);
+  const title = findTitleText(card, linkNode);
+  const shopText = findShopText(card) || undefined;
   const tagNodes = pickAllWithin(card, JD_SELECTORS.resultTagSpans);
 
   return {
-    title: textOf(titleNode) || textOf(linkNode),
-    priceText: textOf(priceNode),
-    url: normalizeHref(linkNode?.href ?? ""),
-    shopText: textOf(shopNode) || undefined,
+    title,
+    priceText: findPriceText(card),
+    url: buildProductUrl(card, linkNode),
+    shopText,
     tags: tagNodes.map((node) => textOf(node)).filter(Boolean).slice(0, 3),
-    summary: textOf(summaryNode) || undefined,
+    summary: findSummary(card, title, shopText ?? ""),
   };
 }
 
@@ -204,17 +269,17 @@ function extractByHeuristics(root: Document | HTMLElement): ExtractedItem[] {
 
   return links.slice(0, 40).map((link) => {
     const container = findProductContainer(link);
-    const title = textOf(link.querySelector("em, span")) || textOf(link);
-    const shopNode = container ? pickWithin(container, JD_SELECTORS.resultShop) : null;
+    const title = findTitleText(container, link);
+    const shopText = findShopText(container) || undefined;
     const tagNodes = container ? pickAllWithin(container, JD_SELECTORS.resultTagSpans) : [];
 
     return {
       title,
       priceText: findPriceText(container),
       url: normalizeHref(link.href),
-      shopText: textOf(shopNode) || undefined,
+      shopText,
       tags: tagNodes.map((node) => textOf(node)).filter(Boolean).slice(0, 3),
-      summary: findSummary(container),
+      summary: findSummary(container, title, shopText ?? ""),
     };
   });
 }
