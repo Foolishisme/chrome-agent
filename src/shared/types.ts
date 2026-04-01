@@ -34,12 +34,52 @@ export interface ExtractedItem {
   summary?: string;
 }
 
+export interface PageReadyState {
+  ready: boolean;
+  reason: string;
+  checks: string[];
+}
+
+export interface SearchControlState {
+  present: boolean;
+  visible: boolean;
+  text?: string;
+}
+
+export interface ResultListState {
+  present: boolean;
+  loaded: boolean;
+  cardCount: number;
+  productLinkCount: number;
+  emptyState: boolean;
+}
+
+export interface PageFacts {
+  searchBox: SearchControlState;
+  searchSubmit: SearchControlState;
+  resultList?: ResultListState;
+}
+
+export interface ExtractionDiagnostics {
+  cardCandidateCount: number;
+  productLinkCount: number;
+  primaryItemCount: number;
+  fallbackItemCount: number;
+  finalItemCount: number;
+  filteredOutCount: number;
+  missingTitleCount: number;
+  missingPriceCount: number;
+  missingUrlCount: number;
+}
+
 export interface SnapshotData {
   url: string;
   title: string;
   pageType: PageType;
   interactiveElements: InteractiveElement[];
   productCandidates: ExtractedItem[];
+  pageReady: PageReadyState;
+  pageFacts: PageFacts;
   timestamp: number;
 }
 
@@ -73,14 +113,26 @@ export interface StepRecord {
   timestamp: number;
 }
 
+export type DebugLogLevel = "info" | "warn" | "error";
+
+export interface DebugLogEntry {
+  timestamp: number;
+  level: DebugLogLevel;
+  source: "runtime" | "llm" | "content";
+  message: string;
+  detail?: string;
+}
+
 export interface SessionMemory {
   goal: string;
   plan: string[];
   stepHistory: StepRecord[];
+  logs: DebugLogEntry[];
   pageSnapshot?: SnapshotData;
   extractedItems: ExtractedItem[];
   liveStepSummary?: string;
   nextIntent?: string;
+  recoveryHint?: string;
   lastError?: string;
   finalSummary?: string;
   runtimeMeta: {
@@ -91,6 +143,9 @@ export interface SessionMemory {
     currentStep: number;
     llmRetryCount: number;
     actionRetryCount: number;
+    pageReadyRetryCount: number;
+    recoveryCount: number;
+    lastRecoveryAction?: string;
     startedAt: number;
   };
 }
@@ -117,6 +172,10 @@ export interface SessionPublicState {
   lastAction?: AgentAction;
   lastActionResult?: ToolResult;
   items: ExtractedItem[];
+  logs: DebugLogEntry[];
+  timeline: StepRecord[];
+  pageSnapshot?: SnapshotData;
+  recoveryHint?: string;
   error?: string;
   finalSummary?: string;
   updatedAt: number;

@@ -1,17 +1,31 @@
 import { SENSITIVE_KEYWORDS } from "../shared/constants";
-import type { AgentAction, LlmDecision, SessionMemory, SnapshotData } from "../shared/types";
 import { RuntimeError } from "../shared/errors";
+import type { AgentAction, LlmDecision, SessionMemory, SnapshotData, ToolResult } from "../shared/types";
+
+const FALLBACK_AGENT_IDS = new Set(["el_search_input", "el_search_submit"]);
 
 export function ensureAgentExists(snapshot: SnapshotData | undefined, agentId: string) {
   if (!snapshot) {
-    throw new RuntimeError("当前没有页面快照，无法定位元素", "SNAPSHOT_MISSING");
+    throw new RuntimeError("当前没有页面快照，无法定位元素。", "SNAPSHOT_MISSING");
   }
 
   const matched = snapshot.interactiveElements.find((item) => item.agentId === agentId);
-  if (!matched) {
-    throw new RuntimeError(`agentId 不存在: ${agentId}`, "AGENT_ID_NOT_FOUND");
+  if (matched) {
+    return matched;
   }
-  return matched;
+
+  if (FALLBACK_AGENT_IDS.has(agentId) && (snapshot.pageType === "home" || snapshot.pageType === "search")) {
+    return {
+      agentId,
+      role: agentId === "el_search_input" ? "input" : "button",
+      text: "",
+      tagName: "",
+      isVisible: true,
+      rect: { x: 0, y: 0, width: 0, height: 0 },
+    };
+  }
+
+  throw new RuntimeError(`agentId 不存在：${agentId}`, "AGENT_ID_NOT_FOUND");
 }
 
 export function ensureActionAllowed(snapshot: SnapshotData | undefined, action: AgentAction) {
@@ -19,12 +33,12 @@ export function ensureActionAllowed(snapshot: SnapshotData | undefined, action: 
     const target = ensureAgentExists(snapshot, action.agentId);
     const combined = `${target.text} ${target.agentId}`.toLowerCase();
     if (SENSITIVE_KEYWORDS.some((keyword) => combined.includes(keyword.toLowerCase()))) {
-      throw new RuntimeError("命中敏感动作拦截规则", "SENSITIVE_ACTION_BLOCKED");
+      throw new RuntimeError("命中敏感动作拦截规则。", "SENSITIVE_ACTION_BLOCKED");
     }
   }
 
   if (action.type === "EXTRACT_LIST" && snapshot?.pageType !== "search") {
-    throw new RuntimeError("只有搜索结果页允许提取商品列表", "INVALID_PAGE_FOR_EXTRACT");
+    throw new RuntimeError("只有搜索结果页允许提取商品列表。", "INVALID_PAGE_FOR_EXTRACT");
   }
 }
 
@@ -50,11 +64,11 @@ export function ensureDoneAllowed(memory: SessionMemory, decision: LlmDecision) 
   }
 
   if (memory.runtimeMeta.pageType !== "search") {
-    throw new RuntimeError("当前页面阶段不允许结束任务", "DONE_PAGE_BLOCKED");
+    throw new RuntimeError("当前页面阶段不允许结束任务。", "DONE_PAGE_BLOCKED");
   }
 
   if (!hasReachedCompletion(memory, decision)) {
-    throw new RuntimeError("商品数量不足，不能提前 DONE", "DONE_ITEMS_BLOCKED");
+    throw new RuntimeError("商品数量不足，不能提前结束任务。", "DONE_ITEMS_BLOCKED");
   }
 }
 
@@ -80,7 +94,11 @@ export function isRepeatedAction(memory: SessionMemory, action: AgentAction): bo
 }
 
 export function summarizeSnapshot(snapshot: SnapshotData): string {
-  return `${snapshot.pageType} | ${snapshot.interactiveElements.length} elements | ${snapshot.productCandidates.length} products`;
+  const resultList = snapshot.pageFacts.resultList;
+  const ready = snapshot.pageReady.ready ? "ready" : "not-ready";
+  const searchFacts = snapshot.pageFacts.searchBox.present ? "search-input" : "no-search-input";
+  const resultFacts = resultList ? `${resultList.cardCount} cards / ${resultList.productLinkCount} links` : "no-results";
+  return `${snapshot.pageType} | ${ready} | ${searchFacts} | ${resultFacts}`;
 }
 
 export function compareExpectedOutcome(
@@ -88,37 +106,46 @@ export function compareExpectedOutcome(
   afterSnapshot: SnapshotData,
   expectedOutcome: string,
   action: AgentAction,
+  actionResult?: ToolResult,
 ): {
   matched: boolean;
   reason: string;
 } {
   if (action.type === "TYPE") {
-    const before = beforeSnapshot?.interactiveElements.find((item) => item.agentId === action.agentId)?.text ?? "";
-    const after = afterSnapshot.interactiveElements.find((item) => item.agentId === action.agentId)?.text ?? "";
+    const before = beforeSnapshot?.pageFacts.searchBox.text ?? "";
+    const after = afterSnapshot.pageFacts.searchBox.text ?? "";
     if (after.includes(action.text) || (before !== after && after.length > 0)) {
-      return { matched: true, reason: "输入框值已更新" };
+      return { matched: true, reason: "搜索框内容已更新。" };
     }
   }
 
   if (action.type === "CLICK") {
     if (beforeSnapshot?.url !== afterSnapshot.url || beforeSnapshot?.pageType !== afterSnapshot.pageType) {
-      return { matched: true, reason: "点击后页面状态发生变化" };
+      return { matched: true, reason: "点击后页面状态发生变化。" };
     }
   }
 
   if (action.type === "SCROLL") {
-    return { matched: true, reason: "滚动动作已执行" };
+    return { matched: true, reason: "滚动动作已执行。" };
   }
 
   if (action.type === "EXTRACT_LIST") {
-    if (afterSnapshot.productCandidates.length >= 3) {
-      return { matched: true, reason: "已提取足够商品" };
+    const extractedCount = actionResult?.items?.length ?? 0;
+    if (extractedCount > 0) {
+      return {
+        matched: true,
+        reason: extractedCount >= 3 ? "已提取到足够商品。" : `已提取到 ${extractedCount} 个商品，仍可继续补充。`,
+      };
+    }
+
+    if (!afterSnapshot.pageReady.ready) {
+      return { matched: false, reason: "页面尚未就绪，提取结果暂不可用。" };
     }
   }
 
   if (expectedOutcome.trim().length > 0) {
-    return { matched: false, reason: "未观测到与预期匹配的页面变化" };
+    return { matched: false, reason: "未观察到与预期匹配的页面变化。" };
   }
 
-  return { matched: true, reason: "无明确预期结果要求" };
+  return { matched: true, reason: "没有设置额外的预期结果。" };
 }

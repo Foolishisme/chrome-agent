@@ -1,5 +1,6 @@
 import type { AgentAction, ToolResult } from "../shared/types";
-import { resolveAgentElement, extractProducts } from "./scanner";
+import { extractStructuredProducts } from "./extractor";
+import { resolveAgentElement } from "./scanner";
 import { highlightRect, showToast } from "./overlay";
 
 function getElementRect(element: HTMLElement) {
@@ -20,11 +21,11 @@ function dispatchInputEvents(input: HTMLInputElement | HTMLTextAreaElement) {
 async function performClick(agentId: string): Promise<ToolResult> {
   const target = resolveAgentElement(agentId);
   if (!target) {
-    showToast(`未找到元素: ${agentId}`, true);
+    showToast(`未找到元素：${agentId}`, true);
     return {
       success: false,
       actionType: "CLICK",
-      message: `未找到元素: ${agentId}`,
+      message: `未找到元素：${agentId}`,
       errorCode: "ELEMENT_NOT_FOUND",
     };
   }
@@ -48,11 +49,11 @@ async function performClick(agentId: string): Promise<ToolResult> {
 async function performType(agentId: string, text: string, submit = false): Promise<ToolResult> {
   const target = resolveAgentElement(agentId);
   if (!target || !(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) {
-    showToast(`输入目标不可用: ${agentId}`, true);
+    showToast(`输入目标不可用：${agentId}`, true);
     return {
       success: false,
       actionType: "TYPE",
-      message: `输入目标不可用: ${agentId}`,
+      message: `输入目标不可用：${agentId}`,
       errorCode: "INPUT_NOT_FOUND",
     };
   }
@@ -68,27 +69,19 @@ async function performType(agentId: string, text: string, submit = false): Promi
   dispatchInputEvents(target);
 
   if (submit) {
-    target.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        bubbles: true,
-        key: "Enter",
-        code: "Enter",
-      }),
-    );
-    target.dispatchEvent(
-      new KeyboardEvent("keyup", {
-        bubbles: true,
-        key: "Enter",
-        code: "Enter",
-      }),
-    );
-    target.form?.requestSubmit?.();
+    target.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter", code: "Enter" }));
+    target.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "Enter", code: "Enter" }));
+    if (target.form?.requestSubmit) {
+      target.form.requestSubmit();
+    } else {
+      resolveAgentElement("el_search_submit")?.click();
+    }
   }
 
   return {
     success: true,
     actionType: "TYPE",
-    message: submit ? `已输入并提交 ${text}` : `已输入 ${text}`,
+    message: submit ? `已输入并提交：${text}` : `已输入：${text}`,
     highlightedAgentId: agentId,
     observation: {
       beforeValue,
@@ -114,12 +107,14 @@ async function performScroll(direction: "up" | "down", amount = 640): Promise<To
     observation: {
       beforeY,
       afterY,
+      direction,
+      amount,
     },
   };
 }
 
 async function performExtractList(): Promise<ToolResult> {
-  const items = extractProducts(document).slice(0, 10);
+  const { items, diagnostics } = extractStructuredProducts(document);
   if (items.length === 0) {
     showToast("未提取到商品列表", true);
     return {
@@ -128,6 +123,11 @@ async function performExtractList(): Promise<ToolResult> {
       message: "未提取到商品列表",
       errorCode: "NO_PRODUCTS",
       items: [],
+      observation: {
+        url: window.location.href,
+        title: document.title,
+        diagnostics,
+      },
     };
   }
 
@@ -137,6 +137,12 @@ async function performExtractList(): Promise<ToolResult> {
     actionType: "EXTRACT_LIST",
     message: `已提取 ${items.length} 个商品`,
     items,
+    observation: {
+      url: window.location.href,
+      title: document.title,
+      itemCount: items.length,
+      diagnostics,
+    },
   };
 }
 

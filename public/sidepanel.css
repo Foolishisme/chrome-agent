@@ -175,6 +175,107 @@ body {
   color: #2d241d;
 }
 
+.timeline-body div + div {
+  margin-top: 4px;
+}
+
+.timeline-body pre,
+.log-detail pre {
+  margin: 8px 0 0;
+  padding: 10px;
+  border-radius: 10px;
+  overflow: auto;
+  background: #f1ece3;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.debug-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.debug-card {
+  padding: 10px;
+  border-radius: 12px;
+  background: #fbf8f2;
+  border: 1px solid rgba(120, 93, 66, 0.12);
+}
+
+.debug-value {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #2d241d;
+}
+
+.debug-detail {
+  margin-top: 10px;
+}
+
+.debug-detail summary {
+  cursor: pointer;
+  color: #7a4a1b;
+  font-size: 12px;
+}
+
+.debug-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #5d5349;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.logs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.log-item {
+  padding: 10px;
+  border-radius: 12px;
+  background: #f8f6f1;
+  border: 1px solid rgba(120, 93, 66, 0.12);
+}
+
+.log-info {
+  border-left: 3px solid #2f7d85;
+}
+
+.log-warn {
+  border-left: 3px solid #c48a25;
+}
+
+.log-error {
+  border-left: 3px solid #b84848;
+}
+
+.log-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: #7b6e62;
+  margin-bottom: 6px;
+}
+
+.log-message {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #2d241d;
+}
+
+.log-detail {
+  margin-top: 8px;
+}
+
 .result-table {
   width: 100%;
   border-collapse: collapse;

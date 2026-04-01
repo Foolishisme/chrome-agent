@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildGeminiRequestBody, extractJsonText } from "../src/background/llm-client";
+import { buildGeminiRequestBody, extractFirstJsonBlock, extractJsonText, parseModelJson } from "../src/background/llm-client";
 
 describe("llm client helpers", () => {
   it("builds a JSON-mode Gemini request", () => {
@@ -24,5 +24,11 @@ describe("llm client helpers", () => {
     });
 
     expect(text).toBe("{\"ok\":true}");
+  });
+
+  it("extracts the first JSON block when extra text is appended", () => {
+    const raw = `{"plan":["step1","step2"]}\n补充说明`;
+    expect(extractFirstJsonBlock(raw)).toBe(`{"plan":["step1","step2"]}`);
+    expect(parseModelJson(raw)).toEqual({ plan: ["step1", "step2"] });
   });
 });
