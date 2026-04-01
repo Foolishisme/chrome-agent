@@ -1,8 +1,18 @@
 import { JD_SELECTORS } from "../shared/selectors";
 import type { ExtractedItem, ExtractionDiagnostics, ResultListState } from "../shared/types";
 
-const PRODUCT_LINK_SELECTOR =
-  "a[href*='item.jd.com/'], a[href*='item.jd.hk/'], a[href*='item.m.jd.com/product/'], a[target='_blank']";
+const PRODUCT_LINK_SELECTOR = [
+  "a[href*='item.jd.com/']",
+  "a[href*='item.jd.hk/']",
+  "a[href*='item.m.jd.com/product/']",
+  "[data-sku] a[href]",
+  "[data-spu] a[href]",
+  ".gl-item a[href]",
+  ".sku-name a[href]",
+  ".p-name a[href]",
+  "[class*='title'] a[href]",
+  "article[data-sku] a[href]",
+].join(", ");
 const PRICE_PATTERN = /(?:¥|￥)?\s?(\d{2,6}(?:\.\d{1,2})?)/;
 
 function textOf(element: Element | null | undefined): string {
@@ -62,10 +72,11 @@ export function collectResultListState(root: Document | HTMLElement = document):
   const hasContainer = JD_SELECTORS.resultContainers.some((selector) => root.querySelector(selector));
   const isLoading = JD_SELECTORS.resultLoading.some((selector) => root.querySelector(selector));
   const emptyState = hasEmptyState(root);
+  const readyState = root instanceof Document ? root.readyState : (root.ownerDocument?.readyState ?? document.readyState);
 
   return {
-    present: hasContainer || cards.length > 0 || emptyState,
-    loaded: cards.length > 0 || emptyState || (!isLoading && document.readyState === "complete"),
+    present: hasContainer || cards.length > 0 || productLinks.length > 0 || emptyState,
+    loaded: cards.length > 0 || productLinks.length > 0 || emptyState || (!isLoading && readyState === "complete"),
     cardCount: cards.length,
     productLinkCount: productLinks.length,
     emptyState,

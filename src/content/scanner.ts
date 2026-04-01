@@ -143,11 +143,11 @@ function buildPageReady(pageType: PageType, facts: PageFacts): PageReadyState {
 
     const resultList = facts.resultList;
     if (!resultList?.present) {
-      checks.push("搜索结果容器未出现");
+      checks.push("搜索结果区未出现");
     } else if (!resultList.loaded) {
       checks.push("搜索结果仍在加载");
-    } else if (resultList.cardCount === 0 && !resultList.emptyState) {
-      checks.push("搜索结果卡片尚未出现");
+    } else if (resultList.cardCount === 0 && resultList.productLinkCount === 0 && !resultList.emptyState) {
+      checks.push("搜索结果卡片或商品链接尚未出现");
     }
 
     return {
@@ -179,15 +179,15 @@ export function resolveAgentElement(agentId: string): HTMLElement | null {
   return null;
 }
 
-export function scanPage(): SnapshotData {
-  const url = new URL(window.location.href);
+export function scanPageAtUrl(urlText: string): SnapshotData {
+  const url = new URL(urlText);
   const pageType = getPageType(url);
   const interactiveElements = buildInteractiveElements(pageType);
   const pageFacts = buildPageFacts(pageType);
   const pageReady = buildPageReady(pageType, pageFacts);
 
   return {
-    url: window.location.href,
+    url: url.href,
     title: document.title,
     pageType,
     interactiveElements,
@@ -196,4 +196,8 @@ export function scanPage(): SnapshotData {
     pageFacts,
     timestamp: Date.now(),
   };
+}
+
+export function scanPage(): SnapshotData {
+  return scanPageAtUrl(window.location.href);
 }

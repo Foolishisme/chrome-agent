@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { collectResultListState, extractStructuredProducts } from "../src/content/extractor";
+import { scanPageAtUrl } from "../src/content/scanner";
 
 describe("extractStructuredProducts", () => {
   it("maps JD search result cards into normalized items", () => {
@@ -81,5 +82,59 @@ describe("collectResultListState", () => {
     expect(state.loaded).toBe(true);
     expect(state.cardCount).toBe(2);
     expect(state.productLinkCount).toBe(2);
+  });
+
+  it("treats link-based result sections as ready even when legacy cards are missing", () => {
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          x: 0,
+          y: 0,
+          width: 160,
+          height: 36,
+          top: 0,
+          left: 0,
+          right: 160,
+          bottom: 36,
+          toJSON() {
+            return {};
+          },
+        }) as DOMRect,
+    );
+
+    document.title = "MacBook 搜索";
+    document.body.innerHTML = `
+      <div class="search-form">
+        <input id="key" value="MacBook" />
+        <button class="button">搜索</button>
+      </div>
+      <section class="custom-results">
+        <article class="custom-entry">
+          <div class="sku-name"><a href="https://item.jd.com/2001.html"><span>MacBook Air 13</span></a></div>
+          <div>到手价 7999.00 元</div>
+          <div class="shopline"><a>Apple 产品京东自营旗舰店</a></div>
+          <p>轻薄便携</p>
+        </article>
+        <article class="custom-entry">
+          <div class="sku-name"><a href="https://item.jd.com/2002.html"><span>MacBook Pro 14</span></a></div>
+          <div>到手价 12999.00 元</div>
+          <p>M 系列芯片</p>
+        </article>
+      </section>
+    `;
+
+    const state = collectResultListState(document);
+    const snapshot = scanPageAtUrl("https://search.jd.com/Search?keyword=MacBook");
+    const extracted = extractStructuredProducts(document);
+
+    expect(state.present).toBe(true);
+    expect(state.loaded).toBe(true);
+    expect(state.cardCount).toBe(0);
+    expect(state.productLinkCount).toBe(2);
+    expect(snapshot.pageReady.ready).toBe(true);
+    expect(snapshot.pageFacts.resultList?.productLinkCount).toBe(2);
+    expect(extracted.items).toHaveLength(2);
+
+    rectSpy.mockRestore();
   });
 });

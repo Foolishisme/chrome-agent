@@ -11,7 +11,6 @@ import type {
   ToolName,
   ToolResult,
 } from "../shared/types";
-import { generateFinalSummary, refineSearchQuery } from "./llm-client";
 import { compileSearchTask } from "./query-compiler";
 import { filterExtractedItems } from "./result-filter";
 
@@ -56,14 +55,22 @@ function hasMatchingQuery(snapshot: SnapshotData, searchQuery: string) {
   return normalizeText(snapshot.pageFacts.searchBox.text).includes(normalizeText(searchQuery));
 }
 
-function buildFallbackSummary(goal: string, items: ExtractedItem[]) {
+export async function compileTaskSpecRuleOnly(goal: string) {
+  return compileSearchTask(goal);
+}
+
+export function buildRuleBasedSummary(goal: string, items: ExtractedItem[]) {
   const first = items[0];
   if (!first) {
-    return `The agent finished the search for "${goal}" but did not collect enough usable items.`;
+    return `Completed the rule-based search for "${goal}", but not enough usable items were collected.`;
   }
 
-  const priceList = items.map((item) => item.priceText).join(" / ");
-  return `Top candidate: ${first.title} (${first.priceText}). Other collected prices: ${priceList}.`;
+  const highlights = items
+    .slice(0, 3)
+    .map((item, index) => `${index + 1}. ${item.title} (${item.priceText}${item.shopText ? `, ${item.shopText}` : ""})`)
+    .join("; ");
+
+  return `Completed the rule-based search for "${goal}" and kept ${items.length} candidates. Top picks: ${highlights}.`;
 }
 
 function buildFinalMarkdown(goal: string, items: ExtractedItem[], summary: string) {
@@ -138,23 +145,8 @@ const compileTaskTool: AgentToolDefinition = {
     context.memory.currentPhase = "planning";
     await context.pushState("Compile the shopping task into a structured search spec.");
 
-    const taskSpec = await compileSearchTask(context.memory.goal, {
-      refineWithLiteModel: async (goal, draftQuery) => {
-        context.memory.runtimeMeta.queryRefineTried = true;
-        const refined = await refineSearchQuery(goal, draftQuery, { signal: context.signal });
-        context.appendLog("llm", "info", "Refined the search query with the configured provider.", {
-          model: refined.model,
-          provider: refined.provider,
-          draftQuery,
-          searchQuery: refined.searchQuery,
-          reason: refined.reason,
-        });
-        return {
-          searchQuery: refined.searchQuery,
-          reason: refined.reason,
-        };
-      },
-    });
+    context.memory.runtimeMeta.queryRefineTried = false;
+    const taskSpec = await compileTaskSpecRuleOnly(context.memory.goal);
 
     context.memory.taskSpec = taskSpec;
     context.memory.currentPhase = "searching";
@@ -355,28 +347,13 @@ const finishWithSummaryTool: AgentToolDefinition = {
       throw new RuntimeError("There are not enough items to produce the final summary.", "FINALIZE_BLOCKED");
     }
 
-    await context.pushState("Generate the final recommendation summary.");
+    await context.pushState("Assemble the final recommendation with rule-based tools.");
 
-    let summary = "";
-    try {
-      const response = await generateFinalSummary(
-        context.memory.goal,
-        context.memory.taskSpec,
-        context.memory.extractedItems,
-        { signal: context.signal },
-      );
-      summary = response.summary;
-      context.appendLog("llm", "info", "Generated the final summary with the configured provider.", {
-        model: response.model,
-        provider: response.provider,
-        itemCount: context.memory.extractedItems.length,
-      });
-    } catch (error) {
-      summary = buildFallbackSummary(context.memory.goal, context.memory.extractedItems);
-      context.appendLog("llm", "warn", "Fell back to a rule-based summary.", {
-        message: error instanceof Error ? error.message : "Unknown summary error",
-      });
-    }
+    const summary = buildRuleBasedSummary(context.memory.goal, context.memory.extractedItems);
+    context.appendLog("runtime", "info", "Generated the final summary with rule-based tools.", {
+      itemCount: context.memory.extractedItems.length,
+      topK: context.memory.taskSpec.topK,
+    });
 
     context.memory.finalSummary = summary;
     context.memory.finalOutput = buildFinalMarkdown(context.memory.goal, context.memory.extractedItems, summary);
