@@ -33,6 +33,53 @@ function formatValue(value: string | number | boolean | undefined) {
   return String(value);
 }
 
+function renderInlineMarkdown(text: string) {
+  return escapeHtml(text).replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a class="result-link" href="$2" target="_blank">$1</a>');
+}
+
+function renderMarkdownBlock(markdown: string | undefined) {
+  if (!markdown) {
+    return `<div class="muted">${escapeHtml(messages.resultsHint)}</div>`;
+  }
+
+  const lines = markdown.split(/\r?\n/);
+  const parts: string[] = [];
+  let listItems: string[] = [];
+
+  const flushList = () => {
+    if (listItems.length === 0) {
+      return;
+    }
+    parts.push(`<ul class="debug-list">${listItems.join("")}</ul>`);
+    listItems = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      continue;
+    }
+
+    if (trimmed.startsWith("## ")) {
+      flushList();
+      parts.push(`<h3>${renderInlineMarkdown(trimmed.slice(3))}</h3>`);
+      continue;
+    }
+
+    if (trimmed.startsWith("- ")) {
+      listItems.push(`<li>${renderInlineMarkdown(trimmed.slice(2))}</li>`);
+      continue;
+    }
+
+    flushList();
+    parts.push(`<p>${renderInlineMarkdown(trimmed)}</p>`);
+  }
+
+  flushList();
+  return `<div class="markdown-output">${parts.join("")}</div>`;
+}
+
 function renderLogItem(log: DebugLogEntry) {
   const detail = log.detail
     ? `<details class="log-detail"><summary>${escapeHtml(messages.logDetail)}</summary><pre>${escapeHtml(log.detail)}</pre></details>`
@@ -258,6 +305,14 @@ function render() {
             <span class="status-label">${escapeHtml(messages.session)}</span>
             <span class="status-value">${escapeHtml(currentState.sessionId?.slice(0, 8) ?? "-")}</span>
           </div>
+          <div class="status-card">
+            <span class="status-label">Phase</span>
+            <span class="status-value">${escapeHtml(currentState.currentPhase ?? "-")}</span>
+          </div>
+          <div class="status-card">
+            <span class="status-label">Tool</span>
+            <span class="status-value">${escapeHtml(currentState.currentTool ?? "-")}</span>
+          </div>
         </div>
       </section>
 
@@ -293,6 +348,7 @@ function render() {
 
       <section class="section">
         <h2>${escapeHtml(messages.resultsTitle)}</h2>
+        ${renderMarkdownBlock(currentState.finalOutput)}
         <table class="result-table">
           <thead>
             <tr>

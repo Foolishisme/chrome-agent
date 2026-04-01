@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildGeminiRequestBody, extractFirstJsonBlock, extractJsonText, getModelCandidates, parseModelJson } from "../src/background/llm-client";
+import {
+  buildDeepSeekRequestBody,
+  buildGeminiRequestBody,
+  extractDeepSeekJsonText,
+  extractFirstJsonBlock,
+  extractJsonText,
+  getModelCandidates,
+  parseModelJson,
+} from "../src/background/llm-client";
 
 describe("llm client helpers", () => {
   it("builds a JSON-mode Gemini request", () => {
@@ -9,8 +17,15 @@ describe("llm client helpers", () => {
   });
 
   it("prefers the simple task model for lightweight tasks", () => {
-    const candidates = getModelCandidates("simple");
+    const candidates = getModelCandidates("simple", "gemini");
     expect(candidates[0]).toBe("gemini-3.1-flash-lite-preview");
+  });
+
+  it("builds a JSON-mode DeepSeek request", () => {
+    const body = buildDeepSeekRequestBody("hello", "deepseek-chat");
+    expect(body.response_format.type).toBe("json_object");
+    expect(body.messages[0]?.content).toBe("hello");
+    expect(body.model).toBe("deepseek-chat");
   });
 
   it("extracts JSON text from fenced responses", () => {
@@ -35,5 +50,19 @@ describe("llm client helpers", () => {
     const raw = `{"plan":["step1","step2"]}\n补充说明`;
     expect(extractFirstJsonBlock(raw)).toBe(`{"plan":["step1","step2"]}`);
     expect(parseModelJson(raw)).toEqual({ plan: ["step1", "step2"] });
+  });
+
+  it("reads JSON content from DeepSeek chat completions", () => {
+    const text = extractDeepSeekJsonText({
+      choices: [
+        {
+          message: {
+            content: '{"ok":true}',
+          },
+        },
+      ],
+    });
+
+    expect(text).toBe('{"ok":true}');
   });
 });

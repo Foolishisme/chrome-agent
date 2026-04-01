@@ -1,5 +1,14 @@
 export type PageType = "home" | "search" | "detail" | "unknown";
 
+export type AgentPhase = "planning" | "searching" | "extracting" | "filtering" | "summarizing" | "done";
+
+export type ToolName =
+  | "compileTask"
+  | "searchInSite"
+  | "extractStructuredResults"
+  | "filterCandidates"
+  | "finishWithSummary";
+
 export type RuntimeStatus =
   | "idle"
   | "scanning"
@@ -144,10 +153,28 @@ export interface DebugLogEntry {
   detail?: string;
 }
 
+export interface ToolCallRecord {
+  toolName: ToolName;
+  phase: AgentPhase;
+  status: "success" | "error";
+  summary: string;
+  timestamp: number;
+}
+
+export interface FailureRecord {
+  phase: AgentPhase;
+  toolName?: ToolName;
+  message: string;
+  timestamp: number;
+}
+
 export interface SessionMemory {
   goal: string;
+  currentPhase: AgentPhase;
   plan: string[];
   taskSpec?: SearchTaskSpec;
+  toolHistory: ToolCallRecord[];
+  currentFacts: Record<string, unknown>;
   stepHistory: StepRecord[];
   logs: DebugLogEntry[];
   pageSnapshot?: SnapshotData;
@@ -158,12 +185,15 @@ export interface SessionMemory {
   nextIntent?: string;
   recoveryHint?: string;
   lastError?: string;
+  failures: FailureRecord[];
   finalSummary?: string;
+  finalOutput?: string;
   runtimeMeta: {
     sessionId: string;
     tabId: number;
     pageType: PageType;
     status: RuntimeStatus;
+    currentTool?: ToolName;
     currentStep: number;
     llmRetryCount: number;
     actionRetryCount: number;
@@ -192,6 +222,8 @@ export interface SessionPublicState {
   goal?: string;
   taskSpec?: SearchTaskSpec;
   status: RuntimeStatus;
+  currentPhase?: AgentPhase;
+  currentTool?: ToolName;
   currentStep: number;
   plan: string[];
   stepSummary?: string;
@@ -206,5 +238,6 @@ export interface SessionPublicState {
   recoveryHint?: string;
   error?: string;
   finalSummary?: string;
+  finalOutput?: string;
   updatedAt: number;
 }

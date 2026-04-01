@@ -33,16 +33,21 @@ function createSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
 function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
   return {
     goal: "Find laptops",
+    currentPhase: "extracting",
     plan: [],
+    toolHistory: [],
+    currentFacts: {},
     stepHistory: [],
     logs: [],
     rawExtractedItems: [],
     extractedItems: [],
+    failures: [],
     runtimeMeta: {
       sessionId: "session-1",
       tabId: 1,
       pageType: "search",
       status: "observing",
+      currentTool: undefined,
       currentStep: 2,
       llmRetryCount: 0,
       actionRetryCount: 0,
