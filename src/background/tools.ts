@@ -169,8 +169,8 @@ function buildCommerceFinalMarkdown(goal: string, items: ExtractedItem[], summar
 }
 
 function buildResearchFallbackSummary(goal: string, sources: ResearchSourceResult[], unresolvedIssues: string[]) {
-  if (sources.length === 0) {
-    return `未能从 Google 第一页中提取到可用来源，无法完成“${goal}”的调研总结。`;
+  if (countSuccessfulResearchSources(sources) === 0) {
+    return `目前没有可靠的信息来源，无法对“${goal}”形成可信结论。`;
   }
 
   const titles = sources.slice(0, 3).map((source) => source.pageTitle || source.candidate.title).join("、");
@@ -187,14 +187,19 @@ function buildResearchFinalMarkdown(summary: string, sources: ResearchSourceResu
     summary,
     "",
     "## 来源要点",
-    ...sources.map((source, index) => {
-      const title = source.pageTitle || source.candidate.title;
-      const detail = source.status === "success" ? source.summary : `${source.summary || "该来源仅得到部分事实。"} (${source.unresolvedIssues.join("；") || "来源可读性不足"})`;
-      return `- ${index + 1}. ${title}：${detail}`;
-    }),
+    ...(sources.length > 0
+      ? sources.map((source, index) => {
+          const title = source.pageTitle || source.candidate.title;
+          const detail =
+            source.status === "success" ? source.summary : `${source.summary || "该来源仅得到部分事实。"} (${source.unresolvedIssues.join("；") || "来源可读性不足"})`;
+          return `- ${index + 1}. ${title}：${detail}`;
+        })
+      : ["- 暂无可靠来源"]),
     "",
     "## 来源链接",
-    ...sources.map((source, index) => `- ${index + 1}. [${source.pageTitle || source.candidate.title}](${source.sourceUrl})`),
+    ...(sources.length > 0
+      ? sources.map((source, index) => `- ${index + 1}. [${source.pageTitle || source.candidate.title}](${source.sourceUrl})`)
+      : ["- 暂无可靠来源"]),
     "",
     "## 未解决问题",
     ...(unresolvedIssues.length > 0 ? unresolvedIssues.map((issue) => `- ${issue}`) : ["- 暂无"]),
@@ -207,12 +212,22 @@ function dedupeIssues(issues: string[]) {
   return Array.from(new Set(issues.filter(Boolean)));
 }
 
+function countSuccessfulResearchSources(sources: ResearchSourceResult[]) {
+  return sources.filter((source) => source.status === "success").length;
+}
+
 function getOverallStatusForResearch(taskSpec: PublicResearchTaskSpec, sources: ResearchSourceResult[], unresolvedIssues: string[]) {
-  if (sources.length === 0) {
+  const successfulSourceCount = countSuccessfulResearchSources(sources);
+
+  if (successfulSourceCount === 0) {
     return "failed" as const;
   }
 
-  if (sources.length < taskSpec.sourceTargetCount || unresolvedIssues.length > 0 || sources.some((source) => source.status !== "success")) {
+  if (
+    successfulSourceCount < taskSpec.sourceTargetCount ||
+    unresolvedIssues.length > 0 ||
+    sources.some((source) => source.status !== "success")
+  ) {
     return "partial" as const;
   }
 
@@ -633,7 +648,7 @@ const readPageFactsTool: AgentToolDefinition = {
       throw new RuntimeError("Research source reading requires a public research task.", "INVALID_RESEARCH_READ");
     }
 
-    if (context.memory.researchSources.length >= context.memory.taskSpec.sourceTargetCount) {
+    if (countSuccessfulResearchSources(context.memory.researchSources) >= context.memory.taskSpec.sourceTargetCount) {
       context.memory.currentPhase = "aggregating";
       return {
         nextPhase: "aggregating",
@@ -707,15 +722,17 @@ const readPageFactsTool: AgentToolDefinition = {
     ]);
     context.memory.activeSourceIndex += 1;
     context.memory.runtimeMeta.currentStep += 1;
+    const successfulSourceCount = countSuccessfulResearchSources(context.memory.researchSources);
     context.memory.currentFacts = {
       ...context.memory.currentFacts,
       readSourceCount: context.memory.researchSources.length,
+      successfulSourceCount,
     };
     context.memory.lastError = undefined;
     context.recordStep({
       stepSummary: `Source processed: ${sourceResult.pageTitle || candidate.title}`,
       nextIntent:
-        context.memory.researchSources.length >= context.memory.taskSpec.sourceTargetCount ||
+        successfulSourceCount >= context.memory.taskSpec.sourceTargetCount ||
         context.memory.activeSourceIndex >= context.memory.researchCandidates.length
           ? "Aggregate the final research result."
           : "Open the next source candidate.",
@@ -731,12 +748,12 @@ const readPageFactsTool: AgentToolDefinition = {
     });
 
     const shouldAggregate =
-      context.memory.researchSources.length >= context.memory.taskSpec.sourceTargetCount ||
+      successfulSourceCount >= context.memory.taskSpec.sourceTargetCount ||
       context.memory.activeSourceIndex >= context.memory.researchCandidates.length;
     context.memory.currentPhase = shouldAggregate ? "aggregating" : "reading";
     return {
       nextPhase: shouldAggregate ? "aggregating" : "reading",
-      summary: `Processed source ${context.memory.researchSources.length}/${context.memory.taskSpec.sourceTargetCount}.`,
+      summary: `Processed source ${successfulSourceCount}/${context.memory.taskSpec.sourceTargetCount} successful.`,
     };
   },
 };
@@ -789,28 +806,38 @@ const aggregateTaskResultsTool: AgentToolDefinition = {
         ...context.memory.unresolvedIssues,
         ...context.memory.researchSources.flatMap((source) => source.unresolvedIssues),
       ]);
+      const successfulSourceCount = countSuccessfulResearchSources(context.memory.researchSources);
 
-      try {
-        const response = await generateResearchSummary(
-          context.memory.goal,
-          context.memory.taskSpec,
-          context.memory.researchSources,
-          unresolvedIssues,
-          { signal: context.signal },
-        );
-        summary = response.summary;
-        finalOutput = response.markdown;
-        context.appendLog("llm", "info", "Generated the final research summary.", {
-          sourceCount: context.memory.researchSources.length,
-          provider: response.provider,
-          model: response.model,
-        });
-      } catch (error) {
+      if (successfulSourceCount === 0) {
         summary = buildResearchFallbackSummary(context.memory.goal, context.memory.researchSources, unresolvedIssues);
         finalOutput = buildResearchFinalMarkdown(summary, context.memory.researchSources, unresolvedIssues);
-        context.appendLog("llm", "warn", "Fell back to rule-based research output after LLM summary failed.", {
-          message: error instanceof Error ? error.message : "Unknown final summary error",
+        context.appendLog("runtime", "warn", "No reliable sources were available; used deterministic research fallback.", {
+          sourceCount: context.memory.researchSources.length,
+          unresolvedIssues,
         });
+      } else {
+        try {
+          const response = await generateResearchSummary(
+            context.memory.goal,
+            context.memory.taskSpec,
+            context.memory.researchSources,
+            unresolvedIssues,
+            { signal: context.signal },
+          );
+          summary = response.summary;
+          finalOutput = response.markdown;
+          context.appendLog("llm", "info", "Generated the final research summary.", {
+            sourceCount: context.memory.researchSources.length,
+            provider: response.provider,
+            model: response.model,
+          });
+        } catch (error) {
+          summary = buildResearchFallbackSummary(context.memory.goal, context.memory.researchSources, unresolvedIssues);
+          finalOutput = buildResearchFinalMarkdown(summary, context.memory.researchSources, unresolvedIssues);
+          context.appendLog("llm", "warn", "Fell back to rule-based research output after LLM summary failed.", {
+            message: error instanceof Error ? error.message : "Unknown final summary error",
+          });
+        }
       }
 
       overallStatus = getOverallStatusForResearch(context.memory.taskSpec, context.memory.researchSources, unresolvedIssues);

@@ -58,8 +58,9 @@ export function hasReachedCompletion(memory: SessionMemory, decision?: LlmDecisi
     decision?.action.type === "DONE" && decision.action.items && decision.action.items.length > 0
       ? decision.action.items
       : memory.extractedItems;
+  const successfulResearchSourceCount = memory.researchSources.filter((source) => source.status === "success").length;
 
-  return items.length >= 3 || memory.researchSources.length >= 3;
+  return items.length >= 3 || successfulResearchSourceCount >= 3;
 }
 
 export function ensureDoneAllowed(memory: SessionMemory, decision: LlmDecision) {

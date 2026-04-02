@@ -124,6 +124,87 @@ describe("public research page facts", () => {
 });
 
 describe("public research aggregation", () => {
+  it("keeps reading when only partial sources have been collected", async () => {
+    const tool = getToolDefinition("readPageFacts");
+    const memory = createResearchMemory({
+      currentPhase: "reading",
+      taskSpec: {
+        taskType: "public_research",
+        originalGoal: "调研 Playwright 和 Selenium 的区别",
+        searchQuery: "Playwright Selenium 区别",
+        querySource: "llm-lite",
+        notes: [],
+        searchEngine: "google",
+        candidateLimit: 5,
+        sourceTargetCount: 3,
+      },
+      researchCandidates: [
+        { title: "Blocked source", url: "https://example.com/a", rank: 1 },
+        { title: "Readable source", url: "https://example.com/b", rank: 2 },
+      ],
+    });
+
+    const executeAction = vi
+      .fn()
+      .mockResolvedValueOnce({
+        success: true,
+        actionType: "NAVIGATE",
+        message: "navigated",
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        actionType: "EXTRACT_PAGE_FACTS",
+        message: "partial",
+        pageFactsResult: {
+          status: "partial",
+          pageTitle: "Blocked source",
+          summary: "该来源未能完成正文提取：登录墙或订阅墙阻断",
+          keyPoints: [],
+          textLength: 0,
+          reason: "登录墙或订阅墙阻断",
+        },
+      });
+
+    const result = await tool.run({
+      memory,
+      signal: new AbortController().signal,
+      scanPage: vi.fn().mockResolvedValue({
+        url: "https://example.com/a",
+        title: "Blocked source",
+        pageType: "content",
+        interactiveElements: [],
+        productCandidates: [],
+        pageReady: { ready: true, reason: "ok", checks: [] },
+        pageFacts: {
+          searchBox: { present: false, visible: false, text: "" },
+          searchSubmit: { present: false, visible: false, text: "" },
+          pageContent: {
+            readable: false,
+            textLength: 0,
+            paragraphCount: 0,
+            hasPasswordInput: false,
+            hasBlockingOverlay: false,
+            likelyLoginWall: true,
+            likelySpa: false,
+            reason: "登录墙或订阅墙阻断",
+          },
+        },
+        timestamp: Date.now(),
+      }),
+      ensureUsableSnapshot: vi.fn(),
+      executeAction,
+      settleAfterAction: vi.fn(),
+      appendLog: vi.fn(),
+      recordStep: vi.fn(),
+      pushState: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(result.nextPhase).toBe("reading");
+    expect(memory.researchSources).toHaveLength(1);
+    expect(memory.researchSources[0]?.status).toBe("partial");
+    expect(memory.activeSourceIndex).toBe(1);
+  });
+
   it("builds partial final output with unresolved issues when sources are insufficient", async () => {
     const tool = getToolDefinition("aggregateTaskResults");
     const memory = createResearchMemory({
@@ -178,5 +259,39 @@ describe("public research aggregation", () => {
     expect(memory.finalOutput).toContain("## 结论摘要");
     expect(memory.finalOutput).toContain("## 来源链接");
     expect(memory.finalOutput).toContain("## 未解决问题");
+  });
+
+  it("returns no reliable information when no sources are available", async () => {
+    const tool = getToolDefinition("aggregateTaskResults");
+    const memory = createResearchMemory({
+      taskSpec: {
+        taskType: "public_research",
+        originalGoal: "调研 Playwright 和 Selenium 的区别",
+        searchQuery: "Playwright Selenium 区别",
+        querySource: "rule",
+        notes: [],
+        searchEngine: "google",
+        candidateLimit: 5,
+        sourceTargetCount: 3,
+      },
+      researchSources: [],
+      unresolvedIssues: ["Google 第一页未筛选出可用自然结果"],
+    });
+
+    await tool.run({
+      memory,
+      signal: new AbortController().signal,
+      scanPage: vi.fn(),
+      ensureUsableSnapshot: vi.fn(),
+      executeAction: vi.fn(),
+      settleAfterAction: vi.fn(),
+      appendLog: vi.fn(),
+      recordStep: vi.fn(),
+      pushState: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(memory.finalResult?.overallStatus).toBe("failed");
+    expect(memory.finalSummary).toContain("没有可靠的信息来源");
+    expect(memory.finalOutput).toContain("暂无可靠来源");
   });
 });

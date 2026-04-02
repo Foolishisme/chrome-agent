@@ -52,6 +52,18 @@ function hasResearchSignal(goal: string) {
   return RESEARCH_INTENT_KEYWORDS.some((keyword) => goal.includes(keyword));
 }
 
+function buildFallbackResearchQuery(goal: string) {
+  const normalized = goal
+    .replace(/[，。！？、；：]/g, " ")
+    .replace(/(?:进入前|前)\s*\d+\s*个?页面?/g, " ")
+    .replace(/帮我|请|麻烦你|我想了解|我想知道|给我/g, " ")
+    .replace(/调研一下|研究一下|总结一下|查一下|介绍一下|解释一下/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return normalized || goal.trim();
+}
+
 export function detectTaskType(goal: string): TaskType {
   if (hasResearchSignal(goal) && !hasCommerceCategory(goal)) {
     return "public_research";
@@ -242,25 +254,48 @@ export async function compilePublicResearchTask(
   } = {},
 ): Promise<PublicResearchTaskSpec> {
   if (!options.refineWithLiteModel) {
-    throw new RuntimeError("Research query planning requires the lite model.", "RESEARCH_QUERY_PLANNER_MISSING");
+    return {
+      taskType: "public_research",
+      originalGoal: goal,
+      searchQuery: buildFallbackResearchQuery(goal),
+      querySource: "rule",
+      notes: ["小模型不可用，回退到规则生成 Google 查询词"],
+      searchEngine: "google",
+      candidateLimit: 5,
+      sourceTargetCount: 3,
+    };
   }
 
-  const refined = await options.refineWithLiteModel(goal);
-  const searchQuery = refined?.searchQuery?.trim();
-  if (!searchQuery) {
-    throw new RuntimeError("The lite model did not return a usable research query.", "RESEARCH_QUERY_EMPTY");
-  }
+  try {
+    const refined = await options.refineWithLiteModel(goal);
+    const searchQuery = refined?.searchQuery?.trim();
+    if (!searchQuery) {
+      throw new RuntimeError("The lite model did not return a usable research query.", "RESEARCH_QUERY_EMPTY");
+    }
 
-  return {
-    taskType: "public_research",
-    originalGoal: goal,
-    searchQuery,
-    querySource: "llm-lite",
-    notes: [refined?.reason ?? "小模型生成 Google 查询词"],
-    searchEngine: "google",
-    candidateLimit: 5,
-    sourceTargetCount: 3,
-  };
+    return {
+      taskType: "public_research",
+      originalGoal: goal,
+      searchQuery,
+      querySource: "llm-lite",
+      notes: [refined?.reason ?? "小模型生成 Google 查询词"],
+      searchEngine: "google",
+      candidateLimit: 5,
+      sourceTargetCount: 3,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "小模型生成查询词失败";
+    return {
+      taskType: "public_research",
+      originalGoal: goal,
+      searchQuery: buildFallbackResearchQuery(goal),
+      querySource: "rule",
+      notes: [`小模型不可用，回退到规则生成 Google 查询词：${message}`],
+      searchEngine: "google",
+      candidateLimit: 5,
+      sourceTargetCount: 3,
+    };
+  }
 }
 
 export async function compileTaskSpec(

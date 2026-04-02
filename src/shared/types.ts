@@ -161,7 +161,7 @@ export interface PublicResearchTaskSpec {
   taskType: "public_research";
   originalGoal: string;
   searchQuery: string;
-  querySource: "llm-lite";
+  querySource: "rule" | "llm-lite";
   notes: string[];
   searchEngine: "google";
   candidateLimit: number;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compileSearchTask, detectTaskType, detectTaskTypeWithLiteModel } from "../src/background/query-compiler";
+import { compilePublicResearchTask, compileSearchTask, detectTaskType, detectTaskTypeWithLiteModel } from "../src/background/query-compiler";
 
 describe("query compiler", () => {
   it("builds the search query directly from the lite model", async () => {
@@ -67,5 +67,18 @@ describe("query compiler", () => {
     expect(routed.taskType).toBe("public_research");
     expect(routed.source).toBe("rule");
     expect(routed.reason).toContain("fallback");
+  });
+
+  it("falls back to a minimal research query when the lite model is unavailable", async () => {
+    const task = await compilePublicResearchTask("帮我调研一下 Playwright 和 Selenium 的区别，进入前 3 个页面总结", {
+      refineWithLiteModel: async () => {
+        throw new Error("provider unavailable");
+      },
+    });
+
+    expect(task.querySource).toBe("rule");
+    expect(task.searchQuery).toContain("Playwright");
+    expect(task.searchQuery).toContain("Selenium");
+    expect(task.notes[0]).toContain("回退到规则");
   });
 });
