@@ -1,182 +1,158 @@
 # Browser Agent 当前代码现状
 
-## 1. 文档定位
+## 1. 当前结论
 
-本文件描述当前代码相对于最新设计主线的真实位置。
-
-关注点只有两类：
-
-- 现在代码已经做到哪里
-- 距离目标架构还差什么
-
-## 2. 当前真实定位
-
-当前项目已经不是旧版“LLM 直接驱动细粒度 DOM 动作”的思路。
-
-更准确地说，当前代码是：
-
-`task-typed tool-first MVP`
-
-它已经具备：
-
-- `commerce_search | public_research` 双任务类型
-- 小模型优先任务路由
-- 小模型生成搜索词
-- phase 驱动的高阶 tool 循环
-- 独立 `aggregating` 阶段
-- research 候选过滤、来源读取、partial 收口
-
-但它还不是：
-
-- 完整的自由 planner
-- 完整的 subtask-based agent
-- 带 checkpoint 恢复的运行时
-
-## 3. 已落地能力
-
-### 3.1 runtime / planning
-
-当前已落地：
-
-- `TaskType = "commerce_search" | "public_research"`
-- `TaskPlan / SubtaskSpec / SubtaskResult / FinalResult`
-- 小模型优先路由，规则回退
-- 固定 phase：
-  - commerce：`planning -> searching -> extracting -> filtering -> aggregating -> done`
-  - research：`planning -> searching -> extracting -> filtering -> reading -> aggregating -> done`
-
-对应模块：
-
-- `src/background/runtime.ts`
-- `src/background/query-compiler.ts`
-- `src/shared/types.ts`
-
-### 3.2 research 主链
-
-当前已落地：
-
-- Google 搜索 URL 直达
-- 只取第一页自然结果
-- 过滤后保留前 5 个候选
-- 串行读取来源页
-- PDF / 登录墙 / 强交互 SPA / 不可读页 -> `partial`
-- 最终输出统一包含结论、来源、未解决问题
-
-对应模块：
-
-- `src/background/tools.ts`
-- `src/background/result-filter.ts`
-- `src/content/research.ts`
-
-### 3.3 统一最终输出
-
-当前 commerce 与 research 都通过统一的 `aggregateTaskResults` 收口。
-
-当前已落地：
-
-- `overallStatus = success | partial | failed`
-- `finalOutput` / `finalResult`
-- research 的 `unresolvedIssues`
-
-这意味着“最后一步总结”已经不再散落在旧主链里。
-
-### 3.4 页面扫描与 direct bridge
-
-当前扫描框架仍是统一入口，但已按页面类型分流：
-
-- 京东搜索页
-- Google 搜索结果页
-- 通用内容页
-- PDF 页
-
-同时，runtime 已增加 direct bridge 兜底：
-
-- 当 `tabs.sendMessage` 报 receiver 缺失时
-- 通过 `chrome.scripting.executeScript` 加载 `content-bridge.js`
-- 直接执行页面扫描和动作
-
-对应模块：
-
-- `src/background/runtime.ts`
-- `src/content/bridge.ts`
-- `public/manifest.json`
-- `vite.config.ts`
-
-## 4. 本轮真实浏览器联调结果
-
-### 4.1 已确认修复
-
-此前两个任务都会在扫页阶段报：
-
-- `Could not establish connection. Receiving end does not exist.`
-
-现在这个扩展内部错误已修复。
-
-验证方式：
-
-- `npm.cmd test`
-- `npm.cmd run build`
-- Playwright 真实浏览器加载 `dist/` 扩展联调
-
-### 4.2 当前暴露出的真实阻断
-
-修复内部通信后，当前真实浏览器里的主要阻断变成了目标站点本身：
+当前代码已经具备双任务类型的高阶 tool 主线：
 
 - `commerce_search`
-  - 京东搜索可能跳转到登录页
-  - runtime 现在会显式报：`JD redirected the search to a login page.`
 - `public_research`
-  - Google 搜索可能进入 `sorry` 验证页
-  - runtime 现在会显式报：`Google returned a verification page and blocked the search results.`
 
-这说明当前第一阻断已从“扩展内部消息链路”转移到“站点登录墙 / 风控页”。
+当前主循环仍然是 phase-driven 的确定性实现，不是开放式 planner。
 
-## 5. 当前仍未完成的部分
+## 2. 已落地内容
 
-### 5.1 memory / checkpoint
+### 2.1 任务类型判断与任务编译已落地
 
-还未正式落地：
+证据：
 
-- `global memory + subtask memory`
-- `chrome.storage.local` checkpoint
-- 中断恢复
+- `src/background/query-compiler.ts`
+- `src/background/prompting.ts`
+- `src/shared/types.ts`
 
-### 5.2 真正稳定的真实浏览器闭环
+现状：
 
-当前还没有在干净 profile 下得到稳定闭环：
+- 支持 `commerce_search` 与 `public_research`
+- `compileTask` 会生成 `taskType`、`taskSpec` 和 `taskPlan`
+- 查询词由 lite model 生成
 
-- 京东会因登录/风控阻断 commerce 搜索
-- Google 会因验证页阻断 research 搜索
+### 2.2 Runtime 已是高阶 tool 驱动
 
-所以当前不能把“真实站点闭环成功”写成已完成。
+证据：
 
-### 5.3 site adapter 仍未正式抽象
+- `src/background/runtime.ts`
+- `src/background/tools.ts`
 
-当前仍是统一 scanner 框架下的分支判断，而不是正式 adapter 架构。
+现状：
 
-后续若继续扩展，需要进一步拆出：
+- `Runtime` 以 `phase -> tool` 方式调度
+- 公开高阶工具已收口为：
+  - `compileTask`
+  - `searchInSite`
+  - `extractStructuredResults`
+  - `filterCandidates`
+  - `readPageFacts`
+  - `aggregateTaskResults`
 
-- JD adapter
-- Google SERP adapter
-- generic content adapter
+### 2.3 Commerce 主链已落地
 
-## 6. 当前建议理解
+证据：
 
-当前项目最准确的判断是：
+- `src/content/scanner.ts`
+- `src/content/extractor.ts`
+- `src/background/result-filter.ts`
 
-- 方向已经从旧 DOM agent 切出来了
-- phase/tool-first 主链已经成型
-- dual taskType + unified aggregation 已经落地
-- receiver 缺失问题已修复
-- 当前真实浏览器阻断主要来自站点，而不是扩展内部通信
+现状：
 
-## 7. 下一步最小重点
+- 当前 commerce 入口是京东
+- 商品提取、去重、过滤、汇总都已具备代码实现
+- 候选数量、LLM 输入数量和最终展示数量已解耦
 
-建议优先级：
+### 2.4 Public Research 主链已落地
 
-1. 明确 blocked-page 的产品策略
-2. 在可控会话环境下完成京东 / Google 真机闭环验证
-3. 再决定是否推进 checkpoint 与 subtask memory
-4. 最后再考虑更彻底的 adapter 抽象和并行子任务
+证据：
+
+- `src/content/research.ts`
+- `src/background/result-filter.ts`
+- `src/background/tools.ts`
+
+现状：
+
+- 当前 research 入口是 Google
+- 已支持提取 Google 第一页候选来源
+- 已支持逐页读取来源并提取页面事实
+- 已支持调研结果汇总和未解决问题输出
+
+### 2.5 Side Panel 与状态展示已落地
+
+证据：
+
+- `src/sidepanel/index.ts`
+- `src/sidepanel/i18n.ts`
+
+现状：
+
+- Side Panel 能展示 `taskType`、`phase`、timeline、候选结果和最终输出
+- 已区分 commerce 与 research 两类展示路径
+
+### 2.6 自动化测试已覆盖核心回归
+
+证据：
+
+- `tests/query-compiler.test.ts`
+- `tests/runtime-tools.test.ts`
+- `tests/scanner.test.ts`
+- `tests/public-research.test.ts`
+
+现状：
+
+- 已覆盖任务类型判断
+- 已覆盖 commerce 候选提取与过滤
+- 已覆盖 public research 候选提取、来源读取与汇总
+
+## 3. 当前仍未完成的部分
+
+### 3.1 仍未抽出正式的 `site adapter` 层
+
+现状：
+
+- 京东站点逻辑仍主要分布在 `src/content/scanner.ts`、`src/content/extractor.ts`、`src/shared/selectors.ts`
+- Google research 逻辑仍主要分布在 `src/content/research.ts`
+
+影响：
+
+- 当前可以继续迭代
+- 但继续扩站点前需要先收口站点能力边界
+
+### 3.2 仍不是 LLM-driven tool selection
+
+现状：
+
+- 当前 phase 顺序由代码确定
+- 还没有基于 `Memory` 的开放式下一步工具选择
+
+影响：
+
+- 当前实现更稳
+- 但灵活性仍受限
+
+### 3.3 真机闭环还没有重新完成验收
+
+当前未确认：
+
+- Chrome 加载扩展
+- Side Panel 真机启动 session
+- 京东真实搜索页闭环
+- Google 真正搜索与来源页读取闭环
+- Gemini / DeepSeek live request
+
+## 4. 当前阶段判断
+
+当前项目更准确的定位是：
+
+- 已有可运行代码主链
+- 已有自动化回归保护
+- 仍缺真机与 live provider 验收
+
+因此下一阶段重点不应是继续拆概念，而应是补验证闭环。
+
+## 5. 下一步最小闭环建议
+
+建议按以下顺序推进：
+
+1. 在 Chrome 真机加载扩展并确认 Side Panel 可启动 session
+2. 跑通一个京东 commerce 真实闭环
+3. 跑通一个 Google public research 真实闭环
+4. 根据真机日志再决定是否抽 `site adapter`
+5. 在真机稳定前，不升级为更开放的 tool planner
 
 Updated: 2026-04-02

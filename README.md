@@ -1,93 +1,189 @@
 # Browser Agent MVP
 
-一个基于 Chrome Extension 的浏览器 Agent MVP。
+一个基于 Chrome Extension Manifest V3 的浏览器 Agent MVP。
 
-当前主线是：
+项目当前主线是：
 
 `Agent = LLM + Tools + Memory + Runtime`
 
-项目目标不是让 LLM 直接决定细粒度 DOM 动作，而是让：
+目标不是一次性做成通用浏览器代理，而是先把可运行、可验证、可继续演进的主链跑通。
 
-- `LLM` 负责任务理解、任务路由、搜索词生成、最终总结
-- `Tools` 负责导航、等待、提取、过滤、页面读取、失败恢复
-- `Memory` 负责保存高价值结构化上下文
-- `Runtime` 负责 phase 循环、状态推进、校验和容错
+## 当前支持
 
-## 当前能力
+当前代码支持两类任务：
 
 - `commerce_search`
-  - 用户目标 -> 小模型生成京东搜索词 -> 直达京东搜索结果页 -> 提取/过滤 -> 统一汇总
+  - 面向京东站内商品搜索、结构化提取、过滤和推荐输出
 - `public_research`
-  - 用户目标 -> 小模型判定为调研 -> 小模型生成 Google 查询词 -> 提取 Google 第一页自然结果 -> 过滤前 5 个候选 -> 串行读取来源页 -> 统一汇总
+  - 面向 Google 公网搜索、来源筛选、逐页读取和调研汇总
 
-统一 phase：
+当前范围内已具备：
 
-- `planning -> searching -> extracting -> filtering -> aggregating -> done`
-- `public_research` 额外包含 `reading`
+- Side Panel 发起 session
+- lite model 参与任务分类和查询词生成
+- phase-driven 的高阶 tool 主循环
+- Gemini / DeepSeek provider 接入
 
-## 当前已落地的关键点
+## 当前不做什么
 
-- 单输入框，自动任务路由
-- `commerce_search | public_research` 双任务类型
-- 小模型优先任务路由，规则回退
-- 小模型生成搜索词
-- 统一 `aggregating` / final output 阶段
-- Google 首屏候选过滤：去广告、去重、去 Google 内部页、去 PDF
-- 来源页允许 `partial`，并显式输出 `unresolvedIssues`
-- side panel 保持统一外壳，调试/日志/时间线默认折叠
-- content script receiver 缺失时，runtime 会回退到 direct bridge，而不是直接失败
+当前不应把项目理解为：
 
-## 当前真实浏览器结论
+- 多站点通用浏览器代理
+- LLM 自由规划任意下一步动作的开放式 agent
+- 自动下单、支付或其他高风险执行器
+- 已完成真机稳定性验收的生产系统
 
-扩展内部的 `"Could not establish connection. Receiving end does not exist."` 已修复。
+## 核心架构
 
-当前真实浏览器里的主要阻断已经变成站点侧：
+### LLM
 
-- 京东搜索可能跳到登录页
-- Google 搜索可能返回 `sorry` 验证页
+负责：
 
-也就是说，当前主要瓶颈不再是扩展内部通信，而是目标站点的登录墙/风控。
+- 任务类型判断
+- 查询词生成
+- 最终结果汇总
+
+不负责：
+
+- 细粒度 DOM 操作
+- 页面等待与重试
+- 结构化提取
+- 基础去重与基础过滤
+
+### Tools
+
+当前主链的高阶工具位于 `src/background/tools.ts`：
+
+- `compileTask`
+- `searchInSite`
+- `extractStructuredResults`
+- `filterCandidates`
+- `readPageFacts`
+- `aggregateTaskResults`
+
+### Memory
+
+保存结构化状态，例如：
+
+- `taskType`
+- `taskSpec`
+- `currentPhase`
+- `toolHistory`
+- `extractedItems`
+- `researchCandidates`
+- `researchSources`
+- `failures`
+- `finalOutput`
+
+### Runtime
+
+负责：
+
+- session 生命周期
+- phase 驱动的工具调度
+- 状态广播
+- 结果校验
+- 容错与停止控制
+
+## 当前任务链路
+
+### Commerce
+
+1. 用户输入购物目标
+2. lite model 生成京东搜索词
+3. 在京东搜索结果页执行搜索
+4. 提取商品候选
+5. 代码侧完成去重与过滤
+6. LLM 输出最终推荐 Markdown
+
+### Public Research
+
+1. 用户输入调研目标
+2. lite model 生成 Google 查询词
+3. 打开 Google 第一页结果
+4. 提取并过滤候选来源
+5. 串行读取来源页并提取事实
+6. LLM 输出调研总结与来源概览
+
+## 目录结构
+
+```text
+.
+├─ public/           # manifest 与 side panel 静态资源
+├─ src/background/   # runtime、tools、query compiler、LLM client
+├─ src/content/      # 页面扫描、动作执行、商品提取、研究页提取
+├─ src/shared/       # 类型、schema、常量、协议
+├─ src/sidepanel/    # Side Panel UI
+├─ tests/            # 自动化测试
+└─ doc/              # 设计、现状、验收与写作规范
+```
+
+## 环境变量
+
+参考 [`.env.example`](./.env.example)：
+
+```env
+VITE_LLM_PROVIDER=gemini
+VITE_GEMINI_API_KEY=
+VITE_GEMINI_MODEL=gemini-2.0-flash
+VITE_GEMINI_SIMPLE_MODEL=gemini-3.1-flash-lite-preview
+VITE_GEMINI_SIMPLE_MODEL_FALLBACK=gemini-2.5-flash-lite
+VITE_DEEPSEEK_API_KEY=
+VITE_DEEPSEEK_MODEL=deepseek-chat
+```
 
 ## 开发命令
 
-```powershell
-npm.cmd install
-npm.cmd test
-npm.cmd run build
+安装依赖：
+
+```bash
+npm install
 ```
 
-产物目录：
+运行测试：
 
-- `dist/`
+```bash
+npm test
+```
 
-Chrome 加载方式：
+构建扩展：
 
-1. 打开 `chrome://extensions`
-2. 开启开发者模式
-3. 选择“加载已解压的扩展程序”
-4. 指向 `dist/`
+```bash
+npm run build
+```
 
-## 目录
+监听构建：
 
-- `src/background/`
-  - runtime、tool 调度、LLM 调用、过滤逻辑
-- `src/content/`
-  - 页面扫描、页面动作、Google/通用页面提取、direct bridge
-- `src/sidepanel/`
-  - side panel UI
-- `src/shared/`
-  - 共享 schema、常量、类型
-- `tests/`
-  - query/filter/runtime/research 回归测试
-- `doc/`
-  - 设计、现状、验收、踩坑记录
+```bash
+npm run dev
+```
 
-## 关键文档
+## 在 Chrome 中加载
 
-- [设计真相](./doc/spec.md)
-- [代码现状](./doc/status.md)
-- [验收口径](./doc/acceptance.md)
+1. 运行 `npm run build`
+2. 打开 Chrome 扩展管理页
+3. 开启开发者模式
+4. 选择“加载已解压的扩展程序”
+5. 选择项目下的 `dist/` 目录
+
+## 文档入口
+
+以 `doc/` 下文档为准：
+
+- [设计规范](./doc/spec.md)
+- [新线程启动词](./doc/thread_bootstrap.md)
+- [当前代码现状](./doc/status.md)
+- [当前验收清单](./doc/acceptance.md)
+- [文档写作规范](./doc/writing_rules.md)
 - [踩坑记录](./doc/pitfalls.md)
-- [线程启动上下文](./doc/thread_bootstrap.md)
+
+## 当前状态
+
+当前项目已经具备双任务类型的代码主链，但仍处于“自动化验证已具备、真机闭环仍需继续验收”的阶段。
+
+更具体的事实和验收状态请看：
+
+- [status.md](./doc/status.md)
+- [acceptance.md](./doc/acceptance.md)
 
 Updated: 2026-04-02

@@ -2,88 +2,129 @@
 
 ## 1. 文档定位
 
-本文件定义当前线程的设计真相。
+本文档只回答一件事：当前主线下，系统应该是什么。
 
-当前统一定义：
+它定义：
+
+- 核心抽象
+- 组件边界
+- 当前任务范围
+- 明确的 MUST / MUST NOT
+
+它不记录：
+
+- 某次改动细节
+- 临时调参过程
+- 真机验收结果
+
+## 2. 核心定义
+
+唯一核心定义：
 
 `Agent = LLM + Tools + Memory + Runtime`
 
-目标不是让 LLM 直接处理细粒度 DOM 动作，而是把职责清晰拆开：
+这是当前项目的设计真相。
 
-- `LLM` 负责任务理解、任务路由、搜索词生成、最终总结
-- `Tools` 负责导航、等待、提取、过滤、读取页面、局部恢复
-- `Memory` 负责保存高价值结构化上下文
-- `Runtime` 负责 phase 循环、状态推进、校验、容错
+## 3. 当前设计范围
 
-## 2. 当前任务模型
+### 3.1 支持的任务类型
 
-### 2.1 任务类型
-
-当前支持两类任务：
+当前主线支持两类任务：
 
 - `commerce_search`
-  - 目标：围绕商品推荐、预算、比价等需求，完成搜索、提取、过滤与推荐
+  - 目标：在京东站内完成商品搜索、提取、过滤和推荐输出
 - `public_research`
-  - 目标：围绕通用调研问题，完成搜索、来源筛选、来源页事实提取与总结
+  - 目标：在 Google 上完成公网搜索、来源筛选、逐页读取和调研汇总
 
-任务类型是 runtime 的第一层分流键。
+### 3.2 当前非目标
 
-### 2.2 任务路由
+当前设计不要求：
 
-任务路由优先使用小模型：
+- 多站点通用 adapter
+- LLM 自由选择任意下一步原子动作
+- 自动购买、支付或其他高风险执行
+- 复杂开放世界浏览器操作
 
-- 输入：用户原始 goal
-- 输出：`taskType + reason`
-- 默认策略：
-  - 小模型成功时使用小模型结果
-  - 小模型失败时回退到规则路由
+## 4. 组件边界
 
-当前不提供显式模式切换 UI，仍保持单输入框自动路由。
+### 4.1 LLM
 
-### 2.3 固定任务模板
+`LLM` 必须负责：
 
-当前仍是固定模板，不做自由 planner。
+- 理解用户目标
+- 判断任务类型
+- 生成查询词
+- 基于结构化结果生成最终输出
 
-`commerce_search`：
+`LLM` 必须不负责：
 
-- `planning -> searching -> extracting -> filtering -> aggregating -> done`
+- 细粒度 DOM 操作
+- 页面等待与重试
+- 结构化提取
+- 基础去重与基础过滤
+- 低层页面恢复逻辑
 
-`public_research`：
+### 4.2 Tools
 
-- `planning -> searching -> extracting -> filtering -> reading -> aggregating -> done`
+`Tools` 必须负责：
 
-当前已经有最小结构：
+- 打开目标搜索页
+- 执行页面动作
+- 提取结构化候选
+- 过滤候选
+- 读取来源页事实
+- 局部恢复与失败返回
 
-- `TaskPlan`
-- `SubtaskSpec`
-- `SubtaskResult`
-- `FinalResult`
+`Tools` 必须不负责：
 
-但这仍然是“带任务结构的 phase/tool-first MVP”，不是完整的自由子任务执行器。
+- 改写系统设计边界
+- 在工具内部偷偷引入新的任务类型判断
 
-## 3. LLM 职责
+### 4.3 Memory
 
-### 3.1 应由 LLM 负责的事
+`Memory` 必须只保留高价值结构化状态。
 
-- 判断 `taskType`
-- 生成稳定搜索词
-- 在统一 aggregating 阶段生成最终 Markdown 输出
+至少应包含：
 
-### 3.2 不应由 LLM 负责的事
+- `goal`
+- `taskType`
+- `taskSpec`
+- `currentPhase`
+- `toolHistory`
+- `extractedItems`
+- `researchCandidates`
+- `researchSources`
+- `failures`
+- `finalOutput`
 
-- 细粒度 DOM 动作编排
-- 页面 ready 判断
-- selector fallback
-- 提取失败后的局部重试
-- 候选过滤规则
+`Memory` 必须不保留：
 
-LLM 只应看到高价值结构化输入，而不是长 DOM、长日志和等待细节。
+- 大段原始 DOM
+- 大量原始日志
+- 对当前循环无帮助的历史噪音
 
-## 4. Tool 设计
+### 4.4 Runtime
 
-### 4.1 当前高阶 Tool
+`Runtime` 必须负责：
 
-当前主链高阶 Tool 为：
+- session 生命周期
+- phase 驱动的确定性循环
+- tool 调度
+- tool 结果校验
+- 状态广播
+- 超时、停止和恢复控制
+
+`Runtime` 必须不负责：
+
+- 业务语义推理
+- 页面提取规则
+- 候选过滤细则
+
+## 5. 工具与 phase 契约
+
+### 5.1 当前标准高阶工具
+
+当前标准工具集合为：
 
 - `compileTask`
 - `searchInSite`
@@ -92,177 +133,72 @@ LLM 只应看到高价值结构化输入，而不是长 DOM、长日志和等待
 - `readPageFacts`
 - `aggregateTaskResults`
 
-### 4.2 Tool 责任边界
+### 5.2 phase 必须是确定性的
 
-Tool 内部应负责：
+当前主线采用 phase-driven loop，而不是开放式 planner。
 
-- 页面短等待
-- 一次性恢复动作
-- 提取逻辑
-- 过滤规则
-- 站点差异
-- 局部失败降级
+`commerce_search` 的推荐 phase 顺序：
 
-当前 runtime 不再让 LLM 直接调度底层 `click/type/scroll` 作为主流程。
+1. `planning`
+2. `searching`
+3. `extracting`
+4. `filtering`
+5. `aggregating`
+6. `done`
 
-## 5. 场景规范
+`public_research` 的推荐 phase 顺序：
 
-### 5.1 commerce_search
+1. `planning`
+2. `searching`
+3. `extracting`
+4. `filtering`
+5. `reading`
+6. `aggregating`
+7. `done`
 
-当前规范：
+## 6. 任务类型契约
 
-- 入口站点固定京东
-- 搜索词由小模型生成
-- 搜索通过直达搜索结果 URL 实现，不依赖页面输入框交互
-- 结构化提取商品卡片
-- 过滤预算/去重/截断
-- 统一进入 `aggregating`
+### 6.1 `commerce_search`
 
-### 5.2 public_research
+必须满足：
 
-当前规范：
+- 搜索入口是京东
+- 查询词由 lite model 生成
+- 商品候选由代码侧提取
+- 去重和基础过滤由代码侧完成
+- 最终推荐结果由 LLM 汇总输出
 
-- 搜索入口固定 Google
-- 直接打开 Google 搜索结果 URL，不先进入主页输入
-- 只看第一页搜索结果
-- 过滤后保留前 5 个候选
-- 候选过滤规则：
-  - 去广告
-  - 去重
-  - 去 Google 内部页
-  - 去明显 PDF
-  - 只保留外部 `http(s)` 结果
-- 按候选顺序串行读取来源页
-- 读取成功或 partial 都记录
-- 目标是得到 3 个来源结果，或候选耗尽
+### 6.2 `public_research`
 
-### 5.3 partial 规则
+必须满足：
 
-以下页面允许记为 `partial`，并在最终结果中显式暴露：
+- 搜索入口是 Google
+- 查询词由 lite model 生成
+- 候选来源从 Google 第一页自然结果中提取
+- 来源页事实由代码侧提取
+- 最终调研结果由 LLM 汇总输出
 
-- PDF
-- 登录墙 / 订阅墙
-- 强交互 SPA
-- 不可读页面
+## 7. 输出契约
 
-最终 research 输出必须包含：
+系统最终输出必须是结构化可展示结果，而不是仅有内部日志。
 
-- 结论摘要
-- 来源要点
-- 来源链接
-- 未解决问题
+对于 `commerce_search`：
 
-## 6. Memory 设计
+- 输出推荐 Markdown
+- 包含商品链接和基本说明
 
-当前 memory 以单 session 结构化状态为主，已经显式包含：
+对于 `public_research`：
 
-- `taskType`
-- `taskPlan`
-- `subtaskResults`
-- `researchCandidates`
-- `researchSources`
-- `unresolvedIssues`
-- `activeSourceIndex`
-- `finalResult`
+- 输出调研摘要
+- 包含来源概览
+- 包含未解决问题
 
-当前还没有正式落地：
+## 8. 当前设计约束
 
-- 独立 `global memory + subtask memory`
-- `chrome.storage.local` checkpoint
-- 中断恢复
+当前阶段必须坚持：
 
-所以本轮仍按单任务内存态推进，不承诺恢复能力。
-
-## 7. Runtime 设计
-
-### 7.1 当前主循环
-
-runtime 当前按 phase 选择高阶 Tool：
-
-1. 识别 `taskType`
-2. 生成 `TaskSpec + TaskPlan`
-3. 进入 phase/tool loop
-4. 收集结构化结果
-5. 进入统一 `aggregating`
-6. 生成最终输出并结束
-
-### 7.2 统一 aggregating
-
-`aggregating` 是独立阶段，不再把“最后一步总结”塞回前面的搜索/提取阶段。
-
-统一约束：
-
-- aggregating 只读结构化产物
-- 不直接读取原始 DOM
-- 最终输出统一落到 `FinalResult`
-- 最终状态统一为：
-  - `success`
-  - `partial`
-  - `failed`
-
-### 7.3 receiver 缺失恢复
-
-当 background 向 tab 发消息时，如果出现：
-
-- `Could not establish connection. Receiving end does not exist.`
-
-runtime 不再直接失败，而是回退到 direct bridge：
-
-- 通过 `chrome.scripting.executeScript`
-- 动态加载 `content-bridge.js`
-- 直接调用 `scanCurrentPage / executeCurrentAction`
-
-这个恢复是 runtime 级兜底，不要求 content script 消息通道一定先可用。
-
-## 8. 容错原则
-
-当前容错顺序：
-
-1. Tool 内部局部恢复
-2. phase 内一次短重试
-3. 产出 `partial`
-4. aggregating 显式暴露未解决问题
-
-当前已显式识别的站点阻断包括：
-
-- 京东搜索跳登录页
-- Google 搜索进入 `sorry` 验证页
-
-这类情况应当明确报错或汇总为 partial，而不是无限等待或继续盲扫。
-
-## 9. 前端展示原则
-
-side panel 保持统一壳子，不增加模式切换。
-
-结果展示按 `taskType` 分流：
-
-- `commerce_search`
-  - 商品结果列表 + 最终总结
-- `public_research`
-  - 结论摘要 + 来源概览 + 来源链接 + 未解决问题
-
-默认折叠：
-
-- timeline
-- task spec / filter diagnostics
-- snapshot / debug
-- logs
-- 每个来源的详细内容
-
-## 10. 当前阶段边界
-
-本阶段明确不做：
-
-- 自由 planner
-- 并行子任务
-- checkpoint / 恢复
-- 多搜索引擎支持
-- 多站点电商适配
-
-本阶段优先回答：
-
-- 这一步该由 `LLM` 做还是 `Tool` 做
-- 这段上下文是否值得给 LLM
-- 这一步是否必须进入 agent loop
+- 先把高阶 tool 主线跑稳，再谈更开放的 planner
+- 先把真机验收补齐，再谈更泛化的站点扩展
+- 先保持文档职责单一，再考虑继续拆分专题文档
 
 Updated: 2026-04-02
