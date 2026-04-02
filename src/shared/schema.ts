@@ -29,6 +29,7 @@ export const scrollActionSchema = z.object({
 
 export const extractListActionSchema = z.object({
   type: z.literal("EXTRACT_LIST"),
+  limit: z.number().int().positive().optional(),
 });
 
 export const doneActionSchema = z.object({
@@ -64,6 +65,7 @@ export const queryRefinementSchema = z.object({
 
 export const summaryResultSchema = z.object({
   summary: z.string().min(1),
+  markdown: z.string().min(1),
 });
 
 export const toolResultSchema = z.object({

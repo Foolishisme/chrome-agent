@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { buildRuleBasedSummary, compileTaskSpecRuleOnly, getToolDefinition } from "../src/background/tools";
+import { buildRuleBasedSummary, getToolDefinition } from "../src/background/tools";
+import { compileSearchTask } from "../src/background/query-compiler";
 import type { SessionMemory, SnapshotData, ToolResult } from "../src/shared/types";
 
 function createSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
@@ -47,6 +48,7 @@ function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
       tabId: 1,
       pageType: "search",
       status: "observing",
+      currentTool: undefined,
       currentStep: 2,
       llmRetryCount: 0,
       actionRetryCount: 0,
@@ -67,16 +69,21 @@ beforeEach(() => {
   });
 });
 
-describe("rule-only runtime helpers", () => {
-  it("compiles task specs without using lite-model refinement", async () => {
-    const task = await compileTaskSpecRuleOnly("推荐一个适合学生办公的 MacBook");
+describe("runtime tool helpers", () => {
+  it("builds the final on-site query directly from the lite model", async () => {
+    const task = await compileSearchTask("推荐一个适合学生办公的 MacBook", {
+      refineWithLiteModel: async () => ({
+        searchQuery: "学生办公 MacBook",
+        reason: "补全办公场景关键词",
+      }),
+    });
 
-    expect(task.querySource).toBe("rule");
-    expect(task.searchQuery).toContain("MacBook");
-    expect(task.topK).toBe(5);
+    expect(task.querySource).toBe("llm-lite");
+    expect(task.searchQuery).toBe("学生办公 MacBook");
+    expect(task.llmInputLimit).toBe(10);
   });
 
-  it("builds a deterministic final summary from extracted items", () => {
+  it("builds a deterministic fallback summary from extracted items", () => {
     const summary = buildRuleBasedSummary("MacBook 对比前3个", [
       { title: "MacBook Air 13", priceText: "7999.00", url: "https://item.jd.com/1.html", shopText: "Apple 自营" },
       { title: "MacBook Pro 14", priceText: "12999.00", url: "https://item.jd.com/2.html" },
@@ -95,10 +102,11 @@ describe("runtime recovery path", () => {
     const memory = createMemory({
       taskSpec: {
         originalGoal: "MacBook 对比前3个",
-        category: "MacBook",
         topK: 3,
+        llmInputLimit: 10,
+        extractLimit: 12,
         searchQuery: "MacBook",
-        querySource: "rule",
+        querySource: "llm-lite",
         notes: [],
       },
       rawExtractedItems: [{ title: "MacBook Air 13", priceText: "7999.00", url: "https://item.jd.com/1.html" }],
@@ -147,10 +155,11 @@ describe("search page query matching", () => {
       currentPhase: "searching",
       taskSpec: {
         originalGoal: "macbookair",
-        category: "MacBook",
         topK: 5,
+        llmInputLimit: 10,
+        extractLimit: 12,
         searchQuery: "macbookair",
-        querySource: "rule",
+        querySource: "llm-lite",
         notes: [],
       },
     });

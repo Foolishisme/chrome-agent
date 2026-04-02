@@ -86,17 +86,20 @@ export interface FilterDiagnostics {
   dedupedCount: number;
   budgetMatchedCount: number;
   finalCount: number;
-  appliedTopK: number;
+  requestedTopK: number;
+  llmInputLimit: number;
   budgetRangeText?: string;
 }
 
 export interface SearchTaskSpec {
   originalGoal: string;
-  category: string;
+  category?: string;
   budget?: number;
   budgetMin?: number;
   budgetMax?: number;
   topK: number;
+  llmInputLimit: number;
+  extractLimit: number;
   searchQuery: string;
   querySource: "rule" | "llm-lite";
   notes: string[];
@@ -117,7 +120,7 @@ export type AgentAction =
   | { type: "CLICK"; agentId: string }
   | { type: "TYPE"; agentId: string; text: string; submit?: boolean }
   | { type: "SCROLL"; direction: "up" | "down"; amount?: number }
-  | { type: "EXTRACT_LIST" }
+  | { type: "EXTRACT_LIST"; limit?: number }
   | { type: "DONE"; summary: string; items?: ExtractedItem[] };
 
 export interface ToolResult {

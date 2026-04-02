@@ -21,7 +21,7 @@
 - Runtime 负责 session、phase、tool 调度、校验、容错
 - Tools 负责搜索、提取、过滤、总结等高阶能力
 - Memory 保存 phase、tool history、facts、failures、final output
-- 当前搜索/提取/过滤/收口主链已经可以走纯 tools，不依赖 provider
+- 当前主链已调整为：搜索词规划直接由小模型生成，提取/过滤/恢复仍由 tools 负责
 
 当前仍然是：
 
@@ -55,11 +55,24 @@
 
 本轮新增收敛：
 
-- `compileTask` 当前只走规则编译，不再触发 provider
-- `finishWithSummary` 当前直接走规则化摘要与最终结果拼装
+- `compileTask` 已改为“用户意图 -> 小模型搜索词”，不再先做规则化 query 拼装
+- `finishWithSummary` 已恢复 LLM 输出，由模型基于过滤后的候选生成最终 Markdown 结果
+- `extractStructuredResults`、`filterCandidates` 只负责候选提取、去重、预算过滤与诊断，不提前决定最终展示内容
 - 候选不足时继续走滚动恢复，不会因为搜索结果页 ready 判定过严而提前中断
 
-### 3.3 搜索结果页 ready 判定已放宽
+### 3.3 搜索词与候选数量已解耦
+
+`src/background/query-compiler.ts`
+`src/background/result-filter.ts`
+`src/content/extractor.ts`
+
+- `topK` 保留为用户最终想看的结果数
+- 新增 `llmInputLimit`，默认向 LLM 提供前 10 个过滤后的候选
+- 新增 `extractLimit`，提取阶段默认抓取更多候选，避免过早截断
+- 结果过滤不再直接裁到最终展示数，而是保留给 LLM 做排序与输出
+- 搜索 query 不再依赖预算/品类规则提取，而是直接由 one-shot prompt 驱动的小模型生成
+
+### 3.4 搜索结果页 ready 判定已放宽
 
 `src/content/scanner.ts`
 
@@ -67,7 +80,7 @@
 - 解决了“页面上已有可提取商品链接，但状态流仍判未就绪”的问题
 - 当搜索结果已经可提取时，不再把“搜索框必须识别成功”作为硬阻塞条件
 
-### 3.4 提取器保留主选择器 + fallback heuristic
+### 3.5 提取器保留主选择器 + fallback heuristic
 
 `src/content/extractor.ts`
 
@@ -75,14 +88,14 @@
 - 当 legacy card selector 未命中时，允许通过商品链接做 fallback 提取
 - 仍输出 diagnostics，方便后续真机微调
 
-### 3.5 自动化回归已覆盖本轮改动
+### 3.6 自动化回归已覆盖本轮改动
 
 - `tests/scanner.test.ts`
   - 覆盖 link-based result readiness
   - 覆盖无 legacy cards 时仍可提取商品
 - `tests/runtime-tools.test.ts`
-  - 覆盖纯规则任务编译
-  - 覆盖纯规则最终摘要
+  - 覆盖“小模型直接生成站内搜索词”
+  - 覆盖 LLM 不可用时的规则摘要 fallback
   - 覆盖候选不足时滚动恢复
 
 ---
@@ -152,7 +165,7 @@
 
 1. 新主线已经落到了代码层
 2. 京东单站点闭环的结构已经基本对齐设计
-3. 本轮已修复搜索结果页 ready 判定过严导致的提取失败问题
+3. 本轮已把“搜索词规划/最终输出”重新交回 LLM，把“提取/过滤/恢复”继续留在 tools
 4. 下一步重点是做真机稳定性验证，而不是继续拆概念
 
 ---

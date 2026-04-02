@@ -24,11 +24,11 @@
 | A5 | Runtime 可驱动高阶 tool 主循环 | 代码审阅 + 真机验证 | PARTIAL | 代码已切到 phase/tool-first loop，本轮修复了 tools 提取主链，但未真机复验 |
 | A6 | 页面视觉反馈可见 | Chrome 录屏验证 | PARTIAL | overlay 仍可复用，未本轮录屏验证 |
 | A7 | 搜索结果可提取至少 3 个商品 | 真机搜索验证 | FAIL | 已补 link-based readiness 与提取回归测试，但仍缺京东真机稳定性验证 |
-| A8 | 最终结果以 Markdown 或通用结果块输出 | 真机验证 | PARTIAL | 当前已返回结构化 items + 规则 summary，未真机复验 |
+| A8 | 最终结果以 Markdown 或通用结果块输出 | 真机验证 | PARTIAL | 当前已恢复 LLM Markdown 输出，并保留规则 fallback，未真机复验 |
 | A9 | 失败时不崩溃并能显示错误 | 真机失败路径验证 | PARTIAL | 错误通路保留，需真机验证 |
 | A10 | 支持 Gemini provider | 配置 key 后真机验证 | PARTIAL | 代码已接入，但本轮不在主链范围且未重新验证 |
 | A11 | 支持 DeepSeek provider | 配置 key 后真机验证 | PARTIAL | 代码已接入，未做真实请求验证 |
-| A12 | 搜索词由 query compiler 或小模型补全 | 代码审阅 + 真机验证 | PARTIAL | 当前主链已固定为 query compiler 纯规则路径，未做真机复验 |
+| A12 | 搜索词由小模型直接生成 | 代码审阅 + 真机验证 | PARTIAL | 当前主链已改为“用户意图 -> 小模型搜索词”，并引入 `llmInputLimit/extractLimit`，未做真机复验 |
 
 ---
 

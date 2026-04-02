@@ -44,14 +44,15 @@ export function filterExtractedItems(items: ExtractedItem[], taskSpec: SearchTas
       : dedupedItems;
 
   const candidateItems = budgetMatchedItems.length > 0 ? budgetMatchedItems : dedupedItems;
-  const finalItems = candidateItems.slice(0, Math.max(3, taskSpec.topK));
+  const finalItems = candidateItems.slice(0, taskSpec.llmInputLimit);
 
   const diagnostics: FilterDiagnostics = {
     inputCount: items.length,
     dedupedCount: dedupedItems.length,
     budgetMatchedCount: budgetMatchedItems.length,
     finalCount: finalItems.length,
-    appliedTopK: Math.max(3, taskSpec.topK),
+    requestedTopK: taskSpec.topK,
+    llmInputLimit: taskSpec.llmInputLimit,
     budgetRangeText: formatBudgetRange(taskSpec),
   };
 

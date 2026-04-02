@@ -302,10 +302,16 @@ function buildDiagnostics(primary: ExtractedItem[], fallback: ExtractedItem[], i
   };
 }
 
-export function extractStructuredProducts(root: Document | HTMLElement = document) {
+export function extractStructuredProducts(
+  root: Document | HTMLElement = document,
+  options: {
+    limit?: number;
+  } = {},
+) {
+  const limit = Math.max(1, options.limit ?? 10);
   const primary = uniqueItems(extractByCardSelectors(root));
   const fallback = uniqueItems([...primary, ...extractByHeuristics(root)]);
-  const items = (primary.length >= 3 ? primary : fallback).slice(0, 10);
+  const items = (primary.length >= 3 ? primary : fallback).slice(0, limit);
 
   return {
     items,

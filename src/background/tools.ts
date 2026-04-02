@@ -12,6 +12,7 @@ import type {
   ToolResult,
 } from "../shared/types";
 import { compileSearchTask } from "./query-compiler";
+import { generateFinalSummary, refineSearchQuery } from "./llm-client";
 import { filterExtractedItems } from "./result-filter";
 
 type StepOptions = {
@@ -83,10 +84,6 @@ function hasMatchingQuery(snapshot: SnapshotData, searchQuery: string) {
       (queryTokens.length > 0 && queryTokens.every((token) => normalizedSignal.includes(token)))
     );
   });
-}
-
-export async function compileTaskSpecRuleOnly(goal: string) {
-  return compileSearchTask(goal);
 }
 
 export function buildRuleBasedSummary(goal: string, items: ExtractedItem[]) {
@@ -175,8 +172,22 @@ const compileTaskTool: AgentToolDefinition = {
     context.memory.currentPhase = "planning";
     await context.pushState("Compile the shopping task into a structured search spec.");
 
-    context.memory.runtimeMeta.queryRefineTried = false;
-    const taskSpec = await compileTaskSpecRuleOnly(context.memory.goal);
+    const taskSpec = await compileSearchTask(context.memory.goal, {
+      refineWithLiteModel: async (goal) => {
+        context.memory.runtimeMeta.queryRefineTried = true;
+        const refined = await refineSearchQuery(goal, { signal: context.signal });
+        context.appendLog("llm", "info", "Refined the on-site search query with the lite model.", {
+          model: refined.model,
+          provider: refined.provider,
+          searchQuery: refined.searchQuery,
+          reason: refined.reason,
+        });
+        return {
+          searchQuery: refined.searchQuery,
+          reason: refined.reason,
+        };
+      },
+    });
 
     context.memory.taskSpec = taskSpec;
     context.memory.currentPhase = "searching";
@@ -184,8 +195,9 @@ const compileTaskTool: AgentToolDefinition = {
       ...context.memory.currentFacts,
       searchQuery: taskSpec.searchQuery,
       querySource: taskSpec.querySource,
-      budget: taskSpec.budget,
       topK: taskSpec.topK,
+      llmInputLimit: taskSpec.llmInputLimit,
+      extractLimit: taskSpec.extractLimit,
     };
     context.memory.nextIntent = "Submit the query on JD and open the search results page.";
     context.memory.recoveryHint = undefined;
@@ -287,7 +299,10 @@ const extractStructuredResultsTool: AgentToolDefinition = {
       };
     }
 
-    const action: AgentAction = { type: "EXTRACT_LIST" };
+    const action: AgentAction = {
+      type: "EXTRACT_LIST",
+      limit: context.memory.taskSpec?.extractLimit,
+    };
     const extractResult = await context.executeAction(action, "Extract structured search result items.");
     const snapshotAfter = await context.scanPage();
 
@@ -353,8 +368,8 @@ const filterCandidatesTool: AgentToolDefinition = {
     });
     context.appendLog("runtime", "info", "Filtering completed.", filtered.diagnostics);
 
-    const requiredCount = Math.max(3, context.memory.taskSpec.topK);
-    if (filtered.items.length >= requiredCount) {
+    const minimumSummaryCount = Math.max(1, Math.min(3, context.memory.taskSpec.topK));
+    if (filtered.items.length >= minimumSummaryCount) {
       context.memory.currentPhase = "summarizing";
       return {
         nextPhase: "summarizing",
@@ -365,7 +380,7 @@ const filterCandidatesTool: AgentToolDefinition = {
     return recoverByScroll(
       context,
       snapshot,
-      `Only ${filtered.items.length} candidates remained after filtering. Need ${requiredCount}.`,
+      `Only ${filtered.items.length} candidates remained after filtering. Need at least ${minimumSummaryCount}.`,
     );
   },
 };
@@ -377,16 +392,36 @@ const finishWithSummaryTool: AgentToolDefinition = {
       throw new RuntimeError("There are not enough items to produce the final summary.", "FINALIZE_BLOCKED");
     }
 
-    await context.pushState("Assemble the final recommendation with rule-based tools.");
+    await context.pushState("Generate the final recommendation with the filtered candidates.");
 
-    const summary = buildRuleBasedSummary(context.memory.goal, context.memory.extractedItems);
-    context.appendLog("runtime", "info", "Generated the final summary with rule-based tools.", {
-      itemCount: context.memory.extractedItems.length,
-      topK: context.memory.taskSpec.topK,
-    });
+    let summary = "";
+    let finalOutput = "";
+
+    try {
+      const response = await generateFinalSummary(
+        context.memory.goal,
+        context.memory.taskSpec,
+        context.memory.extractedItems,
+        { signal: context.signal },
+      );
+      summary = response.summary;
+      finalOutput = response.markdown;
+      context.appendLog("llm", "info", "Generated the final recommendation with the configured LLM provider.", {
+        itemCount: context.memory.extractedItems.length,
+        topK: context.memory.taskSpec.topK,
+        provider: response.provider,
+        model: response.model,
+      });
+    } catch (error) {
+      summary = buildRuleBasedSummary(context.memory.goal, context.memory.extractedItems);
+      finalOutput = buildFinalMarkdown(context.memory.goal, context.memory.extractedItems, summary);
+      context.appendLog("llm", "warn", "Fell back to rule-based final output after LLM summary failed.", {
+        message: error instanceof Error ? error.message : "Unknown final summary error",
+      });
+    }
 
     context.memory.finalSummary = summary;
-    context.memory.finalOutput = buildFinalMarkdown(context.memory.goal, context.memory.extractedItems, summary);
+    context.memory.finalOutput = finalOutput;
     context.memory.runtimeMeta.status = "done";
     context.memory.runtimeMeta.currentStep += 1;
     context.memory.currentPhase = "done";

@@ -9,6 +9,8 @@ const taskSpec: SearchTaskSpec = {
   budgetMin: 3500,
   budgetMax: 6500,
   topK: 5,
+  llmInputLimit: 10,
+  extractLimit: 20,
   searchQuery: "笔记本电脑 5000元",
   querySource: "rule",
   notes: [],
@@ -29,6 +31,8 @@ describe("filterExtractedItems", () => {
     expect(result.items).toHaveLength(2);
     expect(result.diagnostics.dedupedCount).toBe(3);
     expect(result.diagnostics.budgetMatchedCount).toBe(2);
+    expect(result.diagnostics.requestedTopK).toBe(5);
+    expect(result.diagnostics.llmInputLimit).toBe(10);
     expect(result.items.map((item) => item.title)).toEqual(["A", "C"]);
   });
 

@@ -346,9 +346,9 @@ async function requestProviderJson<T>(
   };
 }
 
-export async function refineSearchQuery(goal: string, draftQuery: string, options: RequestOptions = {}) {
+export async function refineSearchQuery(goal: string, options: RequestOptions = {}) {
   const response = await requestProviderJson(
-    buildSearchQueryRefinementPrompt(goal, draftQuery),
+    buildSearchQueryRefinementPrompt(goal),
     queryRefinementSchema,
     "simple",
     options,

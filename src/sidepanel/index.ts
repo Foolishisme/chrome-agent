@@ -219,7 +219,7 @@ function renderFilterDiagnostics() {
       <div class="debug-card">
         <span class="status-label">${escapeHtml(messages.filterFinal)}</span>
         <div class="debug-value">${escapeHtml(String(diagnostics.finalCount))}</div>
-        <div class="muted">budget matched=${escapeHtml(String(diagnostics.budgetMatchedCount))} topK=${escapeHtml(String(diagnostics.appliedTopK))}</div>
+        <div class="muted">budget matched=${escapeHtml(String(diagnostics.budgetMatchedCount))} requested=${escapeHtml(String(diagnostics.requestedTopK))} llm=${escapeHtml(String(diagnostics.llmInputLimit))}</div>
       </div>
     </div>
   `;

@@ -113,8 +113,8 @@ async function performScroll(direction: "up" | "down", amount = 640): Promise<To
   };
 }
 
-async function performExtractList(): Promise<ToolResult> {
-  const { items, diagnostics } = extractStructuredProducts(document);
+async function performExtractList(limit?: number): Promise<ToolResult> {
+  const { items, diagnostics } = extractStructuredProducts(document, { limit });
   if (items.length === 0) {
     showToast("未提取到商品列表", true);
     return {
@@ -155,7 +155,7 @@ export async function executeAction(action: AgentAction): Promise<ToolResult> {
     case "SCROLL":
       return performScroll(action.direction, action.amount);
     case "EXTRACT_LIST":
-      return performExtractList();
+      return performExtractList(action.limit);
     case "DONE":
       return {
         success: true,
