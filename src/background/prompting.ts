@@ -1,6 +1,21 @@
-import type { ExtractedItem, SearchTaskSpec } from "../shared/types";
+import type { ExtractedItem, PublicResearchTaskSpec, ResearchSourceResult, SearchTaskSpec } from "../shared/types";
 
-export function buildSearchQueryRefinementPrompt(goal: string) {
+export function buildTaskRoutePrompt(goal: string) {
+  return [
+    "You classify browser-agent tasks.",
+    "Return JSON only.",
+    'Schema: {"taskType":"commerce_search|public_research","reason":"..."}',
+    "Rules:",
+    "- commerce_search is for shopping, product recommendation, budgeted product search, or clear purchase intent.",
+    "- public_research is for explanations, comparisons, background research, summaries, and source-based investigation.",
+    "- If the user asks for products to buy, recommend, compare by budget, or shortlist items, choose commerce_search.",
+    "- If the user asks to research a topic, summarize sources, explain differences, or gather public information, choose public_research.",
+    "- Choose exactly one taskType.",
+    `User goal: ${goal}`,
+  ].join("\n");
+}
+
+export function buildCommerceQueryRefinementPrompt(goal: string) {
   return [
     "You rewrite JD.com on-site shopping queries.",
     "Return JSON only.",
@@ -24,7 +39,23 @@ export function buildSearchQueryRefinementPrompt(goal: string) {
   ].join("\n");
 }
 
-export function buildFinalSummaryPrompt(goal: string, taskSpec: SearchTaskSpec, items: ExtractedItem[]) {
+export function buildResearchQueryRefinementPrompt(goal: string) {
+  return [
+    "You rewrite public web research queries for Google.",
+    "Return JSON only.",
+    'Schema: {"searchQuery":"...","reason":"..."}',
+    "Rules:",
+    "- Rewrite directly from the user goal.",
+    "- Keep the query concise and information-seeking.",
+    "- Prefer key entities, topic words, and comparison terms when present.",
+    "- Do not add site filters unless the user explicitly asks for them.",
+    "- Do not add words like recommendation, best, buy, price unless the goal clearly needs them.",
+    "- Keep the query short enough for a normal Google search box.",
+    `User goal: ${goal}`,
+  ].join("\n");
+}
+
+export function buildCommerceSummaryPrompt(goal: string, taskSpec: SearchTaskSpec, items: ExtractedItem[]) {
   return [
     "You summarize shopping candidates for a browser agent.",
     "Return JSON only.",
@@ -41,5 +72,29 @@ export function buildFinalSummaryPrompt(goal: string, taskSpec: SearchTaskSpec, 
     `User goal: ${goal}`,
     `Task spec: ${JSON.stringify(taskSpec, null, 2)}`,
     `Items: ${JSON.stringify(items, null, 2)}`,
+  ].join("\n");
+}
+
+export function buildResearchSummaryPrompt(
+  goal: string,
+  taskSpec: PublicResearchTaskSpec,
+  sources: ResearchSourceResult[],
+  unresolvedIssues: string[],
+) {
+  return [
+    "You summarize public web research for a browser agent.",
+    "Return JSON only.",
+    'Schema: {"summary":"...","markdown":"..."}',
+    "Rules:",
+    "- Use only the structured source results provided.",
+    "- Preserve uncertainty when a source is partial or blocked.",
+    '- "markdown" must contain these sections in Chinese: 结论摘要, 来源要点, 来源链接, 未解决问题.',
+    '- In 来源要点, keep each source concise and factual.',
+    '- In 来源链接, list each source title and URL once.',
+    "- If unresolved issues are empty, say 暂无.",
+    `User goal: ${goal}`,
+    `Task spec: ${JSON.stringify(taskSpec, null, 2)}`,
+    `Sources: ${JSON.stringify(sources, null, 2)}`,
+    `Unresolved issues: ${JSON.stringify(unresolvedIssues, null, 2)}`,
   ].join("\n");
 }

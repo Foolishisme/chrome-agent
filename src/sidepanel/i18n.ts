@@ -14,9 +14,11 @@ type MessageBundle = {
   stop: string;
   statusTitle: string;
   runtime: string;
+  taskType: string;
   step: string;
   items: string;
   rawItems: string;
+  sources: string;
   session: string;
   timelineTitle: string;
   timelineWaiting: string;
@@ -28,13 +30,19 @@ type MessageBundle = {
   timelineSnapshot: string;
   resultOk: string;
   resultFail: string;
+  resultPartial: string;
   resultsTitle: string;
   product: string;
   price: string;
   shop: string;
   summary: string;
+  sourceSummary: string;
+  sourceLink: string;
+  sourcePoints: string;
+  sourceIssues: string;
   recommendation: string;
   noItems: string;
+  noSources: string;
   resultsHint: string;
   unknownShop: string;
   unknownSummary: string;
@@ -56,12 +64,16 @@ type MessageBundle = {
   queryBudget: string;
   queryTopK: string;
   querySearch: string;
+  querySearchEngine: string;
   filterTitle: string;
   filterBudget: string;
   filterFinal: string;
   recoveryTitle: string;
   recoveryEmpty: string;
+  issuesTitle: string;
+  issuesEmpty: string;
   emptyValue: string;
+  taskTypeLabels: Record<"commerce_search" | "public_research", string>;
   statusLabels: Record<RuntimeStatus, string>;
 };
 
@@ -69,17 +81,19 @@ const messages: Record<Locale, MessageBundle> = {
   "zh-CN": {
     appTitle: "浏览器 Agent MVP",
     heroTitle: "浏览器 Agent MVP",
-    heroDescription: "规则主线：解析目标、编译搜索词、提取结果、过滤候选，再由模型生成最终推荐。",
+    heroDescription: "规则主线：解析目标、编译查询、提取候选、过滤结果，再统一汇总最终输出。",
     sessionTitle: "任务会话",
-    goalPlaceholder: "输入购物目标",
+    goalPlaceholder: "输入购物或调研目标",
     start: "开始",
     retry: "重试",
     stop: "停止",
     statusTitle: "运行状态",
     runtime: "运行态",
+    taskType: "任务类型",
     step: "步骤",
     items: "结果数",
     rawItems: "原始候选",
+    sources: "来源数",
     session: "会话",
     timelineTitle: "执行时间线",
     timelineWaiting: "等待任务启动。",
@@ -91,14 +105,20 @@ const messages: Record<Locale, MessageBundle> = {
     timelineSnapshot: "快照摘要",
     resultOk: "成功",
     resultFail: "失败",
-    resultsTitle: "结果对比",
+    resultPartial: "部分成功",
+    resultsTitle: "最终结果",
     product: "商品",
     price: "价格",
     shop: "店铺",
     summary: "摘要",
+    sourceSummary: "来源摘要",
+    sourceLink: "来源链接",
+    sourcePoints: "来源要点",
+    sourceIssues: "未解决问题",
     recommendation: "推荐理由",
     noItems: "还没有提取到商品。",
-    resultsHint: "提取并过滤到足够商品后，这里会展示结构化结果和最终推荐。",
+    noSources: "还没有来源结果。",
+    resultsHint: "任务完成后，这里会展示最终 Markdown 和结构化结果。",
     unknownShop: "-",
     unknownSummary: "-",
     logsTitle: "调试日志",
@@ -119,12 +139,19 @@ const messages: Record<Locale, MessageBundle> = {
     queryBudget: "预算",
     queryTopK: "目标数量",
     querySearch: "搜索词",
+    querySearchEngine: "搜索引擎",
     filterTitle: "过滤诊断",
     filterBudget: "预算范围",
     filterFinal: "最终保留",
     recoveryTitle: "恢复状态",
     recoveryEmpty: "当前没有恢复分支。",
+    issuesTitle: "未解决问题",
+    issuesEmpty: "当前没有未解决问题。",
     emptyValue: "-",
+    taskTypeLabels: {
+      commerce_search: "商品搜索",
+      public_research: "公网调研",
+    },
     statusLabels: {
       idle: "空闲",
       scanning: "扫描中",
@@ -138,17 +165,19 @@ const messages: Record<Locale, MessageBundle> = {
   "en-US": {
     appTitle: "Browser Agent MVP",
     heroTitle: "Browser Agent MVP",
-    heroDescription: "Rule-first flow: compile query, extract results, filter candidates, then let the model write the final recommendation.",
+    heroDescription: "Rule-first flow: compile query, extract candidates, filter them, then aggregate the final output.",
     sessionTitle: "Session",
-    goalPlaceholder: "Describe the shopping goal",
+    goalPlaceholder: "Describe a shopping or research goal",
     start: "Start",
     retry: "Retry",
     stop: "Stop",
     statusTitle: "Status",
     runtime: "Runtime",
+    taskType: "Task Type",
     step: "Step",
     items: "Items",
     rawItems: "Raw Items",
+    sources: "Sources",
     session: "Session",
     timelineTitle: "Timeline",
     timelineWaiting: "Waiting for session start.",
@@ -160,14 +189,20 @@ const messages: Record<Locale, MessageBundle> = {
     timelineSnapshot: "Snapshot",
     resultOk: "OK",
     resultFail: "FAIL",
+    resultPartial: "PARTIAL",
     resultsTitle: "Results",
     product: "Product",
     price: "Price",
     shop: "Shop",
     summary: "Summary",
+    sourceSummary: "Source Summary",
+    sourceLink: "Source Link",
+    sourcePoints: "Source Points",
+    sourceIssues: "Issues",
     recommendation: "Recommendation",
     noItems: "No extracted items yet.",
-    resultsHint: "Filtered products and recommendation will appear here once enough candidates are available.",
+    noSources: "No source results yet.",
+    resultsHint: "Final markdown and structured results will appear here after aggregation.",
     unknownShop: "-",
     unknownSummary: "-",
     logsTitle: "Debug Logs",
@@ -188,12 +223,19 @@ const messages: Record<Locale, MessageBundle> = {
     queryBudget: "Budget",
     queryTopK: "Top K",
     querySearch: "Search Query",
+    querySearchEngine: "Search Engine",
     filterTitle: "Filter Diagnostics",
     filterBudget: "Budget Range",
     filterFinal: "Final Count",
     recoveryTitle: "Recovery",
     recoveryEmpty: "No active recovery branch.",
+    issuesTitle: "Unresolved Issues",
+    issuesEmpty: "No unresolved issues.",
     emptyValue: "-",
+    taskTypeLabels: {
+      commerce_search: "Commerce Search",
+      public_research: "Public Research",
+    },
     statusLabels: {
       idle: "Idle",
       scanning: "Scanning",

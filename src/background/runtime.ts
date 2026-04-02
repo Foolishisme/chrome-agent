@@ -1,4 +1,4 @@
-import { DEFAULT_PLAN, LIMITS } from "../shared/constants";
+import { DEFAULT_PLANS, LIMITS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
 import type { ExecuteActionResponse, RequestSnapshotMessage, SnapshotResponse, StartSessionResponse } from "../shared/protocol";
 import { toolResultSchema } from "../shared/schema";
@@ -10,13 +10,17 @@ import type {
   SessionPublicState,
   SnapshotData,
   StepRecord,
+  TaskType,
   ToolName,
   ToolResult,
 } from "../shared/types";
 import { summarizeSnapshot } from "./guards";
+import { classifyTaskType } from "./llm-client";
+import { detectTaskTypeWithLiteModel } from "./query-compiler";
 import { getNextToolName, getToolDefinition, type ToolExecutionResult } from "./tools";
 
 const JD_HOME_URL = "https://www.jd.com/";
+const GOOGLE_HOME_URL = "https://www.google.com/";
 const NAVIGATION_TIMEOUT_MS = 20_000;
 const MAX_LOG_ENTRIES = 80;
 const MAX_FAILURE_ENTRIES = 12;
@@ -55,6 +59,19 @@ function isJdUrl(url?: string | null) {
   }
 }
 
+function isScriptableUrl(url?: string | null) {
+  if (!url) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(url);
+    return ["http:", "https:"].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
 function formatDetail(detail: unknown): string | undefined {
   if (detail === undefined) {
     return undefined;
@@ -76,7 +93,10 @@ function toPublicState(memory: SessionMemory): SessionPublicState {
   return {
     sessionId: memory.runtimeMeta.sessionId,
     goal: memory.goal,
+    taskType: memory.taskType,
     taskSpec: memory.taskSpec,
+    taskPlan: memory.taskPlan,
+    subtaskResults: memory.subtaskResults,
     status: memory.runtimeMeta.status,
     currentPhase: memory.currentPhase,
     currentTool: memory.runtimeMeta.currentTool,
@@ -87,14 +107,18 @@ function toPublicState(memory: SessionMemory): SessionPublicState {
     lastActionResult: lastStep?.actionResult,
     items: memory.extractedItems,
     rawItemCount: memory.rawExtractedItems.length,
+    researchCandidates: memory.researchCandidates,
+    researchSources: memory.researchSources,
     filterDiagnostics: memory.filterDiagnostics,
     logs: memory.logs,
     timeline: memory.stepHistory.slice(-TIMELINE_LIMIT),
     pageSnapshot: memory.pageSnapshot,
     recoveryHint: memory.recoveryHint,
     error: memory.lastError,
+    unresolvedIssues: memory.unresolvedIssues,
     finalSummary: memory.finalSummary,
     finalOutput: memory.finalOutput,
+    finalResult: memory.finalResult,
     updatedAt: Date.now(),
   };
 }
@@ -126,21 +150,37 @@ async function waitForTabComplete(tabId: number, timeoutMs = NAVIGATION_TIMEOUT_
   });
 }
 
-async function getOrPrepareSessionTab(): Promise<{ tab: chrome.tabs.Tab; navigatedToHome: boolean; fromUrl?: string }> {
+async function getOrPrepareSessionTab(taskType: TaskType): Promise<{ tab: chrome.tabs.Tab; navigatedToHome: boolean; fromUrl?: string }> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
     throw new RuntimeError("No active tab is available.", "NO_ACTIVE_TAB");
   }
 
-  if (isJdUrl(tab.url)) {
+  if (taskType === "commerce_search") {
+    if (isJdUrl(tab.url)) {
+      const readyTab = await waitForTabComplete(tab.id);
+      return { tab: readyTab, navigatedToHome: false, fromUrl: tab.url ?? undefined };
+    }
+
+    const fromUrl = tab.url ?? undefined;
+    const updated = await chrome.tabs.update(tab.id, { url: JD_HOME_URL });
+    if (!updated?.id) {
+      throw new RuntimeError("Failed to navigate to the JD home page.", "TAB_UPDATE_FAILED");
+    }
+
+    const readyTab = await waitForTabComplete(updated.id);
+    return { tab: readyTab, navigatedToHome: true, fromUrl };
+  }
+
+  if (isScriptableUrl(tab.url)) {
     const readyTab = await waitForTabComplete(tab.id);
     return { tab: readyTab, navigatedToHome: false, fromUrl: tab.url ?? undefined };
   }
 
   const fromUrl = tab.url ?? undefined;
-  const updated = await chrome.tabs.update(tab.id, { url: JD_HOME_URL });
+  const updated = await chrome.tabs.update(tab.id, { url: GOOGLE_HOME_URL });
   if (!updated?.id) {
-    throw new RuntimeError("Failed to navigate to the JD home page.", "TAB_UPDATE_FAILED");
+    throw new RuntimeError("Failed to navigate to Google home.", "TAB_UPDATE_FAILED");
   }
 
   const readyTab = await waitForTabComplete(updated.id);
@@ -158,11 +198,74 @@ async function broadcastUpdate(payload: SessionPublicState, asError = false) {
   }
 }
 
-async function sendMessageToTab<TResponse>(
+export function isReceiverMissingError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /Receiving end does not exist/i.test(message) || /Could not establish connection/i.test(message);
+}
+
+async function sendMessageThroughBridge<TResponse>(
+  tabId: number,
+  message: RequestSnapshotMessage | { type: "EXECUTE_ACTION"; action: AgentAction },
+): Promise<TResponse | undefined> {
+  const [result] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: async (bridgeUrl, request) => {
+      await import(bridgeUrl);
+      const bridge = (globalThis as typeof globalThis & {
+        __browserAgentMvpDirectBridge?: {
+          scanCurrentPage: () => SnapshotData;
+          executeCurrentAction: (action: AgentAction) => Promise<ToolResult>;
+        };
+      }).__browserAgentMvpDirectBridge;
+
+      if (!bridge) {
+        return undefined;
+      }
+
+      if (request.type === "REQUEST_SNAPSHOT") {
+        return {
+          ok: true,
+          snapshot: bridge.scanCurrentPage(),
+        };
+      }
+
+      try {
+        const actionResult = await bridge.executeCurrentAction(request.action);
+        return {
+          ok: true,
+          result: actionResult,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : "Action execution failed.",
+        };
+      }
+    },
+    args: [chrome.runtime.getURL("content-bridge.js"), message],
+  });
+
+  return result?.result as TResponse | undefined;
+}
+
+export async function sendMessageToTab<TResponse>(
   tabId: number,
   message: RequestSnapshotMessage | { type: "EXECUTE_ACTION"; action: AgentAction },
 ): Promise<TResponse> {
-  return (await chrome.tabs.sendMessage(tabId, message)) as TResponse;
+  try {
+    return (await chrome.tabs.sendMessage(tabId, message)) as TResponse;
+  } catch (error) {
+    if (!isReceiverMissingError(error)) {
+      throw error;
+    }
+
+    const bridgedResponse = await sendMessageThroughBridge<TResponse>(tabId, message);
+    if (bridgedResponse) {
+      return bridgedResponse;
+    }
+
+    return (await chrome.tabs.sendMessage(tabId, message)) as TResponse;
+  }
 }
 
 function throwIfStopped(session: ActiveSession) {
@@ -222,20 +325,41 @@ export class BrowserAgentRuntime {
       this.stop();
     }
 
-    const { tab, navigatedToHome, fromUrl } = await getOrPrepareSessionTab();
+    const route = await detectTaskTypeWithLiteModel(goal, {
+      classifyWithLiteModel: async (routeGoal) => {
+        const classified = await classifyTaskType(routeGoal);
+        return {
+          taskType: classified.taskType,
+          reason: classified.reason,
+        };
+      },
+    });
+    const taskType = route.taskType;
+    const { tab, navigatedToHome, fromUrl } = await getOrPrepareSessionTab(taskType);
     const sessionId = createSessionId();
     const memory: SessionMemory = {
       goal,
+      taskType,
       currentPhase: "planning",
-      plan: [...DEFAULT_PLAN],
+      plan: [...DEFAULT_PLANS[taskType]],
+      subtaskResults: [],
       toolHistory: [],
       currentFacts: {},
       stepHistory: [],
       logs: [],
       rawExtractedItems: [],
       extractedItems: [],
+      researchCandidates: [],
+      researchSources: [],
+      unresolvedIssues: [],
+      activeSourceIndex: 0,
       failures: [],
-      liveStepSummary: navigatedToHome ? "Detected a non-JD page and opened jd.com automatically." : "Ready to start the session.",
+      liveStepSummary:
+        navigatedToHome && taskType === "commerce_search"
+          ? "Detected a non-JD page and opened jd.com automatically."
+          : navigatedToHome && taskType === "public_research"
+            ? "Detected a non-scriptable page and opened Google automatically."
+            : "Ready to start the session.",
       runtimeMeta: {
         sessionId,
         tabId: tab.id!,
@@ -261,14 +385,18 @@ export class BrowserAgentRuntime {
 
     appendLog(session, "runtime", "info", "Session started.", {
       goal,
+      taskType,
+      routeSource: route.source,
+      routeReason: route.reason,
       tabId: tab.id,
       currentUrl: tab.url,
     });
 
     if (navigatedToHome) {
-      appendLog(session, "runtime", "warn", "Automatically redirected the active tab to JD home.", {
+      appendLog(session, "runtime", "warn", "Automatically redirected the active tab before session start.", {
         fromUrl,
         toUrl: tab.url,
+        taskType,
       });
     }
 
@@ -336,7 +464,7 @@ export class BrowserAgentRuntime {
         throw new RuntimeError("Exceeded the maximum number of runtime steps.", "MAX_STEPS_REACHED");
       }
 
-      const toolName = getNextToolName(session.memory.currentPhase);
+      const toolName = getNextToolName(session.memory);
       const result = await this.runTool(session, toolName);
       if (result.stop || result.nextPhase === "done") {
         return;
@@ -351,6 +479,7 @@ export class BrowserAgentRuntime {
     appendLog(session, "runtime", "info", "Running high-level tool.", {
       toolName,
       phase,
+      taskType: session.memory.taskType,
     });
     session.lastPublicState = toPublicState(session.memory);
     await broadcastUpdate(session.lastPublicState);
@@ -380,6 +509,19 @@ export class BrowserAgentRuntime {
           timestamp: Date.now(),
         },
       ].slice(-MAX_TOOL_HISTORY_ENTRIES);
+      session.memory.subtaskResults = [
+        ...session.memory.subtaskResults,
+        {
+          subtaskId: `${phase}:${toolName}`,
+          status: "success",
+          data: {
+            phase,
+            toolName,
+            summary: result.summary,
+          },
+          diagnostics: [],
+        },
+      ];
       appendLog(session, "runtime", "info", "High-level tool completed.", {
         toolName,
         nextPhase: result.nextPhase,
@@ -401,6 +543,18 @@ export class BrowserAgentRuntime {
           timestamp: Date.now(),
         },
       ].slice(-MAX_TOOL_HISTORY_ENTRIES);
+      session.memory.subtaskResults = [
+        ...session.memory.subtaskResults,
+        {
+          subtaskId: `${phase}:${toolName}`,
+          status: "failed",
+          data: {
+            phase,
+            toolName,
+          },
+          diagnostics: [message],
+        },
+      ];
       session.memory.failures = [
         ...session.memory.failures,
         {

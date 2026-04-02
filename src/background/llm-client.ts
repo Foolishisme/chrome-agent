@@ -1,9 +1,15 @@
 import { z } from "zod";
 import { LIMITS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
-import { queryRefinementSchema, summaryResultSchema } from "../shared/schema";
-import type { ExtractedItem, SearchTaskSpec } from "../shared/types";
-import { buildFinalSummaryPrompt, buildSearchQueryRefinementPrompt } from "./prompting";
+import { queryRefinementSchema, summaryResultSchema, taskRouteSchema } from "../shared/schema";
+import type { ExtractedItem, PublicResearchTaskSpec, ResearchSourceResult, SearchTaskSpec, TaskType } from "../shared/types";
+import {
+  buildTaskRoutePrompt,
+  buildCommerceQueryRefinementPrompt,
+  buildCommerceSummaryPrompt,
+  buildResearchQueryRefinementPrompt,
+  buildResearchSummaryPrompt,
+} from "./prompting";
 
 type ProviderName = "gemini" | "deepseek";
 
@@ -346,9 +352,9 @@ async function requestProviderJson<T>(
   };
 }
 
-export async function refineSearchQuery(goal: string, options: RequestOptions = {}) {
+export async function refineCommerceSearchQuery(goal: string, options: RequestOptions = {}) {
   const response = await requestProviderJson(
-    buildSearchQueryRefinementPrompt(goal),
+    buildCommerceQueryRefinementPrompt(goal),
     queryRefinementSchema,
     "simple",
     options,
@@ -361,14 +367,70 @@ export async function refineSearchQuery(goal: string, options: RequestOptions = 
   };
 }
 
-export async function generateFinalSummary(
+export async function classifyTaskType(goal: string, options: RequestOptions = {}): Promise<{
+  taskType: TaskType;
+  reason: string;
+  model: string;
+  provider: ProviderName;
+}> {
+  const response = await requestProviderJson(
+    buildTaskRoutePrompt(goal),
+    taskRouteSchema,
+    "simple",
+    options,
+  );
+
+  return {
+    ...response.data,
+    model: response.model,
+    provider: response.provider,
+  };
+}
+
+export async function refineResearchQuery(goal: string, options: RequestOptions = {}) {
+  const response = await requestProviderJson(
+    buildResearchQueryRefinementPrompt(goal),
+    queryRefinementSchema,
+    "simple",
+    options,
+  );
+
+  return {
+    ...response.data,
+    model: response.model,
+    provider: response.provider,
+  };
+}
+
+export async function generateCommerceSummary(
   goal: string,
   taskSpec: SearchTaskSpec,
   items: ExtractedItem[],
   options: RequestOptions = {},
 ) {
   const response = await requestProviderJson(
-    buildFinalSummaryPrompt(goal, taskSpec, items),
+    buildCommerceSummaryPrompt(goal, taskSpec, items),
+    summaryResultSchema,
+    "default",
+    options,
+  );
+
+  return {
+    ...response.data,
+    model: response.model,
+    provider: response.provider,
+  };
+}
+
+export async function generateResearchSummary(
+  goal: string,
+  taskSpec: PublicResearchTaskSpec,
+  sources: ResearchSourceResult[],
+  unresolvedIssues: string[],
+  options: RequestOptions = {},
+) {
+  const response = await requestProviderJson(
+    buildResearchSummaryPrompt(goal, taskSpec, sources, unresolvedIssues),
     summaryResultSchema,
     "default",
     options,

@@ -34,14 +34,20 @@ function createSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
 function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
   return {
     goal: "MacBook 对比前3个",
+    taskType: "commerce_search",
     currentPhase: "filtering",
     plan: [],
+    subtaskResults: [],
     toolHistory: [],
     currentFacts: {},
     stepHistory: [],
     logs: [],
     rawExtractedItems: [],
     extractedItems: [],
+    researchCandidates: [],
+    researchSources: [],
+    unresolvedIssues: [],
+    activeSourceIndex: 0,
     failures: [],
     runtimeMeta: {
       sessionId: "session-1",
@@ -101,6 +107,7 @@ describe("runtime recovery path", () => {
     const tool = getToolDefinition("filterCandidates");
     const memory = createMemory({
       taskSpec: {
+        taskType: "commerce_search",
         originalGoal: "MacBook 对比前3个",
         topK: 3,
         llmInputLimit: 10,
@@ -153,7 +160,9 @@ describe("search page query matching", () => {
     const tool = getToolDefinition("searchInSite");
     const memory = createMemory({
       currentPhase: "searching",
+      taskType: "commerce_search",
       taskSpec: {
+        taskType: "commerce_search",
         originalGoal: "macbookair",
         topK: 5,
         llmInputLimit: 10,
@@ -201,7 +210,9 @@ describe("search page query matching", () => {
     const tool = getToolDefinition("searchInSite");
     const memory = createMemory({
       currentPhase: "searching",
+      taskType: "commerce_search",
       taskSpec: {
+        taskType: "commerce_search",
         originalGoal: "500耳机",
         topK: 5,
         llmInputLimit: 10,

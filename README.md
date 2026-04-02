@@ -1,193 +1,93 @@
 # Browser Agent MVP
 
-一个基于 Chrome Extension Manifest V3 的浏览器 Agent MVP。
+一个基于 Chrome Extension 的浏览器 Agent MVP。
 
-当前项目聚焦“京东单站点购物搜索”场景，目标不是做一个已经完全通用化的浏览器代理，而是先把一条可运行、可调试、可继续演进的 agent 主线跑通。
-
-项目当前设计主线为：
+当前主线是：
 
 `Agent = LLM + Tools + Memory + Runtime`
 
-## 项目目标
+项目目标不是让 LLM 直接决定细粒度 DOM 动作，而是让：
 
-- 接收用户自然语言购物意图
-- 用小模型生成更适合京东站内搜索的搜索词
-- 在京东页面执行搜索
-- 提取并过滤结构化商品候选
-- 由 LLM 生成最终 Markdown 推荐结果
+- `LLM` 负责任务理解、任务路由、搜索词生成、最终总结
+- `Tools` 负责导航、等待、提取、过滤、页面读取、失败恢复
+- `Memory` 负责保存高价值结构化上下文
+- `Runtime` 负责 phase 循环、状态推进、校验和容错
 
-## 当前范围
+## 当前能力
 
-当前实现优先支持：
+- `commerce_search`
+  - 用户目标 -> 小模型生成京东搜索词 -> 直达京东搜索结果页 -> 提取/过滤 -> 统一汇总
+- `public_research`
+  - 用户目标 -> 小模型判定为调研 -> 小模型生成 Google 查询词 -> 提取 Google 第一页自然结果 -> 过滤前 5 个候选 -> 串行读取来源页 -> 统一汇总
 
-- 京东首页与搜索结果页
-- Side Panel 启动 session
-- 高阶 tool 驱动的搜索、提取、过滤、总结流程
-- Gemini / DeepSeek 两种 LLM provider
+统一 phase：
 
-当前还不属于本项目已完成范围：
+- `planning -> searching -> extracting -> filtering -> aggregating -> done`
+- `public_research` 额外包含 `reading`
 
-- 多站点通用搜索
-- LLM 动态选择任意下一步 tool
-- 完整真机稳定性验收
+## 当前已落地的关键点
 
-## 核心架构
+- 单输入框，自动任务路由
+- `commerce_search | public_research` 双任务类型
+- 小模型优先任务路由，规则回退
+- 小模型生成搜索词
+- 统一 `aggregating` / final output 阶段
+- Google 首屏候选过滤：去广告、去重、去 Google 内部页、去 PDF
+- 来源页允许 `partial`，并显式输出 `unresolvedIssues`
+- side panel 保持统一外壳，调试/日志/时间线默认折叠
+- content script receiver 缺失时，runtime 会回退到 direct bridge，而不是直接失败
 
-### 1. LLM
+## 当前真实浏览器结论
 
-负责：
+扩展内部的 `"Could not establish connection. Receiving end does not exist."` 已修复。
 
-- 将用户意图改写为京东站内搜索词
-- 基于过滤后的结构化候选生成最终推荐结果
+当前真实浏览器里的主要阻断已经变成站点侧：
 
-不负责：
+- 京东搜索可能跳到登录页
+- Google 搜索可能返回 `sorry` 验证页
 
-- 细粒度 DOM 操作
-- 页面等待与重试
-- 商品结构化提取
-- 基础去重与基础过滤
+也就是说，当前主要瓶颈不再是扩展内部通信，而是目标站点的登录墙/风控。
 
-### 2. Tools
+## 开发命令
 
-当前主链的高阶 tools 位于 `src/background/tools.ts`，包括：
-
-- `compileTask`
-- `searchInSite`
-- `extractStructuredResults`
-- `filterCandidates`
-- `finishWithSummary`
-
-这些 tools 封装了搜索执行、提取、过滤、局部恢复等脏活。
-
-### 3. Memory
-
-Memory 保存高价值结构化上下文，例如：
-
-- 当前 phase
-- tool history
-- 当前事实
-- 已提取候选
-- 失败记录
-- 最终输出
-
-### 4. Runtime
-
-Runtime 负责：
-
-- session 生命周期
-- phase/tool 调度
-- 状态广播
-- 错误处理
-- 停止与恢复控制
-
-## 当前搜索链路
-
-当前搜索主链已经收敛为：
-
-1. 用户输入自然语言目标
-2. 小模型直接生成京东搜索词
-3. 将搜索词写入京东搜索框并提交
-4. 提取搜索结果页的结构化商品列表
-5. 代码侧完成去重、基础过滤与候选截断
-6. LLM 基于候选生成最终 Markdown 输出
-
-说明：
-
-- 搜索词不再依赖规则拼装 query
-- prompt 中加入了 one-shot 样本，用于把宽泛需求收敛成更适合站内搜索的短词
-- 提取数量、LLM 输入数量、最终展示数量已经解耦
-
-## 目录结构
-
-```text
-.
-├─ public/
-│  ├─ manifest.json
-│  ├─ sidepanel.html
-│  └─ sidepanel.css
-├─ src/
-│  ├─ background/    # runtime、tools、query planner、LLM client
-│  ├─ content/       # 页面扫描、动作执行、商品提取、overlay
-│  ├─ shared/        # 协议、schema、常量、类型
-│  └─ sidepanel/     # Side Panel UI
-├─ tests/            # 单元测试
-└─ doc/              # 设计、现状、验收文档
+```powershell
+npm.cmd install
+npm.cmd test
+npm.cmd run build
 ```
 
-## 环境变量
+产物目录：
 
-参考 [`.env.example`](/D:/code/browser-agent-mvp/.env.example)：
+- `dist/`
 
-```env
-VITE_LLM_PROVIDER=gemini
-VITE_GEMINI_API_KEY=
-VITE_GEMINI_MODEL=gemini-2.0-flash
-VITE_GEMINI_SIMPLE_MODEL=gemini-3.1-flash-lite-preview
-VITE_GEMINI_SIMPLE_MODEL_FALLBACK=gemini-2.5-flash-lite
-VITE_DEEPSEEK_API_KEY=
-VITE_DEEPSEEK_MODEL=deepseek-chat
-```
+Chrome 加载方式：
 
-说明：
+1. 打开 `chrome://extensions`
+2. 开启开发者模式
+3. 选择“加载已解压的扩展程序”
+4. 指向 `dist/`
 
-- `VITE_LLM_PROVIDER` 可选 `gemini` 或 `deepseek`
-- 如果未显式指定 provider，代码会按当前实现选择可用 provider
+## 目录
 
-## 开发与构建
+- `src/background/`
+  - runtime、tool 调度、LLM 调用、过滤逻辑
+- `src/content/`
+  - 页面扫描、页面动作、Google/通用页面提取、direct bridge
+- `src/sidepanel/`
+  - side panel UI
+- `src/shared/`
+  - 共享 schema、常量、类型
+- `tests/`
+  - query/filter/runtime/research 回归测试
+- `doc/`
+  - 设计、现状、验收、踩坑记录
 
-安装依赖：
+## 关键文档
 
-```bash
-npm install
-```
+- [设计真相](./doc/spec.md)
+- [代码现状](./doc/status.md)
+- [验收口径](./doc/acceptance.md)
+- [踩坑记录](./doc/pitfalls.md)
+- [线程启动上下文](./doc/thread_bootstrap.md)
 
-执行测试：
-
-```bash
-npm test
-```
-
-构建扩展：
-
-```bash
-npm run build
-```
-
-监听构建：
-
-```bash
-npm run dev
-```
-
-## 在 Chrome 中加载
-
-1. 运行 `npm run build`
-2. 打开 Chrome 扩展管理页
-3. 开启“开发者模式”
-4. 选择“加载已解压的扩展程序”
-5. 选择项目下的 `dist/` 目录
-
-## 文档入口
-
-设计与现状以 `doc/` 为准：
-
-- [设计规范](/D:/code/browser-agent-mvp/doc/spec.md)
-- [线程启动上下文](/D:/code/browser-agent-mvp/doc/thread_bootstrap.md)
-- [当前代码现状](/D:/code/browser-agent-mvp/doc/status.md)
-- [当前验收清单](/D:/code/browser-agent-mvp/doc/acceptance.md)
-
-## 当前限制与下一步
-
-当前主要限制：
-
-- 仍是京东单站点优先
-- 仍是 phase-driven tool loop
-- 还没有把站点逻辑正式抽为 site adapter
-- 真实页面上的稳定性仍需持续验收
-
-下一步更适合继续推进的方向：
-
-- 京东真机闭环验证
-- 基于真实日志微调页面选择器与提取策略
-- 把站点能力收敛为 site adapter
-- 再考虑升级为 LLM-driven tool selection
+Updated: 2026-04-02

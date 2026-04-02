@@ -1,5 +1,6 @@
 import type { AgentAction, ToolResult } from "../shared/types";
 import { extractStructuredProducts } from "./extractor";
+import { extractGoogleSearchResults, extractPageFacts } from "./research";
 import { resolveAgentElement } from "./scanner";
 import { highlightRect, showToast } from "./overlay";
 
@@ -69,8 +70,6 @@ async function performType(agentId: string, text: string, submit = false): Promi
   dispatchInputEvents(target);
 
   if (submit) {
-    // Prefer clicking the explicit submit button so JD autocomplete does not hijack Enter
-    // and replace the typed query with a highlighted suggestion.
     target.value = text;
     dispatchInputEvents(target);
     target.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape", code: "Escape" }));
@@ -169,6 +168,56 @@ async function performExtractList(limit?: number): Promise<ToolResult> {
   };
 }
 
+async function performExtractSearchResults(limit?: number): Promise<ToolResult> {
+  const { candidates, diagnostics } = extractGoogleSearchResults(document, limit ?? 10);
+  if (candidates.length === 0) {
+    showToast("未提取到 Google 搜索结果", true);
+    return {
+      success: false,
+      actionType: "EXTRACT_SEARCH_RESULTS",
+      message: "未提取到 Google 搜索结果",
+      errorCode: "NO_SEARCH_RESULTS",
+      researchCandidates: [],
+      observation: {
+        url: window.location.href,
+        title: document.title,
+        diagnostics,
+      },
+    };
+  }
+
+  showToast(`已提取 ${candidates.length} 个来源候选`);
+  return {
+    success: true,
+    actionType: "EXTRACT_SEARCH_RESULTS",
+    message: `已提取 ${candidates.length} 个来源候选`,
+    researchCandidates: candidates,
+    observation: {
+      url: window.location.href,
+      title: document.title,
+      diagnostics,
+    },
+  };
+}
+
+async function performExtractPageFacts(): Promise<ToolResult> {
+  const pageFacts = extractPageFacts();
+  showToast(pageFacts.status === "success" ? "已提取页面事实" : "页面仅得到部分事实", pageFacts.status !== "success");
+  return {
+    success: true,
+    actionType: "EXTRACT_PAGE_FACTS",
+    message: pageFacts.status === "success" ? "已提取页面事实" : `页面部分可读：${pageFacts.reason ?? "unknown"}`,
+    pageFactsResult: pageFacts,
+    observation: {
+      url: window.location.href,
+      title: document.title,
+      status: pageFacts.status,
+      textLength: pageFacts.textLength,
+      reason: pageFacts.reason,
+    },
+  };
+}
+
 export async function executeAction(action: AgentAction): Promise<ToolResult> {
   switch (action.type) {
     case "CLICK":
@@ -181,6 +230,10 @@ export async function executeAction(action: AgentAction): Promise<ToolResult> {
       return performScroll(action.direction, action.amount);
     case "EXTRACT_LIST":
       return performExtractList(action.limit);
+    case "EXTRACT_SEARCH_RESULTS":
+      return performExtractSearchResults(action.limit);
+    case "EXTRACT_PAGE_FACTS":
+      return performExtractPageFacts();
     case "DONE":
       return {
         success: true,

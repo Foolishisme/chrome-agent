@@ -14,7 +14,7 @@ export function ensureAgentExists(snapshot: SnapshotData | undefined, agentId: s
     return matched;
   }
 
-  if (FALLBACK_AGENT_IDS.has(agentId) && (snapshot.pageType === "home" || snapshot.pageType === "search")) {
+  if (FALLBACK_AGENT_IDS.has(agentId) && (snapshot.pageType === "home" || snapshot.pageType === "search" || snapshot.pageType === "google_search")) {
     return {
       agentId,
       role: agentId === "el_search_input" ? "input" : "button",
@@ -40,6 +40,10 @@ export function ensureActionAllowed(snapshot: SnapshotData | undefined, action: 
   if (action.type === "EXTRACT_LIST" && snapshot?.pageType !== "search") {
     throw new RuntimeError("只有搜索结果页允许提取商品列表。", "INVALID_PAGE_FOR_EXTRACT");
   }
+
+  if (action.type === "EXTRACT_SEARCH_RESULTS" && snapshot?.pageType !== "google_search") {
+    throw new RuntimeError("只有 Google 搜索结果页允许提取来源列表。", "INVALID_PAGE_FOR_SEARCH_RESULTS");
+  }
 }
 
 export function normalizeDecision(decision: LlmDecision): LlmDecision {
@@ -55,7 +59,7 @@ export function hasReachedCompletion(memory: SessionMemory, decision?: LlmDecisi
       ? decision.action.items
       : memory.extractedItems;
 
-  return items.length >= 3;
+  return items.length >= 3 || memory.researchSources.length >= 3;
 }
 
 export function ensureDoneAllowed(memory: SessionMemory, decision: LlmDecision) {
@@ -63,7 +67,7 @@ export function ensureDoneAllowed(memory: SessionMemory, decision: LlmDecision) 
     return;
   }
 
-  if (memory.runtimeMeta.pageType !== "search") {
+  if (!["search", "content", "google_search", "pdf"].includes(memory.runtimeMeta.pageType)) {
     throw new RuntimeError("当前页面阶段不允许结束任务。", "DONE_PAGE_BLOCKED");
   }
 
@@ -97,7 +101,15 @@ export function summarizeSnapshot(snapshot: SnapshotData): string {
   const resultList = snapshot.pageFacts.resultList;
   const ready = snapshot.pageReady.ready ? "ready" : "not-ready";
   const searchFacts = snapshot.pageFacts.searchBox.present ? "search-input" : "no-search-input";
-  const resultFacts = resultList ? `${resultList.cardCount} cards / ${resultList.productLinkCount} links` : "no-results";
+  const searchResults = snapshot.pageFacts.searchResults;
+  const contentFacts = snapshot.pageFacts.pageContent;
+  const resultFacts = resultList
+    ? `${resultList.cardCount} cards / ${resultList.productLinkCount} links`
+    : searchResults
+      ? `${searchResults.naturalCount} natural / ${searchResults.adCount} ads`
+      : contentFacts
+        ? `${contentFacts.textLength} chars`
+        : "no-results";
   return `${snapshot.pageType} | ${ready} | ${searchFacts} | ${resultFacts}`;
 }
 
@@ -140,6 +152,29 @@ export function compareExpectedOutcome(
 
     if (!afterSnapshot.pageReady.ready) {
       return { matched: false, reason: "页面尚未就绪，提取结果暂不可用。" };
+    }
+  }
+
+  if (action.type === "EXTRACT_SEARCH_RESULTS") {
+    const extractedCount = actionResult?.researchCandidates?.length ?? 0;
+    if (extractedCount > 0) {
+      return {
+        matched: true,
+        reason: extractedCount >= 5 ? "已提取到足够来源候选。" : `已提取到 ${extractedCount} 个来源候选。`,
+      };
+    }
+
+    if (!afterSnapshot.pageReady.ready) {
+      return { matched: false, reason: "页面尚未就绪，Google 结果暂不可用。" };
+    }
+  }
+
+  if (action.type === "EXTRACT_PAGE_FACTS") {
+    if (actionResult?.pageFactsResult) {
+      return {
+        matched: true,
+        reason: actionResult.pageFactsResult.status === "success" ? "已提取页面事实。" : "页面只提取到部分事实。",
+      };
     }
   }
 

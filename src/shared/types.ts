@@ -1,13 +1,16 @@
-export type PageType = "home" | "search" | "detail" | "unknown";
+export type PageType = "home" | "search" | "google_search" | "content" | "pdf" | "unknown";
 
-export type AgentPhase = "planning" | "searching" | "extracting" | "filtering" | "summarizing" | "done";
+export type TaskType = "commerce_search" | "public_research";
+
+export type AgentPhase = "planning" | "searching" | "extracting" | "filtering" | "reading" | "aggregating" | "done";
 
 export type ToolName =
   | "compileTask"
   | "searchInSite"
   | "extractStructuredResults"
   | "filterCandidates"
-  | "finishWithSummary";
+  | "readPageFacts"
+  | "aggregateTaskResults";
 
 export type RuntimeStatus =
   | "idle"
@@ -43,6 +46,16 @@ export interface ExtractedItem {
   summary?: string;
 }
 
+export interface ResearchCandidate {
+  title: string;
+  url: string;
+  snippet?: string;
+  source?: string;
+  displayUrl?: string;
+  rank: number;
+  isAd?: boolean;
+}
+
 export interface PageReadyState {
   ready: boolean;
   reason: string;
@@ -63,10 +76,31 @@ export interface ResultListState {
   emptyState: boolean;
 }
 
+export interface SearchResultsState {
+  present: boolean;
+  loaded: boolean;
+  resultCount: number;
+  naturalCount: number;
+  adCount: number;
+}
+
+export interface PageContentState {
+  readable: boolean;
+  textLength: number;
+  paragraphCount: number;
+  hasPasswordInput: boolean;
+  hasBlockingOverlay: boolean;
+  likelyLoginWall: boolean;
+  likelySpa: boolean;
+  reason?: string;
+}
+
 export interface PageFacts {
   searchBox: SearchControlState;
   searchSubmit: SearchControlState;
   resultList?: ResultListState;
+  searchResults?: SearchResultsState;
+  pageContent?: PageContentState;
 }
 
 export interface ExtractionDiagnostics {
@@ -81,7 +115,8 @@ export interface ExtractionDiagnostics {
   missingUrlCount: number;
 }
 
-export interface FilterDiagnostics {
+export interface CommerceFilterDiagnostics {
+  kind: "commerce";
   inputCount: number;
   dedupedCount: number;
   budgetMatchedCount: number;
@@ -91,7 +126,22 @@ export interface FilterDiagnostics {
   budgetRangeText?: string;
 }
 
-export interface SearchTaskSpec {
+export interface ResearchFilterDiagnostics {
+  kind: "research";
+  inputCount: number;
+  dedupedCount: number;
+  finalCount: number;
+  skippedAdCount: number;
+  skippedInternalCount: number;
+  skippedDuplicateCount: number;
+  skippedPdfCount: number;
+  skippedInvalidCount: number;
+}
+
+export type FilterDiagnostics = CommerceFilterDiagnostics | ResearchFilterDiagnostics;
+
+export interface CommerceTaskSpec {
+  taskType: "commerce_search";
   originalGoal: string;
   category?: string;
   budget?: number;
@@ -105,6 +155,21 @@ export interface SearchTaskSpec {
   notes: string[];
 }
 
+export type SearchTaskSpec = CommerceTaskSpec;
+
+export interface PublicResearchTaskSpec {
+  taskType: "public_research";
+  originalGoal: string;
+  searchQuery: string;
+  querySource: "llm-lite";
+  notes: string[];
+  searchEngine: "google";
+  candidateLimit: number;
+  sourceTargetCount: number;
+}
+
+export type TaskSpec = CommerceTaskSpec | PublicResearchTaskSpec;
+
 export interface SnapshotData {
   url: string;
   title: string;
@@ -116,12 +181,64 @@ export interface SnapshotData {
   timestamp: number;
 }
 
+export interface SubtaskSpec {
+  id: string;
+  type: string;
+  goal: string;
+  allowedTools: string[];
+  successCriteria: string[];
+}
+
+export interface TaskPlan {
+  taskType: TaskType;
+  steps: string[];
+  subtasks: SubtaskSpec[];
+}
+
+export interface SubtaskResult {
+  subtaskId: string;
+  status: "success" | "partial" | "failed";
+  data: Record<string, unknown>;
+  diagnostics: string[];
+  sources?: string[];
+  unresolvedIssues?: string[];
+}
+
+export interface FinalResult {
+  overallStatus: "success" | "partial" | "failed";
+  summaryMarkdown: string;
+  usedSubtasks: string[];
+  unresolvedIssues: string[];
+}
+
+export interface PageFactExtraction {
+  status: "success" | "partial";
+  pageTitle: string;
+  summary: string;
+  keyPoints: string[];
+  textLength: number;
+  reason?: string;
+}
+
+export interface ResearchSourceResult {
+  candidate: ResearchCandidate;
+  status: "success" | "partial" | "failed";
+  pageTitle: string;
+  summary: string;
+  keyPoints: string[];
+  sourceUrl: string;
+  unresolvedIssues: string[];
+  textLength: number;
+}
+
 export type AgentAction =
   | { type: "CLICK"; agentId: string }
   | { type: "TYPE"; agentId: string; text: string; submit?: boolean }
   | { type: "NAVIGATE"; url: string }
   | { type: "SCROLL"; direction: "up" | "down"; amount?: number }
   | { type: "EXTRACT_LIST"; limit?: number }
+  | { type: "EXTRACT_SEARCH_RESULTS"; limit?: number }
+  | { type: "EXTRACT_PAGE_FACTS" }
   | { type: "DONE"; summary: string; items?: ExtractedItem[] };
 
 export interface ToolResult {
@@ -130,6 +247,8 @@ export interface ToolResult {
   message: string;
   observation?: Record<string, unknown>;
   items?: ExtractedItem[];
+  researchCandidates?: ResearchCandidate[];
+  pageFactsResult?: PageFactExtraction;
   navigated?: boolean;
   highlightedAgentId?: string;
   errorCode?: string;
@@ -174,9 +293,12 @@ export interface FailureRecord {
 
 export interface SessionMemory {
   goal: string;
+  taskType: TaskType;
   currentPhase: AgentPhase;
   plan: string[];
-  taskSpec?: SearchTaskSpec;
+  taskPlan?: TaskPlan;
+  taskSpec?: TaskSpec;
+  subtaskResults: SubtaskResult[];
   toolHistory: ToolCallRecord[];
   currentFacts: Record<string, unknown>;
   stepHistory: StepRecord[];
@@ -184,14 +306,19 @@ export interface SessionMemory {
   pageSnapshot?: SnapshotData;
   rawExtractedItems: ExtractedItem[];
   extractedItems: ExtractedItem[];
+  researchCandidates: ResearchCandidate[];
+  researchSources: ResearchSourceResult[];
   filterDiagnostics?: FilterDiagnostics;
   liveStepSummary?: string;
   nextIntent?: string;
   recoveryHint?: string;
   lastError?: string;
   failures: FailureRecord[];
+  unresolvedIssues: string[];
+  activeSourceIndex: number;
   finalSummary?: string;
   finalOutput?: string;
+  finalResult?: FinalResult;
   runtimeMeta: {
     sessionId: string;
     tabId: number;
@@ -224,7 +351,10 @@ export interface PlanningResult {
 export interface SessionPublicState {
   sessionId?: string;
   goal?: string;
-  taskSpec?: SearchTaskSpec;
+  taskType?: TaskType;
+  taskSpec?: TaskSpec;
+  taskPlan?: TaskPlan;
+  subtaskResults?: SubtaskResult[];
   status: RuntimeStatus;
   currentPhase?: AgentPhase;
   currentTool?: ToolName;
@@ -235,13 +365,17 @@ export interface SessionPublicState {
   lastActionResult?: ToolResult;
   items: ExtractedItem[];
   rawItemCount?: number;
+  researchCandidates?: ResearchCandidate[];
+  researchSources?: ResearchSourceResult[];
   filterDiagnostics?: FilterDiagnostics;
   logs: DebugLogEntry[];
   timeline: StepRecord[];
   pageSnapshot?: SnapshotData;
   recoveryHint?: string;
   error?: string;
+  unresolvedIssues?: string[];
   finalSummary?: string;
   finalOutput?: string;
+  finalResult?: FinalResult;
   updatedAt: number;
 }

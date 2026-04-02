@@ -2,9 +2,9 @@
   "manifest_version": 3,
   "name": "浏览器 Agent MVP",
   "version": "0.1.0",
-  "description": "京东购物浏览器 Agent MVP，包含 Side Panel、规则化运行时编排与 Gemini 结果总结。",
-  "permissions": ["sidePanel", "tabs", "activeTab"],
-  "host_permissions": ["https://www.jd.com/*", "https://search.jd.com/*"],
+  "description": "浏览器 Agent MVP，包含商品搜索、公网调研、Side Panel 与规则化运行时编排。",
+  "permissions": ["sidePanel", "tabs", "activeTab", "scripting"],
+  "host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -17,9 +17,15 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.jd.com/*", "https://search.jd.com/*"],
+      "matches": ["http://*/*", "https://*/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["content-bridge.js", "chunks/*"],
+      "matches": ["http://*/*", "https://*/*"]
     }
   ]
 }

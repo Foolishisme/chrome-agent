@@ -1,5 +1,12 @@
 import { DEFAULT_GOAL } from "../shared/constants";
-import type { DebugLogEntry, SessionPublicState, SnapshotData, StepRecord } from "../shared/types";
+import type {
+  DebugLogEntry,
+  ResearchSourceResult,
+  SessionPublicState,
+  SnapshotData,
+  StepRecord,
+  TaskSpec,
+} from "../shared/types";
 import { getMessages } from "./i18n";
 
 const app = document.getElementById("app")!;
@@ -163,6 +170,17 @@ function renderMarkdownBlock(markdown: string | undefined) {
   return `<div class="markdown-output">${parts.join("")}</div>`;
 }
 
+function renderSection(title: string, content: string, open = false) {
+  return `
+    <section class="section">
+      <details class="section-details"${open ? " open" : ""}>
+        <summary class="section-summary"><h2>${escapeHtml(title)}</h2></summary>
+        <div class="section-body">${content}</div>
+      </details>
+    </section>
+  `;
+}
+
 function renderLogItem(log: DebugLogEntry) {
   const detail = log.detail
     ? `<details class="log-detail"><summary>${escapeHtml(messages.logDetail)}</summary><pre>${escapeHtml(log.detail)}</pre></details>`
@@ -203,6 +221,8 @@ function renderSnapshot(snapshot: SnapshotData | undefined) {
   }
 
   const resultList = snapshot.pageFacts.resultList;
+  const searchResults = snapshot.pageFacts.searchResults;
+  const pageContent = snapshot.pageFacts.pageContent;
   const checks = snapshot.pageReady.checks.length
     ? snapshot.pageReady.checks.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
     : `<li>${escapeHtml(messages.emptyValue)}</li>`;
@@ -235,11 +255,27 @@ function renderSnapshot(snapshot: SnapshotData | undefined) {
       </div>
       <div class="debug-card">
         <span class="status-label">${escapeHtml(messages.resultList)}</span>
-        <div class="debug-value">${escapeHtml(resultList ? `${resultList.cardCount} cards / ${resultList.productLinkCount} links` : messages.emptyValue)}</div>
-        <div class="muted">loaded=${escapeHtml(formatValue(resultList?.loaded))} empty=${escapeHtml(formatValue(resultList?.emptyState))}</div>
+        <div class="debug-value">${escapeHtml(
+          resultList
+            ? `${resultList.cardCount} cards / ${resultList.productLinkCount} links`
+            : searchResults
+              ? `${searchResults.naturalCount} natural / ${searchResults.adCount} ads`
+              : pageContent
+                ? `${pageContent.textLength} chars`
+                : messages.emptyValue,
+        )}</div>
+        <div class="muted">${
+          resultList
+            ? `loaded=${escapeHtml(formatValue(resultList.loaded))} empty=${escapeHtml(formatValue(resultList.emptyState))}`
+            : searchResults
+              ? `loaded=${escapeHtml(formatValue(searchResults.loaded))} total=${escapeHtml(formatValue(searchResults.resultCount))}`
+              : pageContent
+                ? `readable=${escapeHtml(formatValue(pageContent.readable))} paragraphs=${escapeHtml(formatValue(pageContent.paragraphCount))}`
+                : escapeHtml(messages.emptyValue)
+        }</div>
       </div>
     </div>
-    <details class="debug-detail" open>
+    <details class="debug-detail">
       <summary>${escapeHtml(messages.pageChecks)}</summary>
       <ul class="debug-list">${checks}</ul>
     </details>
@@ -252,12 +288,45 @@ function renderTaskSpec() {
     return `<div class="muted">${escapeHtml(messages.timelineWaiting)}</div>`;
   }
 
+  const notesText = taskSpec.notes.length > 0 ? taskSpec.notes.join(" / ") : messages.emptyValue;
+
+  if (taskSpec.taskType === "public_research") {
+    return `
+      <div class="debug-grid">
+        <div class="debug-card">
+          <span class="status-label">${escapeHtml(messages.taskType)}</span>
+          <div class="debug-value">${escapeHtml(messages.taskTypeLabels[taskSpec.taskType])}</div>
+        </div>
+        <div class="debug-card">
+          <span class="status-label">${escapeHtml(messages.querySearchEngine)}</span>
+          <div class="debug-value">${escapeHtml(taskSpec.searchEngine)}</div>
+        </div>
+        <div class="debug-card">
+          <span class="status-label">${escapeHtml(messages.queryTopK)}</span>
+          <div class="debug-value">${escapeHtml(String(taskSpec.sourceTargetCount))}</div>
+        </div>
+        <div class="debug-card">
+          <span class="status-label">${escapeHtml(messages.querySource)}</span>
+          <div class="debug-value">${escapeHtml(taskSpec.querySource)}</div>
+        </div>
+        <div class="debug-card" style="grid-column: 1 / -1;">
+          <span class="status-label">${escapeHtml(messages.querySearch)}</span>
+          <div class="debug-value">${escapeHtml(taskSpec.searchQuery)}</div>
+          <div class="muted">${escapeHtml(notesText)}</div>
+        </div>
+      </div>
+    `;
+  }
+
   const categoryText = formatValue(taskSpec.category);
   const budgetText = taskSpec.budget ? `${taskSpec.budget} 元` : messages.emptyValue;
-  const notesText = taskSpec.notes.length > 0 ? taskSpec.notes.join(" / ") : messages.emptyValue;
 
   return `
     <div class="debug-grid">
+      <div class="debug-card">
+        <span class="status-label">${escapeHtml(messages.taskType)}</span>
+        <div class="debug-value">${escapeHtml(messages.taskTypeLabels[taskSpec.taskType])}</div>
+      </div>
       <div class="debug-card">
         <span class="status-label">${escapeHtml(messages.queryCategory)}</span>
         <div class="debug-value">${escapeHtml(categoryText)}</div>
@@ -289,6 +358,29 @@ function renderFilterDiagnostics() {
     return `<div class="muted">${escapeHtml(messages.timelineWaiting)}</div>`;
   }
 
+  if (diagnostics.kind === "research") {
+    return `
+      <div class="debug-grid">
+        <div class="debug-card">
+          <span class="status-label">${escapeHtml(messages.rawItems)}</span>
+          <div class="debug-value">${escapeHtml(String(diagnostics.inputCount))}</div>
+        </div>
+        <div class="debug-card">
+          <span class="status-label">${escapeHtml(messages.filterFinal)}</span>
+          <div class="debug-value">${escapeHtml(String(diagnostics.finalCount))}</div>
+        </div>
+        <div class="debug-card">
+          <span class="status-label">Skipped Ads</span>
+          <div class="debug-value">${escapeHtml(String(diagnostics.skippedAdCount))}</div>
+        </div>
+        <div class="debug-card">
+          <span class="status-label">Skipped Internal/PDF</span>
+          <div class="debug-value">${escapeHtml(String(diagnostics.skippedInternalCount + diagnostics.skippedPdfCount))}</div>
+        </div>
+      </div>
+    `;
+  }
+
   return `
     <div class="debug-grid">
       <div class="debug-card">
@@ -312,14 +404,72 @@ function renderFilterDiagnostics() {
   `;
 }
 
-function render() {
+function renderOverallStatus() {
+  const status = currentState.finalResult?.overallStatus;
+  if (!status) {
+    return "";
+  }
+
+  const label =
+    status === "success" ? messages.resultOk : status === "partial" ? messages.resultPartial : messages.resultFail;
+  return `<p class="muted"><strong>${escapeHtml(messages.summary)}：</strong>${escapeHtml(label)}</p>`;
+}
+
+function renderResearchSources(sources: ResearchSourceResult[] | undefined) {
+  if (!sources || sources.length === 0) {
+    return `<div class="muted">${escapeHtml(messages.noSources)}</div>`;
+  }
+
+  return sources
+    .map((source, index) => {
+      const statusLabel =
+        source.status === "success" ? messages.resultOk : source.status === "partial" ? messages.resultPartial : messages.resultFail;
+      const points =
+        source.keyPoints.length > 0
+          ? `<ul class="debug-list">${source.keyPoints.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul>`
+          : `<div class="muted">${escapeHtml(messages.emptyValue)}</div>`;
+      const issues =
+        source.unresolvedIssues.length > 0
+          ? `<ul class="debug-list">${source.unresolvedIssues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>`
+          : `<div class="muted">${escapeHtml(messages.issuesEmpty)}</div>`;
+
+      return `
+        <details class="source-card">
+          <summary class="source-summary">
+            <span>${index + 1}. ${escapeHtml(source.pageTitle || source.candidate.title)}</span>
+            <span class="pill">${escapeHtml(statusLabel)}</span>
+          </summary>
+          <div class="source-body">
+            <div><strong>${escapeHtml(messages.sourceSummary)}：</strong>${escapeHtml(source.summary || messages.emptyValue)}</div>
+            <div><strong>${escapeHtml(messages.sourceLink)}：</strong><a class="result-link" href="${escapeHtml(source.sourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(source.sourceUrl)}</a></div>
+            <div><strong>${escapeHtml(messages.sourcePoints)}：</strong>${points}</div>
+            <div><strong>${escapeHtml(messages.sourceIssues)}：</strong>${issues}</div>
+          </div>
+        </details>
+      `;
+    })
+    .join("");
+}
+
+function renderResultsSection() {
+  const taskSpec = currentState.taskSpec;
+  const isResearch = taskSpec?.taskType === "public_research" || (currentState.researchSources?.length ?? 0) > 0;
+
+  if (isResearch) {
+    return `
+      ${renderMarkdownBlock(currentState.finalOutput)}
+      ${renderOverallStatus()}
+      <div class="timeline">${renderResearchSources(currentState.researchSources)}</div>
+    `;
+  }
+
   const itemsRows =
     currentState.items.length > 0
       ? currentState.items
           .map(
             (item) => `
               <tr>
-                <td><a class="result-link" href="${escapeHtml(item.url)}" target="_blank">${escapeHtml(item.title)}</a></td>
+                <td><a class="result-link" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.title)}</a></td>
                 <td>${escapeHtml(item.priceText)}</td>
                 <td>${escapeHtml(item.shopText ?? messages.unknownShop)}</td>
                 <td>${escapeHtml(item.summary ?? (item.tags?.join(" / ") ?? messages.unknownSummary))}</td>
@@ -329,6 +479,29 @@ function render() {
           .join("")
       : `<tr><td colspan="4" class="muted">${escapeHtml(messages.noItems)}</td></tr>`;
 
+  return `
+    ${renderMarkdownBlock(currentState.finalOutput)}
+    ${renderOverallStatus()}
+    <table class="result-table">
+      <thead>
+        <tr>
+          <th>${escapeHtml(messages.product)}</th>
+          <th>${escapeHtml(messages.price)}</th>
+          <th>${escapeHtml(messages.shop)}</th>
+          <th>${escapeHtml(messages.summary)}</th>
+        </tr>
+      </thead>
+      <tbody>${itemsRows}</tbody>
+    </table>
+    ${
+      currentState.finalSummary
+        ? `<p class="muted"><strong>${escapeHtml(messages.recommendation)}：</strong>${escapeHtml(currentState.finalSummary)}</p>`
+        : `<p class="muted">${escapeHtml(messages.resultsHint)}</p>`
+    }
+  `;
+}
+
+function render() {
   const timeline = [
     ...(currentState.plan.length
       ? [
@@ -349,6 +522,11 @@ function render() {
           .map((log) => renderLogItem(log))
           .join("")
       : `<div class="muted">${escapeHtml(messages.logsEmpty)}</div>`;
+
+  const issuesMarkup =
+    currentState.unresolvedIssues && currentState.unresolvedIssues.length > 0
+      ? `<ul class="debug-list">${currentState.unresolvedIssues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>`
+      : `<div class="muted">${escapeHtml(messages.issuesEmpty)}</div>`;
 
   app.innerHTML = `
     <div class="panel-shell">
@@ -377,6 +555,10 @@ function render() {
             <span class="status-value"><span class="pill">${escapeHtml(messages.statusLabels[currentState.status])}</span></span>
           </div>
           <div class="status-card">
+            <span class="status-label">${escapeHtml(messages.taskType)}</span>
+            <span class="status-value">${escapeHtml(currentState.taskType ? messages.taskTypeLabels[currentState.taskType] : "-")}</span>
+          </div>
+          <div class="status-card">
             <span class="status-label">${escapeHtml(messages.step)}</span>
             <span class="status-value">${currentState.currentStep}</span>
           </div>
@@ -387,6 +569,10 @@ function render() {
           <div class="status-card">
             <span class="status-label">${escapeHtml(messages.rawItems)}</span>
             <span class="status-value">${currentState.rawItemCount ?? 0}</span>
+          </div>
+          <div class="status-card">
+            <span class="status-label">${escapeHtml(messages.sources)}</span>
+            <span class="status-value">${currentState.researchSources?.length ?? 0}</span>
           </div>
           <div class="status-card">
             <span class="status-label">${escapeHtml(messages.session)}</span>
@@ -403,55 +589,20 @@ function render() {
         </div>
       </section>
 
-      <section class="section">
-        <h2>${escapeHtml(messages.timelineTitle)}</h2>
-        <div class="timeline">${timeline || `<div class="muted">${escapeHtml(messages.timelineWaiting)}</div>`}</div>
-      </section>
-
-      <section class="section">
-        <h2>${escapeHtml(messages.queryTitle)}</h2>
-        ${renderTaskSpec()}
-      </section>
-
-      <section class="section">
-        <h2>${escapeHtml(messages.filterTitle)}</h2>
-        ${renderFilterDiagnostics()}
-      </section>
-
-      <section class="section">
-        <h2>${escapeHtml(messages.debugTitle)}</h2>
-        ${renderSnapshot(currentState.pageSnapshot)}
-      </section>
-
-      <section class="section">
-        <h2>${escapeHtml(messages.recoveryTitle)}</h2>
-        <div class="timeline">${currentState.recoveryHint ? escapeHtml(currentState.recoveryHint) : `<div class="muted">${escapeHtml(messages.recoveryEmpty)}</div>`}</div>
-      </section>
-
-      <section class="section">
-        <h2>${escapeHtml(messages.logsTitle)}</h2>
-        <div class="logs">${logsMarkup}</div>
-      </section>
+      ${renderSection(messages.timelineTitle, `<div class="timeline">${timeline || `<div class="muted">${escapeHtml(messages.timelineWaiting)}</div>`}</div>`)}
+      ${renderSection(messages.queryTitle, renderTaskSpec())}
+      ${renderSection(messages.filterTitle, renderFilterDiagnostics())}
+      ${renderSection(messages.debugTitle, renderSnapshot(currentState.pageSnapshot))}
+      ${renderSection(
+        messages.recoveryTitle,
+        `<div class="timeline">${currentState.recoveryHint ? escapeHtml(currentState.recoveryHint) : `<div class="muted">${escapeHtml(messages.recoveryEmpty)}</div>`}</div>`,
+      )}
+      ${renderSection(messages.logsTitle, `<div class="logs">${logsMarkup}</div>`)}
+      ${renderSection(messages.issuesTitle, issuesMarkup)}
 
       <section class="section">
         <h2>${escapeHtml(messages.resultsTitle)}</h2>
-        ${renderMarkdownBlock(currentState.finalOutput)}
-        <table class="result-table">
-          <thead>
-            <tr>
-              <th>${escapeHtml(messages.product)}</th>
-              <th>${escapeHtml(messages.price)}</th>
-              <th>${escapeHtml(messages.shop)}</th>
-              <th>${escapeHtml(messages.summary)}</th>
-            </tr>
-          </thead>
-          <tbody>${itemsRows}</tbody>
-        </table>
-        ${
-          currentState.finalSummary
-            ? `<p class="muted"><strong>${escapeHtml(messages.recommendation)}：</strong>${escapeHtml(currentState.finalSummary)}</p>`
-            : `<p class="muted">${escapeHtml(messages.resultsHint)}</p>`
-        }
+        ${renderResultsSection()}
       </section>
 
       ${

@@ -63,6 +63,27 @@ body {
   color: #7a4a1b;
 }
 
+.section-details {
+  width: 100%;
+}
+
+.section-summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.section-summary::-webkit-details-marker {
+  display: none;
+}
+
+.section-summary h2 {
+  margin: 0;
+}
+
+.section-body {
+  margin-top: 12px;
+}
+
 .controls {
   display: flex;
   flex-direction: column;
@@ -273,6 +294,32 @@ body {
 }
 
 .log-detail {
+  margin-top: 8px;
+}
+
+.source-card {
+  border-radius: 12px;
+  background: #f8f6f1;
+  border: 1px solid rgba(120, 93, 66, 0.12);
+}
+
+.source-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #2d241d;
+}
+
+.source-body {
+  padding: 0 10px 10px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.source-body div + div {
   margin-top: 8px;
 }
 

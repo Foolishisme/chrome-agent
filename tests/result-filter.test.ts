@@ -3,6 +3,7 @@ import { filterExtractedItems } from "../src/background/result-filter";
 import type { SearchTaskSpec } from "../src/shared/types";
 
 const taskSpec: SearchTaskSpec = {
+  taskType: "commerce_search",
   originalGoal: "帮我找 5000 元左右的笔记本电脑",
   category: "笔记本电脑",
   budget: 5000,

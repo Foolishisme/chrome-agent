@@ -10,6 +10,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         background: resolve(__dirname, "src/background/index.ts"),
+        "content-bridge": resolve(__dirname, "src/content/bridge.ts"),
         content: resolve(__dirname, "src/content/index.ts"),
         sidepanel: resolve(__dirname, "src/sidepanel/index.ts"),
       },

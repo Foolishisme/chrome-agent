@@ -1,14 +1,27 @@
 import { JD_SELECTORS } from "../shared/selectors";
 import type { InteractiveElement, PageFacts, PageReadyState, PageType, SnapshotData } from "../shared/types";
 import { collectResultListState } from "./extractor";
+import { collectGoogleSearchResultsState, collectPageContentState } from "./research";
 
 function getPageType(url: URL): PageType {
+  if (/\.pdf(?:$|[?#])/i.test(url.href)) {
+    return "pdf";
+  }
+
   if (url.hostname === "www.jd.com") {
     return "home";
   }
 
   if (url.hostname === "search.jd.com") {
     return "search";
+  }
+
+  if (url.hostname.endsWith("google.com") && url.pathname === "/search") {
+    return "google_search";
+  }
+
+  if (["http:", "https:"].includes(url.protocol)) {
+    return "content";
   }
 
   return "unknown";
@@ -69,6 +82,7 @@ function findFallbackSearchInput() {
         (placeholder.includes("搜索") ||
           placeholder.toLowerCase().includes("search") ||
           ariaLabel.includes("搜索") ||
+          ariaLabel.toLowerCase().includes("search") ||
           name.includes("keyword") ||
           id.includes("key") ||
           className.includes("jd_pc_search_bar_react_search_input"))
@@ -89,6 +103,7 @@ function findFallbackSearchButton() {
         (text.includes("搜索") ||
           text.toLowerCase().includes("search") ||
           ariaLabel.includes("搜索") ||
+          ariaLabel.toLowerCase().includes("search") ||
           className.includes("jd_pc_search_bar_react_search_btn"))
       );
     }) ?? null
@@ -96,12 +111,28 @@ function findFallbackSearchButton() {
 }
 
 function findSearchElements(pageType: PageType) {
-  const inputSelectors = pageType === "search" ? JD_SELECTORS.searchInput : JD_SELECTORS.homeSearchInput;
-  const buttonSelectors = pageType === "search" ? JD_SELECTORS.searchButton : JD_SELECTORS.homeSearchButton;
+  if (pageType === "search" || pageType === "home") {
+    const inputSelectors = pageType === "search" ? JD_SELECTORS.searchInput : JD_SELECTORS.homeSearchInput;
+    const buttonSelectors = pageType === "search" ? JD_SELECTORS.searchButton : JD_SELECTORS.homeSearchButton;
+
+    return {
+      input: pickFirst(inputSelectors) ?? findFallbackSearchInput(),
+      button: pickFirst(buttonSelectors) ?? findFallbackSearchButton(),
+    };
+  }
+
+  if (pageType === "google_search") {
+    return {
+      input: document.querySelector<HTMLElement>("textarea[name='q'], input[name='q']") ?? findFallbackSearchInput(),
+      button:
+        document.querySelector<HTMLElement>("button[aria-label*='Google Search'], button[aria-label*='搜索']") ??
+        findFallbackSearchButton(),
+    };
+  }
 
   return {
-    input: pickFirst(inputSelectors) ?? findFallbackSearchInput(),
-    button: pickFirst(buttonSelectors) ?? findFallbackSearchButton(),
+    input: null,
+    button: null,
   };
 }
 
@@ -123,12 +154,14 @@ function buildInteractiveElements(pageType: PageType) {
 function buildPageFacts(pageType: PageType): PageFacts {
   const { input, button } = findSearchElements(pageType);
   const resultList = pageType === "search" ? collectResultListState(document) : undefined;
+  const searchResults = pageType === "google_search" ? collectGoogleSearchResultsState(document) : undefined;
+  const pageContent = pageType === "content" || pageType === "pdf" ? collectPageContentState() : undefined;
 
   return {
     searchBox: {
       present: !!input,
       visible: !!input && isVisible(input),
-      text: input instanceof HTMLInputElement ? input.value : textOf(input),
+      text: input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement ? input.value : textOf(input),
     },
     searchSubmit: {
       present: !!button,
@@ -136,6 +169,8 @@ function buildPageFacts(pageType: PageType): PageFacts {
       text: textOf(button),
     },
     resultList,
+    searchResults,
+    pageContent,
   };
 }
 
@@ -177,6 +212,32 @@ function buildPageReady(pageType: PageType, facts: PageFacts): PageReadyState {
     return {
       ready: checks.length === 0,
       reason: checks.length === 0 ? "搜索结果页可用" : "搜索结果页尚未可用",
+      checks,
+    };
+  }
+
+  if (pageType === "google_search") {
+    const searchResults = facts.searchResults;
+
+    if (!searchResults?.present) {
+      checks.push("Google 搜索结果未出现");
+    } else if (!searchResults.loaded) {
+      checks.push("Google 搜索结果仍在加载");
+    } else if (searchResults.naturalCount === 0) {
+      checks.push("Google 自然结果尚未出现");
+    }
+
+    return {
+      ready: checks.length === 0,
+      reason: checks.length === 0 ? "Google 搜索结果页可用" : "Google 搜索结果页尚未可用",
+      checks,
+    };
+  }
+
+  if (pageType === "content" || pageType === "pdf") {
+    return {
+      ready: true,
+      reason: pageType === "pdf" ? "PDF 页面已加载" : "通用页面已加载",
       checks,
     };
   }
