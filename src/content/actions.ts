@@ -69,12 +69,21 @@ async function performType(agentId: string, text: string, submit = false): Promi
   dispatchInputEvents(target);
 
   if (submit) {
-    target.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter", code: "Enter" }));
-    target.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "Enter", code: "Enter" }));
-    if (target.form?.requestSubmit) {
+    // Prefer clicking the explicit submit button so JD autocomplete does not hijack Enter
+    // and replace the typed query with a highlighted suggestion.
+    target.value = text;
+    dispatchInputEvents(target);
+    target.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape", code: "Escape" }));
+    target.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "Escape", code: "Escape" }));
+    target.blur();
+
+    const submitButton = resolveAgentElement("el_search_submit");
+    if (submitButton) {
+      submitButton.click();
+    } else if (target.form?.requestSubmit) {
       target.form.requestSubmit();
     } else {
-      resolveAgentElement("el_search_submit")?.click();
+      target.form?.submit?.();
     }
   }
 
@@ -86,6 +95,7 @@ async function performType(agentId: string, text: string, submit = false): Promi
     observation: {
       beforeValue,
       afterValue: target.value,
+      submittedValue: submit ? text : undefined,
       submit,
     },
   };
@@ -109,6 +119,19 @@ async function performScroll(direction: "up" | "down", amount = 640): Promise<To
       afterY,
       direction,
       amount,
+    },
+  };
+}
+
+async function performNavigate(url: string): Promise<ToolResult> {
+  window.location.assign(url);
+  return {
+    success: true,
+    actionType: "NAVIGATE",
+    message: `已跳转到：${url}`,
+    navigated: true,
+    observation: {
+      url,
     },
   };
 }
@@ -152,6 +175,8 @@ export async function executeAction(action: AgentAction): Promise<ToolResult> {
       return performClick(action.agentId);
     case "TYPE":
       return performType(action.agentId, action.text, action.submit);
+    case "NAVIGATE":
+      return performNavigate(action.url);
     case "SCROLL":
       return performScroll(action.direction, action.amount);
     case "EXTRACT_LIST":

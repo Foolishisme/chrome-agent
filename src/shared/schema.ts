@@ -21,6 +21,11 @@ export const typeActionSchema = z.object({
   submit: z.boolean().optional(),
 });
 
+export const navigateActionSchema = z.object({
+  type: z.literal("NAVIGATE"),
+  url: z.string().url(),
+});
+
 export const scrollActionSchema = z.object({
   type: z.literal("SCROLL"),
   direction: z.union([z.literal("up"), z.literal("down")]),
@@ -41,6 +46,7 @@ export const doneActionSchema = z.object({
 export const agentActionSchema = z.discriminatedUnion("type", [
   clickActionSchema,
   typeActionSchema,
+  navigateActionSchema,
   scrollActionSchema,
   extractListActionSchema,
   doneActionSchema,
@@ -73,6 +79,7 @@ export const toolResultSchema = z.object({
   actionType: z.union([
     z.literal("CLICK"),
     z.literal("TYPE"),
+    z.literal("NAVIGATE"),
     z.literal("SCROLL"),
     z.literal("EXTRACT_LIST"),
     z.literal("DONE"),

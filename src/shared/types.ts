@@ -119,6 +119,7 @@ export interface SnapshotData {
 export type AgentAction =
   | { type: "CLICK"; agentId: string }
   | { type: "TYPE"; agentId: string; text: string; submit?: boolean }
+  | { type: "NAVIGATE"; url: string }
   | { type: "SCROLL"; direction: "up" | "down"; amount?: number }
   | { type: "EXTRACT_LIST"; limit?: number }
   | { type: "DONE"; summary: string; items?: ExtractedItem[] };

@@ -196,4 +196,60 @@ describe("search page query matching", () => {
     expect(executeAction).not.toHaveBeenCalled();
     expect(memory.currentFacts.searchQueryMatched).toBe(true);
   });
+
+  it("navigates directly to the JD search url when the current page does not match the query", async () => {
+    const tool = getToolDefinition("searchInSite");
+    const memory = createMemory({
+      currentPhase: "searching",
+      taskSpec: {
+        originalGoal: "500耳机",
+        topK: 5,
+        llmInputLimit: 10,
+        extractLimit: 12,
+        searchQuery: "500耳机",
+        querySource: "llm-lite",
+        notes: [],
+      },
+    });
+    const snapshot = createSnapshot({
+      pageType: "home",
+      url: "https://www.jd.com/",
+      title: "京东首页",
+      pageFacts: {
+        searchBox: { present: true, visible: true, text: "" },
+        searchSubmit: { present: true, visible: true, text: "搜索" },
+      },
+    });
+    const snapshotAfter = createSnapshot({
+      url: "https://search.jd.com/Search?keyword=500%E8%80%B3%E6%9C%BA&enc=utf-8",
+      title: "500耳机 - 商品搜索",
+    });
+    const executeAction = vi.fn().mockResolvedValue({
+      success: true,
+      actionType: "NAVIGATE",
+      message: "已跳转到：https://search.jd.com/Search?keyword=500%E8%80%B3%E6%9C%BA&enc=utf-8",
+      navigated: true,
+    });
+
+    const result = await tool.run({
+      memory,
+      signal: new AbortController().signal,
+      scanPage: vi.fn().mockResolvedValue(snapshotAfter),
+      ensureUsableSnapshot: vi.fn().mockResolvedValue(snapshot),
+      executeAction,
+      settleAfterAction: vi.fn().mockResolvedValue(undefined),
+      appendLog: vi.fn(),
+      recordStep: vi.fn(),
+      pushState: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(result.nextPhase).toBe("extracting");
+    expect(executeAction).toHaveBeenCalledWith(
+      {
+        type: "NAVIGATE",
+        url: "https://search.jd.com/Search?keyword=500%E8%80%B3%E6%9C%BA&enc=utf-8",
+      },
+      'Open the JD search results for "500耳机".',
+    );
+  });
 });

@@ -34,7 +34,59 @@ function formatValue(value: string | number | boolean | undefined) {
 }
 
 function renderInlineMarkdown(text: string) {
-  return escapeHtml(text).replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a class="result-link" href="$2" target="_blank">$1</a>');
+  let html = escapeHtml(text);
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a class="result-link" href="$2" target="_blank" rel="noreferrer">$1</a>');
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  return html;
+}
+
+function isMarkdownTableSeparator(line: string) {
+  return /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(line);
+}
+
+function parseMarkdownTableRow(line: string) {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => renderInlineMarkdown(cell.trim()));
+}
+
+function renderMarkdownTable(lines: string[], startIndex: number) {
+  const headerCells = parseMarkdownTableRow(lines[startIndex] ?? "");
+  const bodyRows: string[] = [];
+  let index = startIndex + 2;
+
+  while (index < lines.length) {
+    const current = lines[index]?.trim() ?? "";
+    if (!current || !current.includes("|")) {
+      break;
+    }
+
+    const cells = parseMarkdownTableRow(current);
+    bodyRows.push(
+      `<tr>${cells.map((cell) => `<td>${cell}</td>`).join("")}</tr>`,
+    );
+    index += 1;
+  }
+
+  const headerHtml = `<tr>${headerCells.map((cell) => `<th>${cell}</th>`).join("")}</tr>`;
+  const bodyHtml = bodyRows.join("");
+
+  return {
+    html: `
+      <div class="markdown-table-wrap">
+        <table class="markdown-table">
+          <thead>${headerHtml}</thead>
+          <tbody>${bodyHtml}</tbody>
+        </table>
+      </div>
+    `,
+    nextIndex: index - 1,
+  };
 }
 
 function renderMarkdownBlock(markdown: string | undefined) {
@@ -45,30 +97,61 @@ function renderMarkdownBlock(markdown: string | undefined) {
   const lines = markdown.split(/\r?\n/);
   const parts: string[] = [];
   let listItems: string[] = [];
+  let listTag: "ul" | "ol" | undefined;
 
   const flushList = () => {
     if (listItems.length === 0) {
       return;
     }
-    parts.push(`<ul class="debug-list">${listItems.join("")}</ul>`);
+    const tag = listTag ?? "ul";
+    parts.push(`<${tag} class="markdown-list">${listItems.join("")}</${tag}>`);
     listItems = [];
+    listTag = undefined;
   };
 
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
     const trimmed = line.trim();
     if (!trimmed) {
       flushList();
       continue;
     }
 
-    if (trimmed.startsWith("## ")) {
+    const nextTrimmed = lines[index + 1]?.trim() ?? "";
+    if (trimmed.includes("|") && isMarkdownTableSeparator(nextTrimmed)) {
       flushList();
-      parts.push(`<h3>${renderInlineMarkdown(trimmed.slice(3))}</h3>`);
+      const table = renderMarkdownTable(lines, index);
+      parts.push(table.html);
+      index = table.nextIndex;
       continue;
     }
 
-    if (trimmed.startsWith("- ")) {
-      listItems.push(`<li>${renderInlineMarkdown(trimmed.slice(2))}</li>`);
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      flushList();
+      const level = headingMatch[1].length;
+      const content = renderInlineMarkdown(headingMatch[2]);
+      parts.push(`<h${level} class="markdown-h${level}">${content}</h${level}>`);
+      continue;
+    }
+
+    const orderedMatch = trimmed.match(/^\d+\.\s+(.*)$/);
+    if (orderedMatch) {
+      if (listTag && listTag !== "ol") {
+        flushList();
+      }
+      listTag = "ol";
+      listItems.push(`<li>${renderInlineMarkdown(orderedMatch[1])}</li>`);
+      continue;
+    }
+
+    const unorderedMatch = trimmed.match(/^[-*+]\s+(.*)$/);
+    if (unorderedMatch) {
+      if (listTag && listTag !== "ul") {
+        flushList();
+      }
+      listTag = "ul";
+      listItems.push(`<li>${renderInlineMarkdown(unorderedMatch[1])}</li>`);
       continue;
     }
 
@@ -169,15 +252,19 @@ function renderTaskSpec() {
     return `<div class="muted">${escapeHtml(messages.timelineWaiting)}</div>`;
   }
 
+  const categoryText = formatValue(taskSpec.category);
+  const budgetText = taskSpec.budget ? `${taskSpec.budget} 元` : messages.emptyValue;
+  const notesText = taskSpec.notes.length > 0 ? taskSpec.notes.join(" / ") : messages.emptyValue;
+
   return `
     <div class="debug-grid">
       <div class="debug-card">
         <span class="status-label">${escapeHtml(messages.queryCategory)}</span>
-        <div class="debug-value">${escapeHtml(taskSpec.category)}</div>
+        <div class="debug-value">${escapeHtml(categoryText)}</div>
       </div>
       <div class="debug-card">
         <span class="status-label">${escapeHtml(messages.queryBudget)}</span>
-        <div class="debug-value">${escapeHtml(taskSpec.budget ? `${taskSpec.budget} 元` : messages.emptyValue)}</div>
+        <div class="debug-value">${escapeHtml(budgetText)}</div>
       </div>
       <div class="debug-card">
         <span class="status-label">${escapeHtml(messages.queryTopK)}</span>
@@ -190,7 +277,7 @@ function renderTaskSpec() {
       <div class="debug-card" style="grid-column: 1 / -1;">
         <span class="status-label">${escapeHtml(messages.querySearch)}</span>
         <div class="debug-value">${escapeHtml(taskSpec.searchQuery)}</div>
-        <div class="muted">${escapeHtml(taskSpec.notes.join(" / ") || messages.emptyValue)}</div>
+        <div class="muted">${escapeHtml(notesText)}</div>
       </div>
     </div>
   `;

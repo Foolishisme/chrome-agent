@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { llmDecisionSchema } from "../src/shared/schema";
+import { agentActionSchema, llmDecisionSchema } from "../src/shared/schema";
 
 describe("llmDecisionSchema", () => {
   it("accepts a valid TYPE decision", () => {
@@ -31,5 +31,14 @@ describe("llmDecisionSchema", () => {
         done: false,
       }),
     ).toThrow();
+  });
+
+  it("accepts a valid NAVIGATE action", () => {
+    const parsed = agentActionSchema.parse({
+      type: "NAVIGATE",
+      url: "https://search.jd.com/Search?keyword=500%E8%80%B3%E6%9C%BA&enc=utf-8",
+    });
+
+    expect(parsed.type).toBe("NAVIGATE");
   });
 });

@@ -86,6 +86,13 @@ function hasMatchingQuery(snapshot: SnapshotData, searchQuery: string) {
   });
 }
 
+function buildSearchUrl(searchQuery: string) {
+  const url = new URL("https://search.jd.com/Search");
+  url.searchParams.set("keyword", searchQuery);
+  url.searchParams.set("enc", "utf-8");
+  return url.toString();
+}
+
 export function buildRuleBasedSummary(goal: string, items: ExtractedItem[]) {
   const first = items[0];
   if (!first) {
@@ -241,13 +248,11 @@ const searchInSiteTool: AgentToolDefinition = {
     }
 
     const action: AgentAction = {
-      type: "TYPE",
-      agentId: "el_search_input",
-      text: context.memory.taskSpec.searchQuery,
-      submit: true,
+      type: "NAVIGATE",
+      url: buildSearchUrl(context.memory.taskSpec.searchQuery),
     };
 
-    const result = await context.executeAction(action, `Submit the query "${context.memory.taskSpec.searchQuery}".`);
+    const result = await context.executeAction(action, `Open the JD search results for "${context.memory.taskSpec.searchQuery}".`);
     await context.settleAfterAction(action);
     const snapshotAfter = await context.scanPage();
 

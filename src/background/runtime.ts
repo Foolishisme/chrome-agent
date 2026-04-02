@@ -193,7 +193,7 @@ function getPostActionSettleDelay(action: AgentAction) {
     return POST_ACTION_SETTLE_MS.scroll;
   }
 
-  if (action.type === "CLICK" || (action.type === "TYPE" && action.submit)) {
+  if (action.type === "CLICK" || action.type === "NAVIGATE" || (action.type === "TYPE" && action.submit)) {
     return POST_ACTION_SETTLE_MS.navigateLike;
   }
 
@@ -527,7 +527,8 @@ export class BrowserAgentRuntime {
 
   private async settleAfterAction(session: ActiveSession, action: AgentAction) {
     const delayMs = getPostActionSettleDelay(action);
-    const shouldWaitForTabLoad = action.type === "CLICK" || (action.type === "TYPE" && action.submit);
+    const shouldWaitForTabLoad =
+      action.type === "CLICK" || action.type === "NAVIGATE" || (action.type === "TYPE" && action.submit);
 
     if (delayMs <= 0 && !shouldWaitForTabLoad) {
       return;
