@@ -24,8 +24,9 @@ let currentState: SessionPublicState = {
 
 let lastGoal = DEFAULT_GOAL;
 
-function escapeHtml(value: string) {
-  return value
+function escapeHtml(value: unknown) {
+  const text = value === undefined || value === null ? "" : String(value);
+  return text
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -40,7 +41,7 @@ function formatValue(value: string | number | boolean | undefined) {
   return String(value);
 }
 
-function renderInlineMarkdown(text: string) {
+function renderInlineMarkdown(text: unknown) {
   let html = escapeHtml(text);
   html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a class="result-link" href="$2" target="_blank" rel="noreferrer">$1</a>');
   html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
