@@ -2,6 +2,7 @@ import { KNOWN_CATEGORY_KEYWORDS, RESEARCH_INTENT_KEYWORDS } from "../shared/con
 import { RuntimeError } from "../shared/errors";
 import type {
   CommerceTaskSpec,
+  PlanStep,
   PublicResearchTaskSpec,
   SubtaskSpec,
   TaskPlan,
@@ -196,6 +197,16 @@ function buildResearchSubtasks(): SubtaskSpec[] {
       successCriteria: ["输出结论、来源概览和未解决问题"],
     },
   ];
+}
+
+export function buildPlanSteps(subtasks: SubtaskSpec[]): PlanStep[] {
+  return subtasks.map((subtask) => ({
+    stepId: subtask.id,
+    goal: subtask.goal,
+    allowedTools: [...subtask.allowedTools],
+    successCriteria: [...subtask.successCriteria],
+    status: "pending",
+  }));
 }
 
 export function buildTaskPlan(taskType: TaskType): TaskPlan {

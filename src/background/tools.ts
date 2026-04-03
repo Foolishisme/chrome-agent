@@ -15,7 +15,7 @@ import type {
   ToolName,
   ToolResult,
 } from "../shared/types";
-import { compileTaskSpec } from "./query-compiler";
+import { buildPlanSteps, compileTaskSpec } from "./query-compiler";
 import {
   generateCommerceSummary,
   generateResearchSummary,
@@ -278,7 +278,6 @@ async function recoverByScroll(context: ToolExecutionContext, snapshot: Snapshot
   await context.settleAfterAction(action);
   const snapshotAfter = await context.scanPage();
 
-  context.memory.runtimeMeta.currentStep += 1;
   context.memory.currentPhase = "extracting";
   context.recordStep({
     stepSummary: "Scroll recovery completed.",
@@ -337,7 +336,7 @@ const compileTaskTool: AgentToolDefinition = {
     context.memory.taskType = compiled.taskType;
     context.memory.taskSpec = compiled.taskSpec;
     context.memory.taskPlan = compiled.taskPlan;
-    context.memory.plan = [...compiled.taskPlan.steps];
+    context.memory.plan = buildPlanSteps(compiled.taskPlan.subtasks);
     context.memory.currentPhase = "searching";
     context.memory.currentFacts = {
       ...context.memory.currentFacts,
@@ -409,7 +408,6 @@ const searchInSiteTool: AgentToolDefinition = {
     context.memory.filterDiagnostics = undefined;
     context.memory.unresolvedIssues = [];
     context.memory.runtimeMeta.recoveryCount = 0;
-    context.memory.runtimeMeta.currentStep += 1;
     context.memory.currentPhase = "extracting";
     context.memory.nextIntent =
       context.memory.taskType === "commerce_search"
@@ -480,7 +478,6 @@ const extractStructuredResultsTool: AgentToolDefinition = {
       const extractResult = await context.executeAction(action, "Extract structured search result items.");
       const snapshotAfter = await context.scanPage();
 
-      context.memory.runtimeMeta.currentStep += 1;
       context.memory.rawExtractedItems = extractResult.items ?? [];
       context.memory.lastError = extractResult.success ? undefined : extractResult.message;
       context.memory.currentFacts = {
@@ -527,7 +524,6 @@ const extractStructuredResultsTool: AgentToolDefinition = {
     const extractResult = await context.executeAction(action, "Extract natural results from the Google search page.");
     const snapshotAfter = await context.scanPage();
 
-    context.memory.runtimeMeta.currentStep += 1;
     context.memory.researchCandidates = extractResult.researchCandidates ?? [];
     context.memory.lastError = extractResult.success ? undefined : extractResult.message;
     context.memory.currentFacts = {
@@ -721,7 +717,6 @@ const readPageFactsTool: AgentToolDefinition = {
       ...sourceResult.unresolvedIssues,
     ]);
     context.memory.activeSourceIndex += 1;
-    context.memory.runtimeMeta.currentStep += 1;
     const successfulSourceCount = countSuccessfulResearchSources(context.memory.researchSources);
     context.memory.currentFacts = {
       ...context.memory.currentFacts,
@@ -853,7 +848,6 @@ const aggregateTaskResultsTool: AgentToolDefinition = {
       unresolvedIssues: context.memory.unresolvedIssues,
     };
     context.memory.runtimeMeta.status = "done";
-    context.memory.runtimeMeta.currentStep += 1;
     context.memory.currentPhase = "done";
     context.memory.liveStepSummary = "Final output is ready.";
     context.memory.recoveryHint = undefined;
@@ -891,25 +885,6 @@ const TOOL_REGISTRY: Record<ToolName, AgentToolDefinition> = {
   readPageFacts: readPageFactsTool,
   aggregateTaskResults: aggregateTaskResultsTool,
 };
-
-export function getNextToolName(memory: SessionMemory): ToolName {
-  switch (memory.currentPhase) {
-    case "planning":
-      return "compileTask";
-    case "searching":
-      return "searchInSite";
-    case "extracting":
-      return "extractStructuredResults";
-    case "filtering":
-      return "filterCandidates";
-    case "reading":
-      return "readPageFacts";
-    case "aggregating":
-      return "aggregateTaskResults";
-    case "done":
-      return "aggregateTaskResults";
-  }
-}
 
 export function getToolDefinition(toolName: ToolName) {
   return TOOL_REGISTRY[toolName];

@@ -104,6 +104,18 @@ export const taskRouteSchema = z.object({
   reason: z.string().min(1),
 });
 
+export const nextToolSelectionSchema = z.object({
+  toolName: z.union([
+    z.literal("compileTask"),
+    z.literal("searchInSite"),
+    z.literal("extractStructuredResults"),
+    z.literal("filterCandidates"),
+    z.literal("readPageFacts"),
+    z.literal("aggregateTaskResults"),
+  ]),
+  reason: z.string().min(1),
+});
+
 export const summaryResultSchema = z.object({
   summary: z.string().min(1),
   markdown: z.string().min(1),

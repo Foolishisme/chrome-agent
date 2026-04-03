@@ -4,6 +4,8 @@ export type TaskType = "commerce_search" | "public_research";
 
 export type AgentPhase = "planning" | "searching" | "extracting" | "filtering" | "reading" | "aggregating" | "done";
 
+export type PlanStepStatus = "pending" | "running" | "succeeded" | "failed" | "blocked";
+
 export type ToolName =
   | "compileTask"
   | "searchInSite"
@@ -185,8 +187,16 @@ export interface SubtaskSpec {
   id: string;
   type: string;
   goal: string;
-  allowedTools: string[];
+  allowedTools: ToolName[];
   successCriteria: string[];
+}
+
+export interface PlanStep {
+  stepId: string;
+  goal: string;
+  allowedTools: ToolName[];
+  successCriteria: string[];
+  status: PlanStepStatus;
 }
 
 export interface TaskPlan {
@@ -256,6 +266,7 @@ export interface ToolResult {
 
 export interface StepRecord {
   step: number;
+  planStepId?: string;
   status: RuntimeStatus;
   stepSummary: string;
   nextIntent?: string;
@@ -295,7 +306,7 @@ export interface SessionMemory {
   goal: string;
   taskType: TaskType;
   currentPhase: AgentPhase;
-  plan: string[];
+  plan: PlanStep[];
   taskPlan?: TaskPlan;
   taskSpec?: TaskSpec;
   subtaskResults: SubtaskResult[];
@@ -324,8 +335,10 @@ export interface SessionMemory {
     tabId: number;
     pageType: PageType;
     status: RuntimeStatus;
+    currentStepId?: string;
     currentTool?: ToolName;
     currentStep: number;
+    budgetLow?: boolean;
     llmRetryCount: number;
     actionRetryCount: number;
     pageReadyRetryCount: number;
@@ -357,9 +370,12 @@ export interface SessionPublicState {
   subtaskResults?: SubtaskResult[];
   status: RuntimeStatus;
   currentPhase?: AgentPhase;
+  currentStepId?: string;
   currentTool?: ToolName;
   currentStep: number;
-  plan: string[];
+  plan: PlanStep[];
+  budgetLow?: boolean;
+  elapsedMs?: number;
   stepSummary?: string;
   lastAction?: AgentAction;
   lastActionResult?: ToolResult;

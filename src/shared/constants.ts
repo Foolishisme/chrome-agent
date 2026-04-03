@@ -1,7 +1,10 @@
 import type { TaskType } from "./types";
 
 export const LIMITS = {
-  MAX_STEPS: 16,
+  MAX_TOTAL_STEPS: 20,
+  SOFT_STEP_LIMIT: 15,
+  SOFT_ELAPSED_MS: 120_000,
+  MAX_ELAPSED_MS: 180_000,
   MAX_LLM_RETRIES: 3,
   MAX_ACTION_RETRIES: 2,
   LLM_TIMEOUT_MS: 30_000,
