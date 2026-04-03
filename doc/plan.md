@@ -19,28 +19,34 @@
 
 ## 2. 当前目标
 
-当前目标不是继续补固定 workflow，而是把系统迁移到：
+当前目标不是先把所有能力细拆完，而是先把系统迁移到：
 
 `LLM plan-driven tool orchestration`
 
 迁移要求：
 
 - 保留现有两条已跑通链路作为回归基线
-- 用静态初始 plan 驱动执行
-- 用统一 `ToolResult` 驱动下一步判断
-- 让 `Runtime` 退回到最小护栏层
+- 先让 `Runtime` 从 `phase -> tool` 硬编码调度迁移为 plan 执行器
+- 先使用少量、语义稳定的粗颗粒 tool 承接旧能力
+- 再根据真实复用与重试需求，逐步细化 tool 边界
 
 ## 3. 当前采用方案
 
-当前采用的是“先协议，后执行；先迁移旧链路，再加新能力”的路径。
+当前采用的是“先切范式，再收敛工具边界；先跑通闭环，再逐步细拆”的路径。
 
 核心策略：
 
 1. 先固定协议层
-2. 再迁移 runtime 执行循环
-3. 再迁移现有 tools
-4. 再迁移两条旧链路
+2. 再把 `Runtime` 迁移到 plan 驱动执行
+3. 用少量粗颗粒 tool 跑通 `commerce_search / public_research`
+4. 闭环稳定后，再按复用价值细拆 tool
 5. 最后验证文档/文件类试点
+
+说明：
+
+- 当前不要求第一步就把“读取来源页”和“提取事实”拆成两个 tool
+- 当前不要求把所有旧工具原样搬到新范式
+- 当前优先消除“按旧 phase 命名和调度”的工具边界
 
 ## 4. 工作分解
 
@@ -49,7 +55,7 @@
 目标：
 
 - 定义 `PlanStep`
-- 定义 `ToolResult`
+- 定义新的 `ToolResult`
 - 定义新的 memory 关键字段
 - 固定最终输出 schema
 
@@ -70,18 +76,31 @@
 
 - 新的最小执行循环
 - `budget_low`、硬停止、无进展停止
+- `LLM` 只能在当前 step 的 `allowedTools` 中选下一步 tool
 
-### 4.3 Tool 层
+### 4.3 过渡 Tool 层
 
 目标：
 
-- 让现有 tool 返回统一结构化结果
-- 去掉直接推进全局 phase 的做法
-- 保留 tool 内部局部恢复
+- 先把旧能力收敛成少量粗颗粒、语义稳定的 tool
+- 不再让 tool 名称直接绑定旧 `phase`
+- 保留 tool 内部局部恢复，不把原子 DOM 动作暴露给 `LLM`
 
-产出：
+第一批过渡 tool 建议为：
 
-- 迁移后的 `compileTask / searchInSite / extractStructuredResults / filterCandidates / readPageFacts / aggregateTaskResults`
+- `compileTaskSpec`
+- `openSearchResults`
+- `collectCommerceCandidates`
+- `collectResearchCandidates`
+- `readResearchSourceFacts`
+- `finalizeCommerceResult`
+- `finalizeResearchResult`
+
+说明：
+
+- `readResearchSourceFacts` 当前保持为一个大 tool，内部负责“打开来源页 + 提取事实 + 局部 fallback”
+- 当前不为拆分而拆分，不把“读取来源页”和“提取事实”强行拆成两个 tool
+- 细拆应发生在新范式闭环稳定之后
 
 ### 4.4 任务模块层
 
@@ -91,7 +110,30 @@
 - 再迁移 `public_research`
 - 验证旧回归基线仍成立
 
-### 4.5 试点扩展层
+说明：
+
+- `commerce_search` 先用 `compileTaskSpec -> openSearchResults -> collectCommerceCandidates -> finalizeCommerceResult`
+- `public_research` 先用 `compileTaskSpec -> openSearchResults -> collectResearchCandidates -> readResearchSourceFacts -> finalizeResearchResult`
+- `readResearchSourceFacts` 可在 plan 中多次出现，不要求 tool 自己演化成复杂工作流引擎
+
+### 4.5 细化 Tool 层
+
+目标：
+
+- 在新循环稳定后，再根据复用价值和失败模式细拆 tool
+
+优先考虑的后续细化点：
+
+- 将 `collectCommerceCandidates` 细化为“提取”与“过滤”
+- 将 `collectResearchCandidates` 细化为“提取”与“过滤”
+- 评估 `compileTaskSpec` 与 `openSearchResults` 是否需要按模块分化
+
+不优先细化的点：
+
+- “读取来源页”和“提取事实”当前不优先拆分
+- 不把页面等待、scroll recovery、selector fallback 暴露给 `LLM`
+
+### 4.6 试点扩展层
 
 目标：
 
@@ -109,7 +151,7 @@
 
 1. 协议层
 2. Runtime 层
-3. Tool 层
+3. 过渡 Tool 层
 4. `commerce_search` 迁移
 5. `public_research` 迁移
 
@@ -117,15 +159,16 @@
 
 - 输出 schema 与 side panel 展示适配
 - 文件/文档类 tool 设计讨论
-- 验收项细化
+- 迁移完成后的 tool 细拆方案讨论
 
 ## 6. 当前明确不做
 
 当前不做：
 
 - 执行中复杂 plan 改写
-- 浏览器原子动作全面开放给 LLM
-- 一开始就支持开放世界浏览
+- 浏览器原子动作全面开放给 `LLM`
+- 一开始就把所有能力细拆到底
+- 为了形式整齐而把“读取来源页”和“提取事实”强行拆开
 - 一开始就并行推进多个全新任务模块
 - 为了通用而先做大而全抽象
 
@@ -133,10 +176,10 @@
 
 当前这轮迁移至少应完成：
 
-1. `PlanStep` 与 `ToolResult` 契约落地
+1. `PlanStep` 与新的 `ToolResult` 契约落地
 2. Runtime 最小护栏落地
-3. `commerce_search` 跑通新循环
-4. `public_research` 跑通新循环
+3. 基于少量粗颗粒 tool 跑通 `commerce_search`
+4. 基于少量粗颗粒 tool 跑通 `public_research`
 5. 最终输出在 `success / partial / failed / blocked` 四种状态下都可见
 
 ## 8. 与其他文档的关系

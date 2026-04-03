@@ -125,7 +125,7 @@ describe("public research page facts", () => {
 
 describe("public research aggregation", () => {
   it("keeps reading when only partial sources have been collected", async () => {
-    const tool = getToolDefinition("readPageFacts");
+    const tool = getToolDefinition("readResearchSourceFacts");
     const memory = createResearchMemory({
       currentPhase: "reading",
       taskSpec: {
@@ -206,7 +206,7 @@ describe("public research aggregation", () => {
   });
 
   it("builds partial final output with unresolved issues when sources are insufficient", async () => {
-    const tool = getToolDefinition("aggregateTaskResults");
+    const tool = getToolDefinition("finalizeResearchResult");
     const memory = createResearchMemory({
       taskSpec: {
         taskType: "public_research",
@@ -262,7 +262,7 @@ describe("public research aggregation", () => {
   });
 
   it("returns no reliable information when no sources are available", async () => {
-    const tool = getToolDefinition("aggregateTaskResults");
+    const tool = getToolDefinition("finalizeResearchResult");
     const memory = createResearchMemory({
       taskSpec: {
         taskType: "public_research",

@@ -1,4 +1,4 @@
-import type { AgentAction, ToolResult } from "../shared/types";
+import type { ActionResult, AgentAction } from "../shared/types";
 import { extractStructuredProducts } from "./extractor";
 import { extractGoogleSearchResults, extractPageFacts } from "./research";
 import { resolveAgentElement } from "./scanner";
@@ -19,7 +19,7 @@ function dispatchInputEvents(input: HTMLInputElement | HTMLTextAreaElement) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-async function performClick(agentId: string): Promise<ToolResult> {
+async function performClick(agentId: string): Promise<ActionResult> {
   const target = resolveAgentElement(agentId);
   if (!target) {
     showToast(`未找到元素：${agentId}`, true);
@@ -47,7 +47,7 @@ async function performClick(agentId: string): Promise<ToolResult> {
   };
 }
 
-async function performType(agentId: string, text: string, submit = false): Promise<ToolResult> {
+async function performType(agentId: string, text: string, submit = false): Promise<ActionResult> {
   const target = resolveAgentElement(agentId);
   if (!target || !(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) {
     showToast(`输入目标不可用：${agentId}`, true);
@@ -100,7 +100,7 @@ async function performType(agentId: string, text: string, submit = false): Promi
   };
 }
 
-async function performScroll(direction: "up" | "down", amount = 640): Promise<ToolResult> {
+async function performScroll(direction: "up" | "down", amount = 640): Promise<ActionResult> {
   const beforeY = window.scrollY;
   window.scrollBy({
     top: direction === "down" ? amount : -amount,
@@ -122,7 +122,7 @@ async function performScroll(direction: "up" | "down", amount = 640): Promise<To
   };
 }
 
-async function performNavigate(url: string): Promise<ToolResult> {
+async function performNavigate(url: string): Promise<ActionResult> {
   window.location.assign(url);
   return {
     success: true,
@@ -135,7 +135,7 @@ async function performNavigate(url: string): Promise<ToolResult> {
   };
 }
 
-async function performExtractList(limit?: number): Promise<ToolResult> {
+async function performExtractList(limit?: number): Promise<ActionResult> {
   const { items, diagnostics } = extractStructuredProducts(document, { limit });
   if (items.length === 0) {
     showToast("未提取到商品列表", true);
@@ -168,7 +168,7 @@ async function performExtractList(limit?: number): Promise<ToolResult> {
   };
 }
 
-async function performExtractSearchResults(limit?: number): Promise<ToolResult> {
+async function performExtractSearchResults(limit?: number): Promise<ActionResult> {
   const { candidates, diagnostics } = extractGoogleSearchResults(document, limit ?? 10);
   if (candidates.length === 0) {
     showToast("未提取到 Google 搜索结果", true);
@@ -200,7 +200,7 @@ async function performExtractSearchResults(limit?: number): Promise<ToolResult> 
   };
 }
 
-async function performExtractPageFacts(): Promise<ToolResult> {
+async function performExtractPageFacts(): Promise<ActionResult> {
   const pageFacts = extractPageFacts();
   showToast(pageFacts.status === "success" ? "已提取页面事实" : "页面仅得到部分事实", pageFacts.status !== "success");
   return {
@@ -218,7 +218,7 @@ async function performExtractPageFacts(): Promise<ToolResult> {
   };
 }
 
-export async function executeAction(action: AgentAction): Promise<ToolResult> {
+export async function executeAction(action: AgentAction): Promise<ActionResult> {
   switch (action.type) {
     case "CLICK":
       return performClick(action.agentId);

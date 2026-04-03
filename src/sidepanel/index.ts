@@ -216,6 +216,22 @@ function renderTimelineStep(step: StepRecord) {
   `;
 }
 
+function renderPlanStep(step: SessionPublicState["plan"][number], index: number) {
+  return `
+    <div class="timeline-item">
+      <div class="timeline-head">
+        <span>${index + 1}. ${escapeHtml(step.goal)}</span>
+        <span class="pill">${escapeHtml(step.status)}</span>
+      </div>
+      <div class="timeline-body">
+        <div><strong>Step ID：</strong>${escapeHtml(step.stepId)}</div>
+        <div><strong>Allowed Tools：</strong>${escapeHtml(step.allowedTools.join(", ") || messages.emptyValue)}</div>
+        <div><strong>Success Criteria：</strong>${escapeHtml(step.successCriteria.join(" / ") || messages.emptyValue)}</div>
+      </div>
+    </div>
+  `;
+}
+
 function renderSnapshot(snapshot: SnapshotData | undefined) {
   if (!snapshot) {
     return `<div class="muted">${escapeHtml(messages.timelineWaiting)}</div>`;
@@ -508,7 +524,7 @@ function render() {
       ? [
           `<div class="timeline-item">
             <div class="timeline-head"><span>${escapeHtml(messages.timelinePlan)}</span><span>${currentState.plan.length} ${escapeHtml(messages.timelineSteps)}</span></div>
-            <div class="timeline-body">${currentState.plan.map((item) => escapeHtml(item)).join("<br />")}</div>
+            <div class="timeline-body">${currentState.plan.map((item, index) => renderPlanStep(item, index)).join("")}</div>
           </div>`,
         ]
       : []),

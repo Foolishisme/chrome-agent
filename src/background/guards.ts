@@ -1,6 +1,6 @@
 import { SENSITIVE_KEYWORDS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
-import type { AgentAction, LlmDecision, SessionMemory, SnapshotData, ToolResult } from "../shared/types";
+import type { ActionResult, AgentAction, LlmDecision, SessionMemory, SnapshotData } from "../shared/types";
 
 const FALLBACK_AGENT_IDS = new Set(["el_search_input", "el_search_submit"]);
 
@@ -119,7 +119,7 @@ export function compareExpectedOutcome(
   afterSnapshot: SnapshotData,
   expectedOutcome: string,
   action: AgentAction,
-  actionResult?: ToolResult,
+  actionResult?: ActionResult,
 ): {
   matched: boolean;
   reason: string;

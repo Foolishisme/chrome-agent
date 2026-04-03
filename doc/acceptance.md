@@ -33,10 +33,10 @@
 
 | 编号 | 验收项 | 验证方式 | 当前状态 | 备注 |
 |---|---|---|---|---|
-| N1 | `PlanStep` 契约已落地 | 检查 `src/shared/types.ts` | NOT_RUN | 需包含 `stepId/goal/allowedTools/successCriteria/status` |
-| N2 | `ToolResult` 契约已落地 | 检查 `src/shared/types.ts` 与 `src/background/tools.ts` | NOT_RUN | 需包含 `status/summary/outputs/artifacts/facts/errorCode/retryHint` |
-| N3 | Runtime 不再按 `phase -> tool` 硬编码调度 | 检查 `src/background/runtime.ts` | NOT_RUN | 应改为基于 plan 与 LLM 选择下一步 tool |
-| N4 | LLM 只能在 `allowedTools` 中选择下一步 tool | 单测或集成测试验证 | NOT_RUN | 防止越权调用未授权能力 |
+| N1 | `PlanStep` 契约已落地 | 检查 `src/shared/types.ts` | PASS | 已包含 `stepId/goal/allowedTools/successCriteria/status` |
+| N2 | `ToolResult` 契约已落地 | 检查 `src/shared/types.ts` 与 `src/background/tools.ts` | PASS | 已包含 `status/summary/outputs/artifacts/facts/errorCode/retryHint` |
+| N3 | Runtime 不再按 `phase -> tool` 硬编码调度 | 检查 `src/background/runtime.ts` | PASS | 已改为基于 plan step 与 `allowedTools` 选择 tool |
+| N4 | LLM 只能在 `allowedTools` 中选择下一步 tool | 单测或集成测试验证 | PARTIAL | 当前 runtime 已按 `allowedTools` 限制选 tool，但尚未接入真实 LLM 选 tool |
 | N5 | Runtime 软预算提醒已落地 | 单测验证 `softStepLimit = 15` 时暴露 `budget_low` | NOT_RUN | 到达 15 步时必须提醒 LLM 收敛 |
 | N6 | Runtime 硬预算已落地 | 单测验证 `maxTotalSteps = 20` 与 `maxElapsedMs = 180000` | NOT_RUN | 到达硬上限时必须强制停止 |
 | N7 | Runtime 重试与无进展护栏已落地 | 单测验证同 tool `3` 次失败停止、连续 `3` 步无进展停止 | NOT_RUN | 不允许无限盲试 |
@@ -61,9 +61,9 @@
 
 当前阻塞新架构 MVP 的主要项是：
 
-1. `N1 / N2` 新的 `PlanStep` 与 `ToolResult` 契约尚未在代码中落地
-2. `N3 / N4 / N5 / N6 / N7 / N8` 新执行循环与 runtime 最小护栏尚未在代码中落地
-3. `N9 / N10` 两个已跑通模块尚未迁移到新循环
+1. `N4` 真实 LLM 选 tool 仍未接入，当前仅以 runtime 的 `allowedTools` 约束保证不会越权
+2. `N5 / N6 / N7 / N8` runtime 最小护栏与结构化最终输出的完整新循环验收尚未完成
+3. `N9 / N10` 两个已跑通模块虽已接入 plan-step 驱动调度，但尚未完成新循环集成验收
 4. `M1 / M2 / M3 / M4 / M5 / M6` 新架构下的真机入口、闭环、预算与最终输出尚未验证
 5. `M7 / M8` provider live request 尚未确认
 

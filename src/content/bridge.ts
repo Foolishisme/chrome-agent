@@ -1,4 +1,4 @@
-import type { AgentAction, SnapshotData, ToolResult } from "../shared/types";
+import type { ActionResult, AgentAction, SnapshotData } from "../shared/types";
 import { executeAction } from "./actions";
 import { scanPage } from "./scanner";
 
@@ -6,7 +6,7 @@ export function scanCurrentPage(): SnapshotData {
   return scanPage();
 }
 
-export async function executeCurrentAction(action: AgentAction): Promise<ToolResult> {
+export async function executeCurrentAction(action: AgentAction): Promise<ActionResult> {
   return await executeAction(action);
 }
 

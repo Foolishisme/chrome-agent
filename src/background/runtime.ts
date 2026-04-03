@@ -1,11 +1,13 @@
-import { DEFAULT_PLANS, LIMITS } from "../shared/constants";
+import { LIMITS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
 import type { ExecuteActionResponse, RequestSnapshotMessage, SnapshotResponse, StartSessionResponse } from "../shared/protocol";
-import { toolResultSchema } from "../shared/schema";
+import { actionResultSchema } from "../shared/schema";
 import type {
+  ActionResult,
   AgentAction,
   DebugLogEntry,
   DebugLogLevel,
+  PlanStep,
   SessionMemory,
   SessionPublicState,
   SnapshotData,
@@ -16,8 +18,8 @@ import type {
 } from "../shared/types";
 import { summarizeSnapshot } from "./guards";
 import { classifyTaskType } from "./llm-client";
-import { detectTaskTypeWithLiteModel } from "./query-compiler";
-import { getNextToolName, getToolDefinition, type ToolExecutionResult } from "./tools";
+import { buildTaskPlan, detectTaskTypeWithLiteModel } from "./query-compiler";
+import { getToolDefinition } from "./tools";
 
 const JD_HOME_URL = "https://www.jd.com/";
 const GOOGLE_HOME_URL = "https://www.google.com/";
@@ -99,6 +101,7 @@ function toPublicState(memory: SessionMemory): SessionPublicState {
     subtaskResults: memory.subtaskResults,
     status: memory.runtimeMeta.status,
     currentPhase: memory.currentPhase,
+    currentStepId: memory.runtimeMeta.currentStepId,
     currentTool: memory.runtimeMeta.currentTool,
     currentStep: memory.runtimeMeta.currentStep,
     plan: memory.plan,
@@ -214,7 +217,7 @@ async function sendMessageThroughBridge<TResponse>(
       const bridge = (globalThis as typeof globalThis & {
         __browserAgentMvpDirectBridge?: {
           scanCurrentPage: () => SnapshotData;
-          executeCurrentAction: (action: AgentAction) => Promise<ToolResult>;
+          executeCurrentAction: (action: AgentAction) => Promise<ActionResult>;
         };
       }).__browserAgentMvpDirectBridge;
 
@@ -303,6 +306,45 @@ function getPostActionSettleDelay(action: AgentAction) {
   return 0;
 }
 
+function getCurrentPlanStep(memory: SessionMemory): PlanStep | undefined {
+  return memory.plan.find((step) => step.status === "running") ?? memory.plan.find((step) => step.status === "pending");
+}
+
+function markCurrentPlanStepRunning(memory: SessionMemory): PlanStep {
+  const step = getCurrentPlanStep(memory);
+  if (!step) {
+    throw new RuntimeError("No runnable plan step is available.", "PLAN_STEP_MISSING");
+  }
+
+  if (step.status === "pending") {
+    step.status = "running";
+  }
+
+  memory.runtimeMeta.currentStepId = step.stepId;
+  return step;
+}
+
+function selectAllowedTool(step: PlanStep): ToolName {
+  const selected = step.allowedTools[0];
+  if (!selected) {
+    throw new RuntimeError(`Plan step ${step.stepId} has no allowed tools.`, "PLAN_STEP_NO_ALLOWED_TOOLS");
+  }
+  return selected;
+}
+
+function applyToolResultToPlan(memory: SessionMemory, stepId: string, result: ToolResult) {
+  const step = memory.plan.find((item) => item.stepId === stepId);
+  if (!step) {
+    memory.runtimeMeta.currentStepId = getCurrentPlanStep(memory)?.stepId;
+    return;
+  }
+
+  step.status =
+    result.stepStatus ??
+    (result.status === "fatal_error" ? "failed" : result.status === "retryable_error" ? "running" : "succeeded");
+  memory.runtimeMeta.currentStepId = getCurrentPlanStep(memory)?.stepId;
+}
+
 export class BrowserAgentRuntime {
   private activeSession?: ActiveSession;
 
@@ -337,11 +379,13 @@ export class BrowserAgentRuntime {
     const taskType = route.taskType;
     const { tab, navigatedToHome, fromUrl } = await getOrPrepareSessionTab(taskType);
     const sessionId = createSessionId();
+    const initialTaskPlan = buildTaskPlan(taskType);
     const memory: SessionMemory = {
       goal,
       taskType,
       currentPhase: "planning",
-      plan: [...DEFAULT_PLANS[taskType]],
+      plan: initialTaskPlan.steps,
+      taskPlan: initialTaskPlan,
       subtaskResults: [],
       toolHistory: [],
       currentFacts: {},
@@ -365,6 +409,7 @@ export class BrowserAgentRuntime {
         tabId: tab.id!,
         pageType: "unknown",
         status: "idle",
+        currentStepId: undefined,
         currentTool: undefined,
         currentStep: 0,
         llmRetryCount: 0,
@@ -464,19 +509,22 @@ export class BrowserAgentRuntime {
         throw new RuntimeError("Exceeded the maximum number of runtime steps.", "MAX_STEPS_REACHED");
       }
 
-      const toolName = getNextToolName(session.memory);
-      const result = await this.runTool(session, toolName);
-      if (result.stop || result.nextPhase === "done") {
+      const planStep = markCurrentPlanStepRunning(session.memory);
+      const toolName = selectAllowedTool(planStep);
+      const result = await this.runTool(session, planStep, toolName);
+      if (result.stop || session.memory.currentPhase === "done") {
         return;
       }
     }
   }
 
-  private async runTool(session: ActiveSession, toolName: ToolName): Promise<ToolExecutionResult> {
+  private async runTool(session: ActiveSession, planStep: PlanStep, toolName: ToolName): Promise<ToolResult> {
     const tool = getToolDefinition(toolName);
     const phase = session.memory.currentPhase;
     session.memory.runtimeMeta.currentTool = toolName;
     appendLog(session, "runtime", "info", "Running high-level tool.", {
+      stepId: planStep.stepId,
+      stepGoal: planStep.goal,
       toolName,
       phase,
       taskType: session.memory.taskType,
@@ -497,14 +545,22 @@ export class BrowserAgentRuntime {
         pushState: (stepSummary) => this.pushState(session, stepSummary),
       });
 
-      session.memory.currentPhase = result.nextPhase;
+      session.memory.currentFacts = {
+        ...session.memory.currentFacts,
+        ...result.facts,
+      };
+      if (result.nextPhase) {
+        session.memory.currentPhase = result.nextPhase;
+      }
+      applyToolResultToPlan(session.memory, planStep.stepId, result);
       session.memory.runtimeMeta.currentTool = undefined;
       session.memory.toolHistory = [
         ...session.memory.toolHistory,
         {
           toolName,
+          stepId: planStep.stepId,
           phase,
-          status: "success",
+          status: result.status,
           summary: result.summary,
           timestamp: Date.now(),
         },
@@ -512,31 +568,41 @@ export class BrowserAgentRuntime {
       session.memory.subtaskResults = [
         ...session.memory.subtaskResults,
         {
-          subtaskId: `${phase}:${toolName}`,
-          status: "success",
+          subtaskId: planStep.stepId,
+          status: result.status === "success" ? "success" : result.status === "partial" ? "partial" : "failed",
           data: {
+            stepId: planStep.stepId,
             phase,
             toolName,
             summary: result.summary,
+            outputs: result.outputs,
           },
-          diagnostics: [],
+          diagnostics: result.retryHint ? [result.retryHint] : [],
         },
       ];
       appendLog(session, "runtime", "info", "High-level tool completed.", {
+        stepId: planStep.stepId,
         toolName,
         nextPhase: result.nextPhase,
         summary: result.summary,
+        status: result.status,
       });
       session.lastPublicState = toPublicState(session.memory);
       await broadcastUpdate(session.lastPublicState);
       return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown tool error.";
+      const currentStep = session.memory.plan.find((step) => step.stepId === planStep.stepId);
+      if (currentStep) {
+        currentStep.status = error instanceof RuntimeError && error.code === "SEARCH_BLOCKED" ? "blocked" : "failed";
+      }
+      session.memory.runtimeMeta.currentStepId = getCurrentPlanStep(session.memory)?.stepId;
       session.memory.runtimeMeta.currentTool = undefined;
       session.memory.toolHistory = [
         ...session.memory.toolHistory,
         {
           toolName,
+          stepId: planStep.stepId,
           phase,
           status: "error",
           summary: message,
@@ -546,9 +612,10 @@ export class BrowserAgentRuntime {
       session.memory.subtaskResults = [
         ...session.memory.subtaskResults,
         {
-          subtaskId: `${phase}:${toolName}`,
+          subtaskId: planStep.stepId,
           status: "failed",
           data: {
+            stepId: planStep.stepId,
             phase,
             toolName,
           },
@@ -559,6 +626,7 @@ export class BrowserAgentRuntime {
         ...session.memory.failures,
         {
           phase,
+          stepId: planStep.stepId,
           toolName,
           message,
           timestamp: Date.now(),
@@ -642,7 +710,7 @@ export class BrowserAgentRuntime {
     session: ActiveSession,
     action: AgentAction,
     stepSummary: string,
-  ): Promise<ToolResult> {
+  ): Promise<ActionResult> {
     session.memory.runtimeMeta.status = "acting";
     await this.pushState(session, stepSummary);
     appendLog(session, "runtime", "info", "Executing atomic action.", action);
@@ -656,7 +724,7 @@ export class BrowserAgentRuntime {
         throw new RuntimeError(response.error ?? "Action execution failed.", "ACTION_EXECUTION_ERROR");
       }
       session.memory.runtimeMeta.actionRetryCount = 0;
-      return toolResultSchema.parse(response.result);
+      return actionResultSchema.parse(response.result);
     } catch (error) {
       if (session.stopped) {
         throw new RuntimeError("The session was stopped.", "SESSION_STOPPED");
@@ -718,7 +786,7 @@ export class BrowserAgentRuntime {
       nextIntent?: string;
       expectedOutcome?: string;
       action?: AgentAction;
-      actionResult?: ToolResult;
+      actionResult?: ActionResult;
       snapshot?: SnapshotData;
       snapshotSummary?: string;
     },

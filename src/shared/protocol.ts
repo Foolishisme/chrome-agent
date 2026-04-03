@@ -1,4 +1,4 @@
-import type { AgentAction, SessionPublicState, SnapshotData, ToolResult } from "./types";
+import type { ActionResult, AgentAction, SessionPublicState, SnapshotData } from "./types";
 
 export type StartSessionMessage = {
   type: "START_SESSION";
@@ -55,6 +55,6 @@ export interface SnapshotResponse {
 
 export interface ExecuteActionResponse {
   ok: boolean;
-  result?: ToolResult;
+  result?: ActionResult;
   error?: string;
 }

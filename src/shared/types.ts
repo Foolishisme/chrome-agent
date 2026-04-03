@@ -4,13 +4,18 @@ export type TaskType = "commerce_search" | "public_research";
 
 export type AgentPhase = "planning" | "searching" | "extracting" | "filtering" | "reading" | "aggregating" | "done";
 
+export type PlanStepStatus = "pending" | "running" | "succeeded" | "failed" | "blocked";
+
 export type ToolName =
-  | "compileTask"
-  | "searchInSite"
-  | "extractStructuredResults"
-  | "filterCandidates"
-  | "readPageFacts"
-  | "aggregateTaskResults";
+  | "compileTaskSpec"
+  | "openSearchResults"
+  | "collectCommerceCandidates"
+  | "collectResearchCandidates"
+  | "readResearchSourceFacts"
+  | "finalizeCommerceResult"
+  | "finalizeResearchResult";
+
+export type ToolExecutionStatus = "success" | "partial" | "retryable_error" | "fatal_error";
 
 export type RuntimeStatus =
   | "idle"
@@ -181,18 +186,17 @@ export interface SnapshotData {
   timestamp: number;
 }
 
-export interface SubtaskSpec {
-  id: string;
-  type: string;
+export interface PlanStep {
+  stepId: string;
   goal: string;
-  allowedTools: string[];
+  allowedTools: ToolName[];
   successCriteria: string[];
+  status: PlanStepStatus;
 }
 
 export interface TaskPlan {
   taskType: TaskType;
-  steps: string[];
-  subtasks: SubtaskSpec[];
+  steps: PlanStep[];
 }
 
 export interface SubtaskResult {
@@ -241,7 +245,7 @@ export type AgentAction =
   | { type: "EXTRACT_PAGE_FACTS" }
   | { type: "DONE"; summary: string; items?: ExtractedItem[] };
 
-export interface ToolResult {
+export interface ActionResult {
   success: boolean;
   actionType: AgentAction["type"];
   message: string;
@@ -254,6 +258,19 @@ export interface ToolResult {
   errorCode?: string;
 }
 
+export interface ToolResult {
+  status: ToolExecutionStatus;
+  summary: string;
+  outputs: Record<string, unknown>;
+  artifacts: string[];
+  facts: Record<string, unknown>;
+  errorCode?: string;
+  retryHint?: string;
+  stepStatus?: Exclude<PlanStepStatus, "pending">;
+  nextPhase?: AgentPhase;
+  stop?: boolean;
+}
+
 export interface StepRecord {
   step: number;
   status: RuntimeStatus;
@@ -261,7 +278,7 @@ export interface StepRecord {
   nextIntent?: string;
   expectedOutcome?: string;
   action?: AgentAction;
-  actionResult?: ToolResult;
+  actionResult?: ActionResult;
   snapshotSummary?: string;
   timestamp: number;
 }
@@ -278,14 +295,16 @@ export interface DebugLogEntry {
 
 export interface ToolCallRecord {
   toolName: ToolName;
-  phase: AgentPhase;
-  status: "success" | "error";
+  stepId?: string;
+  phase?: AgentPhase;
+  status: ToolExecutionStatus | "error";
   summary: string;
   timestamp: number;
 }
 
 export interface FailureRecord {
-  phase: AgentPhase;
+  phase?: AgentPhase;
+  stepId?: string;
   toolName?: ToolName;
   message: string;
   timestamp: number;
@@ -295,7 +314,7 @@ export interface SessionMemory {
   goal: string;
   taskType: TaskType;
   currentPhase: AgentPhase;
-  plan: string[];
+  plan: PlanStep[];
   taskPlan?: TaskPlan;
   taskSpec?: TaskSpec;
   subtaskResults: SubtaskResult[];
@@ -324,6 +343,7 @@ export interface SessionMemory {
     tabId: number;
     pageType: PageType;
     status: RuntimeStatus;
+    currentStepId?: string;
     currentTool?: ToolName;
     currentStep: number;
     llmRetryCount: number;
@@ -357,12 +377,13 @@ export interface SessionPublicState {
   subtaskResults?: SubtaskResult[];
   status: RuntimeStatus;
   currentPhase?: AgentPhase;
+  currentStepId?: string;
   currentTool?: ToolName;
   currentStep: number;
-  plan: string[];
+  plan: PlanStep[];
   stepSummary?: string;
   lastAction?: AgentAction;
-  lastActionResult?: ToolResult;
+  lastActionResult?: ActionResult;
   items: ExtractedItem[];
   rawItemCount?: number;
   researchCandidates?: ResearchCandidate[];

@@ -109,7 +109,7 @@ export const summaryResultSchema = z.object({
   markdown: z.string().min(1),
 });
 
-export const toolResultSchema = z.object({
+export const actionResultSchema = z.object({
   success: z.boolean(),
   actionType: z.union([
     z.literal("CLICK"),

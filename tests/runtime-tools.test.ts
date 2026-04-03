@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildRuleBasedSummary, getToolDefinition } from "../src/background/tools";
 import { compileSearchTask } from "../src/background/query-compiler";
-import type { SessionMemory, SnapshotData, ToolResult } from "../src/shared/types";
+import type { ActionResult, SessionMemory, SnapshotData } from "../src/shared/types";
 
 function createSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
   return {
@@ -104,7 +104,7 @@ describe("runtime tool helpers", () => {
 
 describe("runtime recovery path", () => {
   it("keeps scroll recovery available when results are insufficient but the page is ready", async () => {
-    const tool = getToolDefinition("filterCandidates");
+    const tool = getToolDefinition("collectCommerceCandidates");
     const memory = createMemory({
       taskSpec: {
         taskType: "commerce_search",
@@ -119,7 +119,7 @@ describe("runtime recovery path", () => {
       rawExtractedItems: [{ title: "MacBook Air 13", priceText: "7999.00", url: "https://item.jd.com/1.html" }],
     });
     const snapshot = createSnapshot();
-    const scrollResult: ToolResult = {
+    const scrollResult: ActionResult = {
       success: true,
       actionType: "SCROLL",
       message: "已向下滚动",
@@ -157,7 +157,7 @@ describe("runtime recovery path", () => {
 
 describe("search page query matching", () => {
   it("accepts a matching search result page even when the search input is missing", async () => {
-    const tool = getToolDefinition("searchInSite");
+    const tool = getToolDefinition("openSearchResults");
     const memory = createMemory({
       currentPhase: "searching",
       taskType: "commerce_search",
@@ -207,7 +207,7 @@ describe("search page query matching", () => {
   });
 
   it("navigates directly to the JD search url when the current page does not match the query", async () => {
-    const tool = getToolDefinition("searchInSite");
+    const tool = getToolDefinition("openSearchResults");
     const memory = createMemory({
       currentPhase: "searching",
       taskType: "commerce_search",
