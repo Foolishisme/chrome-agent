@@ -40,8 +40,9 @@
 2. 当前需要的静态初始 plan 是什么
 3. 哪些能力值得成为 `runtime-visible tool`
 4. 哪些步骤应留在 tool 内部
-5. 当前 step 需要记什么结构化状态到 memory
-6. 这次变更应更新哪一份文档
+5. 当前是否已有对应的线程实例位于 `doc/threads/active/`
+6. 当前 step 需要记什么结构化状态到 memory
+7. 这次变更应更新哪一份文档
 
 ## 5. 可直接复制给 agent 的提示
 

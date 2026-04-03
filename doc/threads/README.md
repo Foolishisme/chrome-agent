@@ -2,7 +2,7 @@
 
 ## 1. 定位
 
-本目录只存放线程级文档。
+本目录只存放线程级协议与线程实例。
 
 线程文档用于承载：
 
@@ -19,36 +19,55 @@
 - `doc/acceptance.md`
 - `doc/pitfalls.md`
 
-## 2. 适用规则
+## 2. 目录结构
+
+当前统一结构为：
+
+- `templates/`
+- `active/`
+- `closed/`
+
+语义：
+
+- `templates/`：线程模板
+- `active/`：当前仍在推进的线程实例
+- `closed/`：本轮已关闭但仍可能短期回看的线程实例
+- `doc/history/threads/`：彻底归档后的长期历史
+
+## 3. 线程类型
 
 - `work`：用于执行、修 bug、落地实现
 - `design`：用于思考、设计、方案取舍
-- `review`：默认不单独建文档；只有 review 变成多轮追踪事项时再新增
+- `review`：用于裁判线程、结论线程、风险判定线程
 
-## 3. 命名规则
+## 4. 命名规则
 
 建议文件名：
 
 - `work-<topic>.md`
 - `design-<topic>.md`
+- `review-<topic>.md`
 
 例如：
 
 - `work-runtime-loop-stability.md`
 - `work-google-blocked-page.md`
 - `design-site-adapter-boundary.md`
+- `review-runtime-contract.md`
 
-## 4. 使用顺序
+## 5. 使用顺序
 
 新线程启动时建议按以下顺序读取：
 
 1. `doc/thread_bootstrap.md`
-2. 需要的全局文档
-3. 对应的线程文档
+2. 对应的全局文档
+3. `doc/threads/active/` 下的对应线程实例
+4. 如无实例，再从 `doc/threads/templates/` 复制模板创建
 
-## 5. 归档规则
+## 6. 归档规则
 
-- 线程完成、废弃或被合并后，移动到 `doc/history/threads/`
+- 线程完成后，先移动到 `doc/threads/closed/`
+- 当前工作周期彻底结束后，再从 `doc/threads/closed/` 移动到 `doc/history/threads/`
 - 已成为项目事实的结论，再同步回对应全局文档
 - 未成为项目事实的临时讨论，不写入 `doc/status.md`
 
