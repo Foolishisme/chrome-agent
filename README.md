@@ -118,6 +118,17 @@
 - 当前线程已通过用户实机验证
 - 具体模块级验收状态以 [doc/acceptance.md](D:/code/browser-agent-mvp/doc/acceptance.md) 为准
 
+## 下一步计划
+
+这一块只用于提醒当前主线还没收口的事情，避免后续遗忘：
+
+1. 补 `no progress / 连续失败` 护栏。
+2. 补 `commerce_search` 的实机闭环记录。
+3. 专门验证 `stop / error` 路径下结果区的最终展示。
+4. 做 Gemini / DeepSeek provider 的联调确认。
+5. 继续收口高层 tool 返回契约，逐步减少 `currentPhase` 兼容依赖。
+6. 根据后续真机反馈，再决定是否继续细拆 tool，而不是提前拆分。
+
 ## 开发命令
 
 安装依赖：
