@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { LIMITS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
-import { queryRefinementSchema, summaryResultSchema, taskRouteSchema } from "../shared/schema";
-import type { ExtractedItem, PublicResearchTaskSpec, ResearchSourceResult, SearchTaskSpec, TaskType } from "../shared/types";
+import { nextToolSelectionSchema, queryRefinementSchema, summaryResultSchema, taskRouteSchema } from "../shared/schema";
+import type { ExtractedItem, PlanStep, PublicResearchTaskSpec, ResearchSourceResult, SearchTaskSpec, TaskType, ToolName } from "../shared/types";
 import {
   buildTaskRoutePrompt,
   buildCommerceQueryRefinementPrompt,
   buildCommerceSummaryPrompt,
+  buildNextToolPrompt,
   buildResearchQueryRefinementPrompt,
   buildResearchSummaryPrompt,
 } from "./prompting";
@@ -441,4 +442,55 @@ export async function generateResearchSummary(
     model: response.model,
     provider: response.provider,
   };
+}
+
+export async function chooseNextTool(
+  options: {
+    goal: string;
+    taskType: TaskType;
+    currentStep: PlanStep;
+    budgetLow?: boolean;
+    currentFacts?: Record<string, unknown>;
+    unresolvedIssues?: string[];
+  },
+  requestOptions: RequestOptions = {},
+): Promise<{
+  toolName: ToolName;
+  reason: string;
+  source: "llm-lite" | "rule";
+  model?: string;
+  provider?: ProviderName;
+}> {
+  const fallbackTool = options.currentStep.allowedTools[0];
+  if (!fallbackTool) {
+    throw new RuntimeError("Current plan step does not expose any allowed tools.", "NO_ALLOWED_TOOLS");
+  }
+
+  try {
+    const response = await requestProviderJson(
+      buildNextToolPrompt(options),
+      nextToolSelectionSchema,
+      "simple",
+      requestOptions,
+    );
+
+    const selected = response.data.toolName as ToolName;
+    if (!options.currentStep.allowedTools.includes(selected)) {
+      throw new RuntimeError("The model selected a tool outside allowedTools.", "TOOL_NOT_ALLOWED");
+    }
+
+    return {
+      toolName: selected,
+      reason: response.data.reason,
+      source: "llm-lite",
+      model: response.model,
+      provider: response.provider,
+    };
+  } catch (error) {
+    return {
+      toolName: fallbackTool,
+      reason: error instanceof Error ? `fallback to first allowed tool: ${error.message}` : "fallback to first allowed tool",
+      source: "rule",
+    };
+  }
 }

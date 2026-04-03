@@ -1,13 +1,13 @@
 import { LIMITS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
 import type { ExecuteActionResponse, RequestSnapshotMessage, SnapshotResponse, StartSessionResponse } from "../shared/protocol";
-import { actionResultSchema } from "../shared/schema";
+import { toolResultSchema } from "../shared/schema";
 import type {
-  ActionResult,
   AgentAction,
   DebugLogEntry,
   DebugLogLevel,
   PlanStep,
+  PlanStepStatus,
   SessionMemory,
   SessionPublicState,
   SnapshotData,
@@ -17,9 +17,9 @@ import type {
   ToolResult,
 } from "../shared/types";
 import { summarizeSnapshot } from "./guards";
-import { classifyTaskType } from "./llm-client";
-import { buildTaskPlan, detectTaskTypeWithLiteModel } from "./query-compiler";
-import { getToolDefinition } from "./tools";
+import { chooseNextTool, classifyTaskType } from "./llm-client";
+import { buildPlanSteps, buildTaskPlan, detectTaskTypeWithLiteModel } from "./query-compiler";
+import { getToolDefinition, type ToolExecutionResult } from "./tools";
 
 const JD_HOME_URL = "https://www.jd.com/";
 const GOOGLE_HOME_URL = "https://www.google.com/";
@@ -29,7 +29,7 @@ const MAX_FAILURE_ENTRIES = 12;
 const MAX_TOOL_HISTORY_ENTRIES = 20;
 const TIMELINE_LIMIT = 8;
 const POST_ACTION_SETTLE_MS = {
-  navigateLike: LIMITS.PAGE_READY_WAIT_MS,
+  navigateLike: 1_000,
   scroll: 400,
 } as const;
 
@@ -90,6 +90,76 @@ function formatDetail(detail: unknown): string | undefined {
   }
 }
 
+function getElapsedMs(memory: SessionMemory, now = Date.now()) {
+  return Math.max(0, now - memory.runtimeMeta.startedAt);
+}
+
+function buildTerminalFallbackOutput(memory: SessionMemory, overallStatus: "partial" | "failed", reason: string) {
+  const issueSet = new Set([...(memory.unresolvedIssues ?? []), reason].filter(Boolean));
+  const unresolvedIssues = Array.from(issueSet);
+  const usedSubtasks = memory.plan
+    .filter((step) => step.status !== "pending")
+    .map((step) => step.stepId);
+  const lines = [
+    "## Status",
+    overallStatus,
+    "",
+    "## Summary",
+    reason,
+    "",
+    "## Progress",
+    `- current step: ${memory.runtimeMeta.currentStep}`,
+    `- current tool: ${memory.runtimeMeta.currentTool ?? "none"}`,
+    `- elapsed ms: ${getElapsedMs(memory)}`,
+  ];
+
+  if (memory.taskType === "commerce_search") {
+    lines.push(`- kept items: ${memory.extractedItems.length}`);
+  } else {
+    lines.push(`- source results: ${memory.researchSources.length}`);
+  }
+
+  lines.push("", "## Unresolved Issues");
+  if (unresolvedIssues.length > 0) {
+    for (const issue of unresolvedIssues) {
+      lines.push(`- ${issue}`);
+    }
+  } else {
+    lines.push("- none");
+  }
+
+  return {
+    finalSummary: reason,
+    finalOutput: lines.join("\n"),
+    finalResult: {
+      overallStatus,
+      summaryMarkdown: lines.join("\n"),
+      usedSubtasks,
+      unresolvedIssues,
+    },
+  };
+}
+
+function ensureTerminalResult(memory: SessionMemory, reason: string) {
+  if (memory.finalResult && memory.finalOutput) {
+    return;
+  }
+
+  const overallStatus =
+    memory.taskType === "commerce_search"
+      ? memory.extractedItems.length > 0
+        ? "partial"
+        : "failed"
+      : memory.researchSources.length > 0
+        ? "partial"
+        : "failed";
+  const terminal = buildTerminalFallbackOutput(memory, overallStatus, reason);
+  memory.finalSummary = terminal.finalSummary;
+  memory.finalOutput = terminal.finalOutput;
+  memory.finalResult = terminal.finalResult;
+  memory.unresolvedIssues = terminal.finalResult.unresolvedIssues;
+}
+
 function toPublicState(memory: SessionMemory): SessionPublicState {
   const lastStep = memory.stepHistory.at(-1);
   return {
@@ -104,6 +174,8 @@ function toPublicState(memory: SessionMemory): SessionPublicState {
     currentStepId: memory.runtimeMeta.currentStepId,
     currentTool: memory.runtimeMeta.currentTool,
     currentStep: memory.runtimeMeta.currentStep,
+    budgetLow: memory.runtimeMeta.budgetLow,
+    elapsedMs: getElapsedMs(memory),
     plan: memory.plan,
     stepSummary: memory.liveStepSummary ?? lastStep?.stepSummary,
     lastAction: lastStep?.action,
@@ -142,6 +214,7 @@ async function waitForTabComplete(tabId: number, timeoutMs = NAVIGATION_TIMEOUT_
       if (updatedTabId !== tabId) {
         return;
       }
+
       if (changeInfo.status === "complete") {
         clearTimeout(timeoutId);
         chrome.tabs.onUpdated.removeListener(listener);
@@ -217,7 +290,7 @@ async function sendMessageThroughBridge<TResponse>(
       const bridge = (globalThis as typeof globalThis & {
         __browserAgentMvpDirectBridge?: {
           scanCurrentPage: () => SnapshotData;
-          executeCurrentAction: (action: AgentAction) => Promise<ActionResult>;
+          executeCurrentAction: (action: AgentAction) => Promise<ToolResult>;
         };
       }).__browserAgentMvpDirectBridge;
 
@@ -306,11 +379,43 @@ function getPostActionSettleDelay(action: AgentAction) {
   return 0;
 }
 
+export function evaluateRuntimeBudget(memory: SessionMemory, now = Date.now()) {
+  const elapsedMs = getElapsedMs(memory, now);
+  const budgetLow = memory.runtimeMeta.currentStep >= LIMITS.SOFT_STEP_LIMIT || elapsedMs >= LIMITS.SOFT_ELAPSED_MS;
+
+  if (elapsedMs >= LIMITS.MAX_ELAPSED_MS) {
+    return {
+      elapsedMs,
+      budgetLow,
+      hardStopCode: "MAX_ELAPSED_REACHED",
+      hardStopReason: "Exceeded the maximum runtime duration.",
+    };
+  }
+
+  if (memory.runtimeMeta.currentStep >= LIMITS.MAX_TOTAL_STEPS) {
+    return {
+      elapsedMs,
+      budgetLow,
+      hardStopCode: "MAX_STEPS_REACHED",
+      hardStopReason: "Exceeded the maximum number of runtime steps.",
+    };
+  }
+
+  return {
+    elapsedMs,
+    budgetLow,
+  };
+}
+
 function getCurrentPlanStep(memory: SessionMemory): PlanStep | undefined {
   return memory.plan.find((step) => step.status === "running") ?? memory.plan.find((step) => step.status === "pending");
 }
 
-function markCurrentPlanStepRunning(memory: SessionMemory): PlanStep {
+function updateCurrentStepId(memory: SessionMemory) {
+  memory.runtimeMeta.currentStepId = getCurrentPlanStep(memory)?.stepId;
+}
+
+function markPlanStepRunning(memory: SessionMemory): PlanStep {
   const step = getCurrentPlanStep(memory);
   if (!step) {
     throw new RuntimeError("No runnable plan step is available.", "PLAN_STEP_MISSING");
@@ -320,29 +425,40 @@ function markCurrentPlanStepRunning(memory: SessionMemory): PlanStep {
     step.status = "running";
   }
 
-  memory.runtimeMeta.currentStepId = step.stepId;
+  updateCurrentStepId(memory);
   return step;
 }
 
-function selectAllowedTool(step: PlanStep): ToolName {
-  const selected = step.allowedTools[0];
-  if (!selected) {
-    throw new RuntimeError(`Plan step ${step.stepId} has no allowed tools.`, "PLAN_STEP_NO_ALLOWED_TOOLS");
+function setPlanStepStatus(memory: SessionMemory, stepId: string, status: PlanStepStatus) {
+  const step = memory.plan.find((item) => item.stepId === stepId);
+  if (step) {
+    step.status = status;
   }
-  return selected;
+  updateCurrentStepId(memory);
 }
 
-function applyToolResultToPlan(memory: SessionMemory, stepId: string, result: ToolResult) {
-  const step = memory.plan.find((item) => item.stepId === stepId);
-  if (!step) {
-    memory.runtimeMeta.currentStepId = getCurrentPlanStep(memory)?.stepId;
-    return;
+function resolveStepStatus(step: PlanStep, result: ToolExecutionResult): PlanStepStatus {
+  switch (step.stepId) {
+    case "compile-commerce-task":
+    case "compile-research-task":
+    case "search-commerce-results":
+    case "search-research-results":
+      return "succeeded";
+    case "extract-commerce-results":
+    case "extract-research-results":
+      return result.nextPhase === "filtering" ? "succeeded" : "running";
+    case "filter-commerce-results":
+      return result.nextPhase === "aggregating" ? "succeeded" : "running";
+    case "filter-research-results":
+      return result.nextPhase === "reading" || result.nextPhase === "aggregating" ? "succeeded" : "running";
+    case "read-research-results":
+      return result.nextPhase === "aggregating" ? "succeeded" : "running";
+    case "aggregate-commerce-results":
+    case "aggregate-research-results":
+      return result.nextPhase === "done" || result.stop ? "succeeded" : "running";
+    default:
+      return result.stop ? "succeeded" : "running";
   }
-
-  step.status =
-    result.stepStatus ??
-    (result.status === "fatal_error" ? "failed" : result.status === "retryable_error" ? "running" : "succeeded");
-  memory.runtimeMeta.currentStepId = getCurrentPlanStep(memory)?.stepId;
 }
 
 export class BrowserAgentRuntime {
@@ -376,6 +492,7 @@ export class BrowserAgentRuntime {
         };
       },
     });
+
     const taskType = route.taskType;
     const { tab, navigatedToHome, fromUrl } = await getOrPrepareSessionTab(taskType);
     const sessionId = createSessionId();
@@ -384,7 +501,7 @@ export class BrowserAgentRuntime {
       goal,
       taskType,
       currentPhase: "planning",
-      plan: initialTaskPlan.steps,
+      plan: buildPlanSteps(initialTaskPlan.subtasks),
       taskPlan: initialTaskPlan,
       subtaskResults: [],
       toolHistory: [],
@@ -412,6 +529,7 @@ export class BrowserAgentRuntime {
         currentStepId: undefined,
         currentTool: undefined,
         currentStep: 0,
+        budgetLow: false,
         llmRetryCount: 0,
         actionRetryCount: 0,
         pageReadyRetryCount: 0,
@@ -420,6 +538,7 @@ export class BrowserAgentRuntime {
         startedAt: Date.now(),
       },
     };
+    updateCurrentStepId(memory);
 
     const session: ActiveSession = {
       memory,
@@ -464,6 +583,7 @@ export class BrowserAgentRuntime {
     appendLog(this.activeSession, "runtime", "warn", "Stop requested.");
     this.activeSession.stopped = true;
     this.activeSession.abortController.abort();
+    ensureTerminalResult(this.activeSession.memory, "The session was stopped before completion.");
     this.activeSession.memory.runtimeMeta.status = "idle";
     this.activeSession.memory.runtimeMeta.currentTool = undefined;
     this.activeSession.memory.liveStepSummary = "Session stopped.";
@@ -491,6 +611,7 @@ export class BrowserAgentRuntime {
       session.memory.runtimeMeta.status = "error";
       session.memory.runtimeMeta.currentTool = undefined;
       session.memory.lastError = message;
+      ensureTerminalResult(session.memory, message);
       session.memory.liveStepSummary = "Session failed.";
       session.lastPublicState = toPublicState(session.memory);
       await broadcastUpdate(session.lastPublicState, true);
@@ -505,23 +626,65 @@ export class BrowserAgentRuntime {
         return;
       }
 
-      if (session.memory.runtimeMeta.currentStep >= LIMITS.MAX_STEPS) {
-        throw new RuntimeError("Exceeded the maximum number of runtime steps.", "MAX_STEPS_REACHED");
+      const budget = evaluateRuntimeBudget(session.memory);
+      if (budget.budgetLow && !session.memory.runtimeMeta.budgetLow) {
+        session.memory.runtimeMeta.budgetLow = true;
+        appendLog(session, "runtime", "warn", "Runtime budget is getting low.", {
+          currentStep: session.memory.runtimeMeta.currentStep,
+          elapsedMs: budget.elapsedMs,
+        });
       }
 
-      const planStep = markCurrentPlanStepRunning(session.memory);
-      const toolName = selectAllowedTool(planStep);
+      if (budget.hardStopReason) {
+        throw new RuntimeError(budget.hardStopReason, budget.hardStopCode ?? "RUNTIME_BUDGET_EXHAUSTED");
+      }
+
+      const planStep = markPlanStepRunning(session.memory);
+      const toolName = await this.chooseToolForStep(session, planStep);
       const result = await this.runTool(session, planStep, toolName);
-      if (result.stop || session.memory.currentPhase === "done") {
+      if (result.stop || result.nextPhase === "done") {
         return;
       }
     }
   }
 
-  private async runTool(session: ActiveSession, planStep: PlanStep, toolName: ToolName): Promise<ToolResult> {
+  private async chooseToolForStep(session: ActiveSession, step: PlanStep): Promise<ToolName> {
+    const selected = await chooseNextTool(
+      {
+        goal: session.memory.goal,
+        taskType: session.memory.taskType,
+        currentStep: step,
+        budgetLow: session.memory.runtimeMeta.budgetLow,
+        currentFacts: session.memory.currentFacts,
+        unresolvedIssues: session.memory.unresolvedIssues,
+      },
+      {
+        signal: session.abortController.signal,
+      },
+    );
+
+    if (!step.allowedTools.includes(selected.toolName)) {
+      throw new RuntimeError("Selected tool is not allowed for the current step.", "TOOL_NOT_ALLOWED");
+    }
+
+    appendLog(session, "llm", "info", "Selected the next tool for the current plan step.", {
+      stepId: step.stepId,
+      allowedTools: step.allowedTools,
+      selectedTool: selected.toolName,
+      reason: selected.reason,
+      source: selected.source,
+      provider: selected.provider,
+      model: selected.model,
+    });
+
+    return selected.toolName;
+  }
+
+  private async runTool(session: ActiveSession, planStep: PlanStep, toolName: ToolName): Promise<ToolExecutionResult> {
     const tool = getToolDefinition(toolName);
     const phase = session.memory.currentPhase;
     session.memory.runtimeMeta.currentTool = toolName;
+    session.memory.runtimeMeta.currentStep += 1;
     appendLog(session, "runtime", "info", "Running high-level tool.", {
       stepId: planStep.stepId,
       stepGoal: planStep.goal,
@@ -545,22 +708,15 @@ export class BrowserAgentRuntime {
         pushState: (stepSummary) => this.pushState(session, stepSummary),
       });
 
-      session.memory.currentFacts = {
-        ...session.memory.currentFacts,
-        ...result.facts,
-      };
-      if (result.nextPhase) {
-        session.memory.currentPhase = result.nextPhase;
-      }
-      applyToolResultToPlan(session.memory, planStep.stepId, result);
+      session.memory.currentPhase = result.nextPhase;
       session.memory.runtimeMeta.currentTool = undefined;
+      setPlanStepStatus(session.memory, planStep.stepId, resolveStepStatus(planStep, result));
       session.memory.toolHistory = [
         ...session.memory.toolHistory,
         {
           toolName,
-          stepId: planStep.stepId,
           phase,
-          status: result.status,
+          status: "success",
           summary: result.summary,
           timestamp: Date.now(),
         },
@@ -569,40 +725,34 @@ export class BrowserAgentRuntime {
         ...session.memory.subtaskResults,
         {
           subtaskId: planStep.stepId,
-          status: result.status === "success" ? "success" : result.status === "partial" ? "partial" : "failed",
+          status: planStep.status === "succeeded" ? "success" : "partial",
           data: {
-            stepId: planStep.stepId,
             phase,
             toolName,
             summary: result.summary,
-            outputs: result.outputs,
           },
-          diagnostics: result.retryHint ? [result.retryHint] : [],
+          diagnostics: [],
         },
       ];
       appendLog(session, "runtime", "info", "High-level tool completed.", {
         stepId: planStep.stepId,
         toolName,
         nextPhase: result.nextPhase,
+        stepStatus: session.memory.plan.find((step) => step.stepId === planStep.stepId)?.status,
         summary: result.summary,
-        status: result.status,
       });
       session.lastPublicState = toPublicState(session.memory);
       await broadcastUpdate(session.lastPublicState);
       return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown tool error.";
-      const currentStep = session.memory.plan.find((step) => step.stepId === planStep.stepId);
-      if (currentStep) {
-        currentStep.status = error instanceof RuntimeError && error.code === "SEARCH_BLOCKED" ? "blocked" : "failed";
-      }
-      session.memory.runtimeMeta.currentStepId = getCurrentPlanStep(session.memory)?.stepId;
       session.memory.runtimeMeta.currentTool = undefined;
+      const status = error instanceof RuntimeError && error.code === "SEARCH_BLOCKED" ? "blocked" : "failed";
+      setPlanStepStatus(session.memory, planStep.stepId, status);
       session.memory.toolHistory = [
         ...session.memory.toolHistory,
         {
           toolName,
-          stepId: planStep.stepId,
           phase,
           status: "error",
           summary: message,
@@ -615,7 +765,6 @@ export class BrowserAgentRuntime {
           subtaskId: planStep.stepId,
           status: "failed",
           data: {
-            stepId: planStep.stepId,
             phase,
             toolName,
           },
@@ -626,7 +775,6 @@ export class BrowserAgentRuntime {
         ...session.memory.failures,
         {
           phase,
-          stepId: planStep.stepId,
           toolName,
           message,
           timestamp: Date.now(),
@@ -710,7 +858,7 @@ export class BrowserAgentRuntime {
     session: ActiveSession,
     action: AgentAction,
     stepSummary: string,
-  ): Promise<ActionResult> {
+  ): Promise<ToolResult> {
     session.memory.runtimeMeta.status = "acting";
     await this.pushState(session, stepSummary);
     appendLog(session, "runtime", "info", "Executing atomic action.", action);
@@ -724,7 +872,7 @@ export class BrowserAgentRuntime {
         throw new RuntimeError(response.error ?? "Action execution failed.", "ACTION_EXECUTION_ERROR");
       }
       session.memory.runtimeMeta.actionRetryCount = 0;
-      return actionResultSchema.parse(response.result);
+      return toolResultSchema.parse(response.result);
     } catch (error) {
       if (session.stopped) {
         throw new RuntimeError("The session was stopped.", "SESSION_STOPPED");
@@ -786,13 +934,14 @@ export class BrowserAgentRuntime {
       nextIntent?: string;
       expectedOutcome?: string;
       action?: AgentAction;
-      actionResult?: ActionResult;
+      actionResult?: ToolResult;
       snapshot?: SnapshotData;
       snapshotSummary?: string;
     },
   ) {
     const record: StepRecord = {
       step: session.memory.stepHistory.length + 1,
+      planStepId: session.memory.runtimeMeta.currentStepId,
       status: session.memory.runtimeMeta.status,
       stepSummary: options.stepSummary,
       nextIntent: options.nextIntent,

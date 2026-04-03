@@ -104,12 +104,31 @@ export const taskRouteSchema = z.object({
   reason: z.string().min(1),
 });
 
+export const nextToolSelectionSchema = z.object({
+  toolName: z.union([
+    z.literal("compileTaskSpec"),
+    z.literal("compileTask"),
+    z.literal("openSearchResults"),
+    z.literal("searchInSite"),
+    z.literal("collectCommerceCandidates"),
+    z.literal("collectResearchCandidates"),
+    z.literal("extractStructuredResults"),
+    z.literal("filterCandidates"),
+    z.literal("readResearchSourceFacts"),
+    z.literal("readPageFacts"),
+    z.literal("finalizeCommerceResult"),
+    z.literal("finalizeResearchResult"),
+    z.literal("aggregateTaskResults"),
+  ]),
+  reason: z.string().min(1),
+});
+
 export const summaryResultSchema = z.object({
   summary: z.string().min(1),
   markdown: z.string().min(1),
 });
 
-export const actionResultSchema = z.object({
+export const toolResultSchema = z.object({
   success: z.boolean(),
   actionType: z.union([
     z.literal("CLICK"),

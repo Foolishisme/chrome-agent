@@ -1,7 +1,6 @@
 import { LIMITS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
 import type {
-  ActionResult,
   AgentAction,
   AgentPhase,
   CommerceTaskSpec,
@@ -16,7 +15,7 @@ import type {
   ToolName,
   ToolResult,
 } from "../shared/types";
-import { compileTaskSpec } from "./query-compiler";
+import { buildPlanSteps, compileTaskSpec } from "./query-compiler";
 import {
   generateCommerceSummary,
   generateResearchSummary,
@@ -30,7 +29,7 @@ type StepOptions = {
   nextIntent?: string;
   expectedOutcome?: string;
   action?: AgentAction;
-  actionResult?: ActionResult;
+  actionResult?: ToolResult;
   snapshot?: SnapshotData;
   snapshotSummary?: string;
 };
@@ -40,16 +39,22 @@ export interface ToolExecutionContext {
   signal: AbortSignal;
   scanPage(): Promise<SnapshotData>;
   ensureUsableSnapshot(): Promise<SnapshotData>;
-  executeAction(action: AgentAction, stepSummary: string): Promise<ActionResult>;
+  executeAction(action: AgentAction, stepSummary: string): Promise<ToolResult>;
   settleAfterAction(action: AgentAction): Promise<void>;
   appendLog(source: DebugLogEntry["source"], level: DebugLogLevel, message: string, detail?: unknown): void;
   recordStep(options: StepOptions): void;
   pushState(stepSummary?: string): Promise<void>;
 }
 
+export interface ToolExecutionResult {
+  nextPhase: AgentPhase;
+  summary: string;
+  stop?: boolean;
+}
+
 export interface AgentToolDefinition {
   name: ToolName;
-  run(context: ToolExecutionContext): Promise<ToolResult>;
+  run(context: ToolExecutionContext): Promise<ToolExecutionResult>;
 }
 
 function normalizeText(text: string | undefined) {
@@ -249,35 +254,7 @@ function isResearchTask(taskSpec: TaskSpec | undefined): taskSpec is PublicResea
   return !!taskSpec && taskSpec.taskType === "public_research";
 }
 
-function createToolResult(
-  status: ToolResult["status"],
-  summary: string,
-  options: {
-    outputs?: Record<string, unknown>;
-    artifacts?: string[];
-    facts?: Record<string, unknown>;
-    errorCode?: string;
-    retryHint?: string;
-    stepStatus?: ToolResult["stepStatus"];
-    nextPhase?: AgentPhase;
-    stop?: boolean;
-  } = {},
-): ToolResult {
-  return {
-    status,
-    summary,
-    outputs: options.outputs ?? {},
-    artifacts: options.artifacts ?? [],
-    facts: options.facts ?? {},
-    errorCode: options.errorCode,
-    retryHint: options.retryHint,
-    stepStatus: options.stepStatus,
-    nextPhase: options.nextPhase,
-    stop: options.stop,
-  };
-}
-
-async function recoverByScroll(context: ToolExecutionContext, snapshot: SnapshotData, reason: string): Promise<ToolResult> {
+async function recoverByScroll(context: ToolExecutionContext, snapshot: SnapshotData, reason: string): Promise<ToolExecutionResult> {
   const resultList = snapshot.pageFacts.resultList;
   if (!resultList?.present || resultList.emptyState) {
     throw new RuntimeError(reason, "NO_RECOVERABLE_RESULTS");
@@ -301,7 +278,6 @@ async function recoverByScroll(context: ToolExecutionContext, snapshot: Snapshot
   await context.settleAfterAction(action);
   const snapshotAfter = await context.scanPage();
 
-  context.memory.runtimeMeta.currentStep += 1;
   context.memory.currentPhase = "extracting";
   context.recordStep({
     stepSummary: "Scroll recovery completed.",
@@ -312,23 +288,14 @@ async function recoverByScroll(context: ToolExecutionContext, snapshot: Snapshot
     snapshot: snapshotAfter,
   });
 
-  return createToolResult("partial", reason, {
-    outputs: {
-      recoveryAction: "SCROLL",
-      recoveryCount: context.memory.runtimeMeta.recoveryCount,
-    },
-    facts: {
-      recoveryAction: "SCROLL",
-      recoveryCount: context.memory.runtimeMeta.recoveryCount,
-    },
-    retryHint: "Retry the same collection step after the list refreshes.",
-    stepStatus: "running",
+  return {
     nextPhase: "extracting",
-  });
+    summary: reason,
+  };
 }
 
-const compileTaskSpecTool: AgentToolDefinition = {
-  name: "compileTaskSpec",
+const compileTaskTool: AgentToolDefinition = {
+  name: "compileTask",
   async run(context) {
     context.memory.runtimeMeta.status = "planning";
     context.memory.currentPhase = "planning";
@@ -368,10 +335,8 @@ const compileTaskSpecTool: AgentToolDefinition = {
 
     context.memory.taskType = compiled.taskType;
     context.memory.taskSpec = compiled.taskSpec;
-    context.memory.taskPlan = {
-      ...compiled.taskPlan,
-      steps: context.memory.plan,
-    };
+    context.memory.taskPlan = compiled.taskPlan;
+    context.memory.plan = buildPlanSteps(compiled.taskPlan.subtasks);
     context.memory.currentPhase = "searching";
     context.memory.currentFacts = {
       ...context.memory.currentFacts,
@@ -390,23 +355,15 @@ const compileTaskSpecTool: AgentToolDefinition = {
     });
     context.appendLog("runtime", "info", "Structured task created.", compiled);
 
-    return createToolResult("success", `Query ready: ${compiled.taskSpec.searchQuery}`, {
-      outputs: {
-        taskType: compiled.taskType,
-        searchQuery: compiled.taskSpec.searchQuery,
-      },
-      facts: {
-        taskType: compiled.taskType,
-        searchQuery: compiled.taskSpec.searchQuery,
-      },
-      stepStatus: "succeeded",
+    return {
       nextPhase: "searching",
-    });
+      summary: `Query ready: ${compiled.taskSpec.searchQuery}`,
+    };
   },
 };
 
-const openSearchResultsTool: AgentToolDefinition = {
-  name: "openSearchResults",
+const searchInSiteTool: AgentToolDefinition = {
+  name: "searchInSite",
   async run(context) {
     if (!context.memory.taskSpec) {
       throw new RuntimeError("Task spec is missing before search.", "TASK_SPEC_MISSING");
@@ -423,18 +380,10 @@ const openSearchResultsTool: AgentToolDefinition = {
         searchQueryMatched: true,
       };
       context.appendLog("runtime", "info", "The target search results page is already open.");
-      return createToolResult("success", "Search page already matched the current query.", {
-        outputs: {
-          pageType: snapshot.pageType,
-          searchQueryMatched: true,
-        },
-        facts: {
-          pageType: snapshot.pageType,
-          searchQueryMatched: true,
-        },
-        stepStatus: "succeeded",
+      return {
         nextPhase: "extracting",
-      });
+        summary: "Search page already matched the current query.",
+      };
     }
 
     const action: AgentAction = {
@@ -459,7 +408,6 @@ const openSearchResultsTool: AgentToolDefinition = {
     context.memory.filterDiagnostics = undefined;
     context.memory.unresolvedIssues = [];
     context.memory.runtimeMeta.recoveryCount = 0;
-    context.memory.runtimeMeta.currentStep += 1;
     context.memory.currentPhase = "extracting";
     context.memory.nextIntent =
       context.memory.taskType === "commerce_search"
@@ -502,153 +450,80 @@ const openSearchResultsTool: AgentToolDefinition = {
       );
     }
 
-    return createToolResult("success", `Search submitted: ${context.memory.taskSpec.searchQuery}`, {
-      outputs: {
-        pageType: snapshotAfter.pageType,
-        lastSearchQuery: context.memory.taskSpec.searchQuery,
-      },
-      facts: {
-        pageType: snapshotAfter.pageType,
-        lastSearchQuery: context.memory.taskSpec.searchQuery,
-      },
-      stepStatus: "succeeded",
+    return {
       nextPhase: "extracting",
-    });
+      summary: `Search submitted: ${context.memory.taskSpec.searchQuery}`,
+    };
   },
 };
 
-const collectCommerceCandidatesTool: AgentToolDefinition = {
-  name: "collectCommerceCandidates",
+const extractStructuredResultsTool: AgentToolDefinition = {
+  name: "extractStructuredResults",
   async run(context) {
     const snapshot = await context.ensureUsableSnapshot();
-    if (!isCommerceTask(context.memory.taskSpec)) {
-      throw new RuntimeError("Commerce candidate collection requires a commerce task.", "INVALID_COMMERCE_COLLECTION");
-    }
 
-    if (snapshot.pageType !== "search") {
-      context.memory.currentPhase = "searching";
-      return createToolResult("retryable_error", `Expected a JD search page, received ${snapshot.pageType}.`, {
-        outputs: {
-          pageType: snapshot.pageType,
-        },
-        facts: {
-          pageType: snapshot.pageType,
-        },
-        errorCode: "SEARCH_PAGE_UNEXPECTED",
-        retryHint: "Re-open the search results page before collecting candidates again.",
-        stepStatus: "running",
-        nextPhase: "searching",
+    if (context.memory.taskType === "commerce_search") {
+      if (snapshot.pageType !== "search") {
+        context.memory.currentPhase = "searching";
+        return {
+          nextPhase: "searching",
+          summary: `Expected a JD search page, received ${snapshot.pageType}.`,
+        };
+      }
+
+      const action: AgentAction = {
+        type: "EXTRACT_LIST",
+        limit: isCommerceTask(context.memory.taskSpec) ? context.memory.taskSpec.extractLimit : undefined,
+      };
+      const extractResult = await context.executeAction(action, "Extract structured search result items.");
+      const snapshotAfter = await context.scanPage();
+
+      context.memory.rawExtractedItems = extractResult.items ?? [];
+      context.memory.lastError = extractResult.success ? undefined : extractResult.message;
+      context.memory.currentFacts = {
+        ...context.memory.currentFacts,
+        lastRawExtractedCount: extractResult.items?.length ?? 0,
+      };
+      context.recordStep({
+        stepSummary: "Structured extraction completed.",
+        nextIntent: "Filter the extracted candidates.",
+        expectedOutcome: "At least a few structured product items are available.",
+        action,
+        actionResult: extractResult,
+        snapshot: snapshotAfter,
       });
-    }
-
-    const action: AgentAction = {
-      type: "EXTRACT_LIST",
-      limit: context.memory.taskSpec.extractLimit,
-    };
-    const extractResult = await context.executeAction(action, "Extract structured search result items.");
-    const snapshotAfter = await context.scanPage();
-
-    context.memory.runtimeMeta.currentStep += 1;
-    context.memory.rawExtractedItems = extractResult.items ?? [];
-    context.memory.lastError = extractResult.success ? undefined : extractResult.message;
-    context.memory.currentFacts = {
-      ...context.memory.currentFacts,
-      lastRawExtractedCount: extractResult.items?.length ?? 0,
-    };
-    context.recordStep({
-      stepSummary: "Commerce candidates extracted.",
-      nextIntent: "Validate and keep the usable candidates.",
-      expectedOutcome: "At least a few structured product items are available.",
-      action,
-      actionResult: extractResult,
-      snapshot: snapshotAfter,
-    });
-    context.appendLog("content", extractResult.success ? "info" : "warn", "Commerce extraction finished.", {
-      message: extractResult.message,
-      itemCount: extractResult.items?.length ?? 0,
-      observation: extractResult.observation,
-    });
-
-    if (!extractResult.items?.length) {
-      return recoverByScroll(context, snapshotAfter, "No product items were extracted.");
-    }
-
-    const filtered = filterExtractedItems(context.memory.rawExtractedItems, context.memory.taskSpec);
-    context.memory.runtimeMeta.status = "observing";
-    context.memory.filterDiagnostics = filtered.diagnostics;
-    context.memory.extractedItems = filtered.items;
-    context.memory.lastError = undefined;
-    context.memory.recoveryHint = undefined;
-    context.memory.currentFacts = {
-      ...context.memory.currentFacts,
-      filteredCount: filtered.items.length,
-      budgetMatchedCount: filtered.diagnostics.budgetMatchedCount,
-    };
-    context.recordStep({
-      stepSummary: "Commerce candidates filtered.",
-      nextIntent: "Aggregate the final recommendation.",
-      expectedOutcome: "Enough clean candidates remain after filtering.",
-      snapshotSummary: JSON.stringify(filtered.diagnostics),
-    });
-    context.appendLog("runtime", "info", "Commerce filtering completed.", filtered.diagnostics);
-
-    const minimumSummaryCount = Math.max(1, Math.min(3, context.memory.taskSpec.topK));
-    if (filtered.items.length >= minimumSummaryCount) {
-      context.memory.currentPhase = "aggregating";
-      return createToolResult("success", `Prepared ${filtered.items.length} commerce candidates for aggregation.`, {
-        outputs: {
-          candidateCount: filtered.items.length,
-          filterDiagnostics: filtered.diagnostics,
-        },
-        facts: {
-          filteredCount: filtered.items.length,
-          budgetMatchedCount: filtered.diagnostics.budgetMatchedCount,
-        },
-        stepStatus: "succeeded",
-        nextPhase: "aggregating",
+      context.appendLog("content", extractResult.success ? "info" : "warn", "Structured extraction finished.", {
+        message: extractResult.message,
+        itemCount: extractResult.items?.length ?? 0,
+        observation: extractResult.observation,
       });
+
+      if (!extractResult.items?.length) {
+        return recoverByScroll(context, snapshotAfter, "No product items were extracted.");
+      }
+
+      context.memory.currentPhase = "filtering";
+      return {
+        nextPhase: "filtering",
+        summary: `Extracted ${extractResult.items.length} raw items.`,
+      };
     }
 
-    return recoverByScroll(
-      context,
-      snapshot,
-      `Only ${filtered.items.length} candidates remained after filtering. Need at least ${minimumSummaryCount}.`,
-    );
-  },
-};
-
-const collectResearchCandidatesTool: AgentToolDefinition = {
-  name: "collectResearchCandidates",
-  async run(context) {
-    if (!isResearchTask(context.memory.taskSpec)) {
-      throw new RuntimeError("Research candidate collection requires a public research task.", "INVALID_RESEARCH_COLLECTION");
-    }
-
-    const snapshot = await context.ensureUsableSnapshot();
     if (snapshot.pageType !== "google_search") {
       context.memory.currentPhase = "searching";
-      return createToolResult("retryable_error", `Expected a Google search page, received ${snapshot.pageType}.`, {
-        outputs: {
-          pageType: snapshot.pageType,
-        },
-        facts: {
-          pageType: snapshot.pageType,
-        },
-        errorCode: "SEARCH_PAGE_UNEXPECTED",
-        retryHint: "Re-open the Google results page before collecting research candidates again.",
-        stepStatus: "running",
+      return {
         nextPhase: "searching",
-      });
+        summary: `Expected a Google search page, received ${snapshot.pageType}.`,
+      };
     }
 
     const action: AgentAction = {
       type: "EXTRACT_SEARCH_RESULTS",
-      limit: context.memory.taskSpec.candidateLimit * 2,
+      limit: isResearchTask(context.memory.taskSpec) ? context.memory.taskSpec.candidateLimit * 2 : 10,
     };
     const extractResult = await context.executeAction(action, "Extract natural results from the Google search page.");
     const snapshotAfter = await context.scanPage();
 
-    context.memory.runtimeMeta.currentStep += 1;
     context.memory.researchCandidates = extractResult.researchCandidates ?? [];
     context.memory.lastError = extractResult.success ? undefined : extractResult.message;
     context.memory.currentFacts = {
@@ -656,20 +531,78 @@ const collectResearchCandidatesTool: AgentToolDefinition = {
       lastResearchCandidateCount: extractResult.researchCandidates?.length ?? 0,
     };
     context.recordStep({
-      stepSummary: "Research candidates extracted.",
+      stepSummary: "Google results extracted.",
       nextIntent: "Filter the extracted source candidates.",
       expectedOutcome: "Candidate sources are ready for filtering.",
       action,
       actionResult: extractResult,
       snapshot: snapshotAfter,
     });
-    context.appendLog("content", extractResult.success ? "info" : "warn", "Research extraction finished.", {
+    context.appendLog("content", extractResult.success ? "info" : "warn", "Google result extraction finished.", {
       message: extractResult.message,
       candidateCount: extractResult.researchCandidates?.length ?? 0,
       observation: extractResult.observation,
     });
 
-    const filtered = filterResearchCandidates(context.memory.researchCandidates, context.memory.taskSpec.candidateLimit);
+    context.memory.currentPhase = "filtering";
+    return {
+      nextPhase: "filtering",
+      summary: `Extracted ${extractResult.researchCandidates?.length ?? 0} raw source candidates.`,
+    };
+  },
+};
+
+const filterCandidatesTool: AgentToolDefinition = {
+  name: "filterCandidates",
+  async run(context) {
+    if (!context.memory.taskSpec) {
+      throw new RuntimeError("Task spec is missing before filtering.", "TASK_SPEC_MISSING");
+    }
+
+    await context.pushState("Filter candidates with task-specific rules.");
+
+    if (context.memory.taskType === "commerce_search") {
+      const snapshot = await context.ensureUsableSnapshot();
+      const filtered = filterExtractedItems(context.memory.rawExtractedItems, context.memory.taskSpec as CommerceTaskSpec);
+
+      context.memory.runtimeMeta.status = "observing";
+      context.memory.filterDiagnostics = filtered.diagnostics;
+      context.memory.extractedItems = filtered.items;
+      context.memory.lastError = undefined;
+      context.memory.recoveryHint = undefined;
+      context.memory.currentFacts = {
+        ...context.memory.currentFacts,
+        filteredCount: filtered.items.length,
+        budgetMatchedCount: filtered.diagnostics.budgetMatchedCount,
+      };
+      context.recordStep({
+        stepSummary: "Candidate filtering completed.",
+        nextIntent: "Aggregate the final recommendation.",
+        expectedOutcome: "Enough clean candidates remain after filtering.",
+        snapshotSummary: JSON.stringify(filtered.diagnostics),
+      });
+      context.appendLog("runtime", "info", "Filtering completed.", filtered.diagnostics);
+
+      const minimumSummaryCount = Math.max(1, Math.min(3, context.memory.taskSpec.topK));
+      if (filtered.items.length >= minimumSummaryCount) {
+        context.memory.currentPhase = "aggregating";
+        return {
+          nextPhase: "aggregating",
+          summary: `Prepared ${filtered.items.length} candidates for aggregation.`,
+        };
+      }
+
+      return recoverByScroll(
+        context,
+        snapshot,
+        `Only ${filtered.items.length} candidates remained after filtering. Need at least ${minimumSummaryCount}.`,
+      );
+    }
+
+    const filtered = filterResearchCandidates(
+      context.memory.researchCandidates,
+      (context.memory.taskSpec as PublicResearchTaskSpec).candidateLimit,
+    );
     context.memory.runtimeMeta.status = "observing";
     context.memory.filterDiagnostics = filtered.diagnostics;
     context.memory.researchCandidates = filtered.candidates;
@@ -682,7 +615,7 @@ const collectResearchCandidatesTool: AgentToolDefinition = {
     context.recordStep({
       stepSummary: "Research candidate filtering completed.",
       nextIntent: filtered.candidates.length > 0 ? "Read the selected source pages." : "Aggregate a partial result.",
-      expectedOutcome: "A deduped top source list is available.",
+      expectedOutcome: "A deduped top-5 source list is available.",
       snapshotSummary: JSON.stringify(filtered.diagnostics),
     });
     context.appendLog("runtime", "info", "Research filtering completed.", filtered.diagnostics);
@@ -690,37 +623,22 @@ const collectResearchCandidatesTool: AgentToolDefinition = {
     if (filtered.candidates.length === 0) {
       context.memory.unresolvedIssues = dedupeIssues([...context.memory.unresolvedIssues, "Google 第一页未筛选出可用自然结果"]);
       context.memory.currentPhase = "aggregating";
-      return createToolResult("partial", "No usable research sources remained after filtering.", {
-        outputs: {
-          candidateCount: 0,
-          filterDiagnostics: filtered.diagnostics,
-        },
-        facts: {
-          filteredSourceCount: 0,
-        },
-        retryHint: "Proceed to finalization with a partial result.",
-        stepStatus: "succeeded",
+      return {
         nextPhase: "aggregating",
-      });
+        summary: "No usable research sources remained after filtering.",
+      };
     }
 
     context.memory.currentPhase = "reading";
-    return createToolResult("success", `Prepared ${filtered.candidates.length} source candidates for reading.`, {
-      outputs: {
-        candidateCount: filtered.candidates.length,
-        filterDiagnostics: filtered.diagnostics,
-      },
-      facts: {
-        filteredSourceCount: filtered.candidates.length,
-      },
-      stepStatus: "succeeded",
+    return {
       nextPhase: "reading",
-    });
+      summary: `Prepared ${filtered.candidates.length} source candidates for reading.`,
+    };
   },
 };
 
-const readResearchSourceFactsTool: AgentToolDefinition = {
-  name: "readResearchSourceFacts",
+const readPageFactsTool: AgentToolDefinition = {
+  name: "readPageFacts",
   async run(context) {
     if (!isResearchTask(context.memory.taskSpec)) {
       throw new RuntimeError("Research source reading requires a public research task.", "INVALID_RESEARCH_READ");
@@ -728,16 +646,10 @@ const readResearchSourceFactsTool: AgentToolDefinition = {
 
     if (countSuccessfulResearchSources(context.memory.researchSources) >= context.memory.taskSpec.sourceTargetCount) {
       context.memory.currentPhase = "aggregating";
-      return createToolResult("success", "Reached the target number of research sources.", {
-        outputs: {
-          successfulSourceCount: countSuccessfulResearchSources(context.memory.researchSources),
-        },
-        facts: {
-          successfulSourceCount: countSuccessfulResearchSources(context.memory.researchSources),
-        },
-        stepStatus: "succeeded",
+      return {
         nextPhase: "aggregating",
-      });
+        summary: "Reached the target number of research sources.",
+      };
     }
 
     const candidate = context.memory.researchCandidates[context.memory.activeSourceIndex];
@@ -747,19 +659,10 @@ const readResearchSourceFactsTool: AgentToolDefinition = {
         ...context.memory.unresolvedIssues,
         "候选来源已耗尽，未满足目标来源数",
       ]);
-      return createToolResult("partial", "Research candidates were exhausted.", {
-        outputs: {
-          successfulSourceCount: countSuccessfulResearchSources(context.memory.researchSources),
-          exhausted: true,
-        },
-        facts: {
-          successfulSourceCount: countSuccessfulResearchSources(context.memory.researchSources),
-          exhausted: true,
-        },
-        retryHint: "Proceed to finalization with the currently collected sources.",
-        stepStatus: "succeeded",
+      return {
         nextPhase: "aggregating",
-      });
+        summary: "Research candidates were exhausted.",
+      };
     }
 
     const action: AgentAction = {
@@ -814,7 +717,6 @@ const readResearchSourceFactsTool: AgentToolDefinition = {
       ...sourceResult.unresolvedIssues,
     ]);
     context.memory.activeSourceIndex += 1;
-    context.memory.runtimeMeta.currentStep += 1;
     const successfulSourceCount = countSuccessfulResearchSources(context.memory.researchSources);
     context.memory.currentFacts = {
       ...context.memory.currentFacts,
@@ -844,80 +746,18 @@ const readResearchSourceFactsTool: AgentToolDefinition = {
       successfulSourceCount >= context.memory.taskSpec.sourceTargetCount ||
       context.memory.activeSourceIndex >= context.memory.researchCandidates.length;
     context.memory.currentPhase = shouldAggregate ? "aggregating" : "reading";
-    return createToolResult(sourceResult.status === "success" ? "success" : "partial", `Processed source ${successfulSourceCount}/${context.memory.taskSpec.sourceTargetCount} successful.`, {
-      outputs: {
-        sourceTitle: sourceResult.pageTitle,
-        sourceStatus: sourceResult.status,
-        successfulSourceCount,
-        processedSourceCount: context.memory.researchSources.length,
-      },
-      facts: {
-        readSourceCount: context.memory.researchSources.length,
-        successfulSourceCount,
-      },
-      retryHint: shouldAggregate ? undefined : "Continue reading the next selected source.",
-      stepStatus: shouldAggregate ? "succeeded" : "running",
+    return {
       nextPhase: shouldAggregate ? "aggregating" : "reading",
-    });
+      summary: `Processed source ${successfulSourceCount}/${context.memory.taskSpec.sourceTargetCount} successful.`,
+    };
   },
 };
 
-function completeFinalResult(
-  context: ToolExecutionContext,
-  overallStatus: "success" | "partial" | "failed",
-  summary: string,
-  finalOutput: string,
-) {
-  context.memory.finalSummary = summary;
-  context.memory.finalOutput = finalOutput;
-  context.memory.finalResult = {
-      overallStatus,
-      summaryMarkdown: finalOutput,
-      usedSubtasks: context.memory.taskPlan?.steps.map((step) => step.stepId) ?? [],
-      unresolvedIssues: context.memory.unresolvedIssues,
-  };
-  context.memory.runtimeMeta.status = "done";
-  context.memory.runtimeMeta.currentStep += 1;
-  context.memory.currentPhase = "done";
-  context.memory.liveStepSummary = "Final output is ready.";
-  context.memory.recoveryHint = undefined;
-  context.memory.lastError = undefined;
-  context.memory.currentFacts = {
-    ...context.memory.currentFacts,
-    finalStatus: overallStatus,
-  };
-
-  context.recordStep({
-    stepSummary: "Final output generated.",
-    nextIntent: "Stop the session.",
-    expectedOutcome: "A Markdown result is ready for the side panel.",
-    action: {
-      type: "DONE",
-      summary,
-      items: context.memory.extractedItems,
-    },
-    snapshotSummary: `${overallStatus} -> markdown`,
-  });
-
-  return createToolResult(overallStatus === "success" ? "success" : overallStatus === "partial" ? "partial" : "fatal_error", "Final Markdown output generated.", {
-    outputs: {
-      overallStatus,
-      finalOutput,
-    },
-    facts: {
-      finalStatus: overallStatus,
-    },
-    stepStatus: "succeeded",
-    nextPhase: "done",
-    stop: true,
-  });
-}
-
-const finalizeCommerceResultTool: AgentToolDefinition = {
-  name: "finalizeCommerceResult",
+const aggregateTaskResultsTool: AgentToolDefinition = {
+  name: "aggregateTaskResults",
   async run(context) {
-    if (!isCommerceTask(context.memory.taskSpec)) {
-      throw new RuntimeError("Commerce finalization requires a commerce task.", "INVALID_COMMERCE_FINALIZE");
+    if (!context.memory.taskSpec) {
+      throw new RuntimeError("Task spec is missing before aggregation.", "TASK_SPEC_MISSING");
     }
 
     await context.pushState("Aggregate the structured task results into the final output.");
@@ -926,103 +766,188 @@ const finalizeCommerceResultTool: AgentToolDefinition = {
     let finalOutput = "";
     let overallStatus: "success" | "partial" | "failed" = "failed";
 
-    if (context.memory.extractedItems.length === 0) {
-      summary = `未能为“${context.memory.goal}”收集到足够的商品候选。`;
-      finalOutput = buildCommerceFinalMarkdown(context.memory.goal, [], summary);
-      overallStatus = "failed";
-    } else {
-      try {
-        const response = await generateCommerceSummary(
-          context.memory.goal,
-          context.memory.taskSpec,
-          context.memory.extractedItems,
-          { signal: context.signal },
-        );
-        summary = response.summary;
-        finalOutput = response.markdown;
-        context.appendLog("llm", "info", "Generated the final commerce recommendation.", {
-          itemCount: context.memory.extractedItems.length,
-          topK: context.memory.taskSpec.topK,
-          provider: response.provider,
-          model: response.model,
-        });
-      } catch (error) {
-        summary = buildRuleBasedSummary(context.memory.goal, context.memory.extractedItems);
-        finalOutput = buildCommerceFinalMarkdown(context.memory.goal, context.memory.extractedItems, summary);
-        context.appendLog("llm", "warn", "Fell back to rule-based commerce output after LLM summary failed.", {
-          message: error instanceof Error ? error.message : "Unknown final summary error",
-        });
+    if (isCommerceTask(context.memory.taskSpec)) {
+      if (context.memory.extractedItems.length === 0) {
+        summary = `未能为“${context.memory.goal}”收集到足够的商品候选。`;
+        finalOutput = buildCommerceFinalMarkdown(context.memory.goal, [], summary);
+        overallStatus = "failed";
+      } else {
+        try {
+          const response = await generateCommerceSummary(
+            context.memory.goal,
+            context.memory.taskSpec,
+            context.memory.extractedItems,
+            { signal: context.signal },
+          );
+          summary = response.summary;
+          finalOutput = response.markdown;
+          context.appendLog("llm", "info", "Generated the final commerce recommendation.", {
+            itemCount: context.memory.extractedItems.length,
+            topK: context.memory.taskSpec.topK,
+            provider: response.provider,
+            model: response.model,
+          });
+        } catch (error) {
+          summary = buildRuleBasedSummary(context.memory.goal, context.memory.extractedItems);
+          finalOutput = buildCommerceFinalMarkdown(context.memory.goal, context.memory.extractedItems, summary);
+          context.appendLog("llm", "warn", "Fell back to rule-based commerce output after LLM summary failed.", {
+            message: error instanceof Error ? error.message : "Unknown final summary error",
+          });
+        }
+        overallStatus = "success";
       }
-      overallStatus = "success";
+    } else {
+      const unresolvedIssues = dedupeIssues([
+        ...context.memory.unresolvedIssues,
+        ...context.memory.researchSources.flatMap((source) => source.unresolvedIssues),
+      ]);
+      const successfulSourceCount = countSuccessfulResearchSources(context.memory.researchSources);
+
+      if (successfulSourceCount === 0) {
+        summary = buildResearchFallbackSummary(context.memory.goal, context.memory.researchSources, unresolvedIssues);
+        finalOutput = buildResearchFinalMarkdown(summary, context.memory.researchSources, unresolvedIssues);
+        context.appendLog("runtime", "warn", "No reliable sources were available; used deterministic research fallback.", {
+          sourceCount: context.memory.researchSources.length,
+          unresolvedIssues,
+        });
+      } else {
+        try {
+          const response = await generateResearchSummary(
+            context.memory.goal,
+            context.memory.taskSpec,
+            context.memory.researchSources,
+            unresolvedIssues,
+            { signal: context.signal },
+          );
+          summary = response.summary;
+          finalOutput = response.markdown;
+          context.appendLog("llm", "info", "Generated the final research summary.", {
+            sourceCount: context.memory.researchSources.length,
+            provider: response.provider,
+            model: response.model,
+          });
+        } catch (error) {
+          summary = buildResearchFallbackSummary(context.memory.goal, context.memory.researchSources, unresolvedIssues);
+          finalOutput = buildResearchFinalMarkdown(summary, context.memory.researchSources, unresolvedIssues);
+          context.appendLog("llm", "warn", "Fell back to rule-based research output after LLM summary failed.", {
+            message: error instanceof Error ? error.message : "Unknown final summary error",
+          });
+        }
+      }
+
+      overallStatus = getOverallStatusForResearch(context.memory.taskSpec, context.memory.researchSources, unresolvedIssues);
+      context.memory.unresolvedIssues = unresolvedIssues;
     }
 
-    return completeFinalResult(context, overallStatus, summary, finalOutput);
+    context.memory.finalSummary = summary;
+    context.memory.finalOutput = finalOutput;
+    context.memory.finalResult = {
+      overallStatus,
+      summaryMarkdown: finalOutput,
+      usedSubtasks: context.memory.taskPlan?.subtasks.map((subtask) => subtask.id) ?? [],
+      unresolvedIssues: context.memory.unresolvedIssues,
+    };
+    context.memory.runtimeMeta.status = "done";
+    context.memory.currentPhase = "done";
+    context.memory.liveStepSummary = "Final output is ready.";
+    context.memory.recoveryHint = undefined;
+    context.memory.lastError = undefined;
+    context.memory.currentFacts = {
+      ...context.memory.currentFacts,
+      finalStatus: overallStatus,
+    };
+
+    context.recordStep({
+      stepSummary: "Final output generated.",
+      nextIntent: "Stop the session.",
+      expectedOutcome: "A Markdown result is ready for the side panel.",
+      action: {
+        type: "DONE",
+        summary,
+        items: context.memory.extractedItems,
+      },
+      snapshotSummary: `${overallStatus} -> markdown`,
+    });
+
+    return {
+      nextPhase: "done",
+      summary: "Final Markdown output generated.",
+      stop: true,
+    };
+  },
+};
+
+const compileTaskSpecTool: AgentToolDefinition = {
+  name: "compileTaskSpec",
+  run(context) {
+    return compileTaskTool.run(context);
+  },
+};
+
+const openSearchResultsTool: AgentToolDefinition = {
+  name: "openSearchResults",
+  run(context) {
+    return searchInSiteTool.run(context);
+  },
+};
+
+const collectCommerceCandidatesTool: AgentToolDefinition = {
+  name: "collectCommerceCandidates",
+  run(context) {
+    if (context.memory.currentPhase === "extracting") {
+      return extractStructuredResultsTool.run(context);
+    }
+
+    return filterCandidatesTool.run(context);
+  },
+};
+
+const collectResearchCandidatesTool: AgentToolDefinition = {
+  name: "collectResearchCandidates",
+  run(context) {
+    if (context.memory.currentPhase === "extracting") {
+      return extractStructuredResultsTool.run(context);
+    }
+
+    return filterCandidatesTool.run(context);
+  },
+};
+
+const readResearchSourceFactsTool: AgentToolDefinition = {
+  name: "readResearchSourceFacts",
+  run(context) {
+    return readPageFactsTool.run(context);
+  },
+};
+
+const finalizeCommerceResultTool: AgentToolDefinition = {
+  name: "finalizeCommerceResult",
+  run(context) {
+    return aggregateTaskResultsTool.run(context);
   },
 };
 
 const finalizeResearchResultTool: AgentToolDefinition = {
   name: "finalizeResearchResult",
-  async run(context) {
-    if (!isResearchTask(context.memory.taskSpec)) {
-      throw new RuntimeError("Research finalization requires a public research task.", "INVALID_RESEARCH_FINALIZE");
-    }
-
-    await context.pushState("Aggregate the structured task results into the final output.");
-
-    const unresolvedIssues = dedupeIssues([
-      ...context.memory.unresolvedIssues,
-      ...context.memory.researchSources.flatMap((source) => source.unresolvedIssues),
-    ]);
-    const successfulSourceCount = countSuccessfulResearchSources(context.memory.researchSources);
-    let summary = "";
-    let finalOutput = "";
-
-    if (successfulSourceCount === 0) {
-      summary = buildResearchFallbackSummary(context.memory.goal, context.memory.researchSources, unresolvedIssues);
-      finalOutput = buildResearchFinalMarkdown(summary, context.memory.researchSources, unresolvedIssues);
-      context.appendLog("runtime", "warn", "No reliable sources were available; used deterministic research fallback.", {
-        sourceCount: context.memory.researchSources.length,
-        unresolvedIssues,
-      });
-    } else {
-      try {
-        const response = await generateResearchSummary(
-          context.memory.goal,
-          context.memory.taskSpec,
-          context.memory.researchSources,
-          unresolvedIssues,
-          { signal: context.signal },
-        );
-        summary = response.summary;
-        finalOutput = response.markdown;
-        context.appendLog("llm", "info", "Generated the final research summary.", {
-          sourceCount: context.memory.researchSources.length,
-          provider: response.provider,
-          model: response.model,
-        });
-      } catch (error) {
-        summary = buildResearchFallbackSummary(context.memory.goal, context.memory.researchSources, unresolvedIssues);
-        finalOutput = buildResearchFinalMarkdown(summary, context.memory.researchSources, unresolvedIssues);
-        context.appendLog("llm", "warn", "Fell back to rule-based research output after LLM summary failed.", {
-          message: error instanceof Error ? error.message : "Unknown final summary error",
-        });
-      }
-    }
-
-    const overallStatus = getOverallStatusForResearch(context.memory.taskSpec, context.memory.researchSources, unresolvedIssues);
-    context.memory.unresolvedIssues = unresolvedIssues;
-    return completeFinalResult(context, overallStatus, summary, finalOutput);
+  run(context) {
+    return aggregateTaskResultsTool.run(context);
   },
 };
 
 const TOOL_REGISTRY: Record<ToolName, AgentToolDefinition> = {
   compileTaskSpec: compileTaskSpecTool,
+  compileTask: compileTaskTool,
   openSearchResults: openSearchResultsTool,
+  searchInSite: searchInSiteTool,
   collectCommerceCandidates: collectCommerceCandidatesTool,
   collectResearchCandidates: collectResearchCandidatesTool,
+  extractStructuredResults: extractStructuredResultsTool,
+  filterCandidates: filterCandidatesTool,
   readResearchSourceFacts: readResearchSourceFactsTool,
+  readPageFacts: readPageFactsTool,
   finalizeCommerceResult: finalizeCommerceResultTool,
   finalizeResearchResult: finalizeResearchResultTool,
+  aggregateTaskResults: aggregateTaskResultsTool,
 };
 
 export function getToolDefinition(toolName: ToolName) {

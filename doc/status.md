@@ -2,70 +2,83 @@
 
 ## 1. Current Phase
 
-`migration`
+`implementation`
 
 ## 2. Current Focus
 
-先按新迁移路径推进代码落地：
+当前主线已经进入“范式迁移落地”的收口阶段：
 
-- 保持文档协议与迁移路径一致
-- 先将旧 `phase` 工具收敛为少量粗颗粒过渡 tool
-- 再将 runtime 从 `phase -> tool` 调度迁移到 plan 执行器
+- Runtime 按 `PlanStep + allowedTools` 驱动
+- Tools 由 LLM 在当前 step 的 `allowedTools` 内选择
+- Runtime 最小护栏先落了“执行步数 + 运行时间”
+- Side Panel 已切到 `对话 | 运行状态 | 结果`
 
 ## 3. Done
 
-- 已明确将执行范式切换为 `LLM plan-driven tool orchestration`
-- 已将旧版核心文档归档到 `doc/history/2026-04-03-plan-driven-rewrite/`
-- 已重写 [spec.md](D:/code/browser-agent-mvp/doc/spec.md) 为新设计真相
-- 已重写 [acceptance.md](D:/code/browser-agent-mvp/doc/acceptance.md) 为“旧基线 + 新迁移验收”
-- 已补充 [constraints.md](D:/code/browser-agent-mvp/doc/constraints.md) 与 [plan.md](D:/code/browser-agent-mvp/doc/plan.md)
-- 已将迁移路径调整为“先切范式、先用少量大工具过渡、再按需要细拆”
-- 已将旧工具边界收敛为第一批过渡 tool 命名：
-  - `compileTaskSpec`
-  - `openSearchResults`
-  - `collectCommerceCandidates`
-  - `collectResearchCandidates`
-  - `readResearchSourceFacts`
-  - `finalizeCommerceResult`
-  - `finalizeResearchResult`
-- 已在 `src/shared/types.ts` 中落地 `PlanStep` 与新的高层 `ToolResult`
-- 已将原子 DOM 动作结果与高层 tool 结果解耦：
-  - 原子动作结果改为 `ActionResult`
-  - 高层 tool 返回结构化 `ToolResult`
-- 已将 `Runtime` 改为基于 `plan step / allowedTools` 选择 tool，不再直接按 `phase -> tool` 硬编码调度
-- 已让 side panel 显示结构化 plan step 状态，而不是旧的字符串 plan
-- 已同步更新对应测试，并确认 `npm.cmd test` 与 `npm.cmd run build` 通过
+- `src/shared/types.ts`
+  - 已落地 `PlanStep`
+  - `SessionMemory.plan` / `SessionPublicState.plan` 已切到结构化步骤
+  - `StepRecord` 已记录所属 `planStepId`
+- `src/background/runtime.ts`
+  - 已移除旧的 `phase -> tool` 主调度逻辑
+  - 已改为按当前 `PlanStep.allowedTools` 选择 tool
+  - 已落最小护栏：
+    - `softStepLimit = 15`
+    - `softElapsedMs = 120000`
+    - `maxTotalSteps = 20`
+    - `maxElapsedMs = 180000`
+  - 异常或手动停止时会补结构化终态结果
+- `src/background/tools.ts`
+  - 已与新的 `PlanStep[]` 内存契约对齐
+  - 高层 step 计数已收回 runtime 统一维护
+- `src/sidepanel/index.ts`
+  - 已改成三段式展示：
+    - 对话
+    - 运行状态
+    - 结果
+  - 执行时间线已按计划步骤正序分组展示
+  - 调试日志已改为正序展示
+- 自动化验证
+  - `npm.cmd test` 通过
+  - `npm.cmd run build` 通过
 
-## 4. In Progress
+## 4. Real-World Validation
 
-- 将 `Runtime` 从“基于 plan step 选 tool”继续推进到“由 LLM 决定当前 step 内的下一步 tool”
-- 将 runtime 最小护栏补齐到 `budget_low / hard stop / no progress`
-- 将当前内存与最终输出协议继续对齐到新范式
+本线程已有用户实机反馈：
 
-## 5. Blockers
+- 扩展可加载
+- Side Panel 可启动 session
+- `public_research` 路径已跑通
 
-- 当前 runtime 已按 plan step 调度 tool，但仍保留 `currentPhase` 作为兼容状态字段
-- 真实的 LLM 选 tool 仍未接入，当前仅以 `allowedTools[0]` 的确定性选择保证不越权
-- runtime 最小护栏仍未在代码中实现
-- `readResearchSourceFacts` 仍包含局部串行读取逻辑，后续需要决定保留边界还是继续收口到 plan
+实机反馈同时暴露了一个 UI 问题：
 
-## 6. Rejected Paths
+- 执行时间线之前把步骤细节直接拼在计划步骤后面，且展示顺序为倒序
+- 本轮已按“计划步骤分组 + 步骤细节内聚 + 正序展示”修正
 
-- 继续为每个任务模块堆固定 workflow
-- 直接把 raw DOM 原子动作暴露给 LLM
-- 在当前预算约束下并行维护两个迁移仓库
+## 5. In Progress
 
-## 7. Next Actions
+- 继续把高层 tool 返回契约从过渡态收口到最终形态
+- 继续减少 tools 内对 `currentPhase` 的兼容依赖
+- 准备补 `no progress` / 连续失败类护栏
 
-1. 在 runtime 中补齐软预算、硬停止、同 tool 失败和无进展护栏
-2. 将“当前 step 选哪个 tool”从确定性 `allowedTools[0]` 升级为 LLM 决策
-3. 为 `commerce_search` 新循环补集成验收
-4. 为 `public_research` 新循环补集成验收
-5. 再决定是否继续细拆 `collect*` / `readResearchSourceFacts`
+## 6. Blockers
 
-## 8. Needs Human Decision
+- 高层 `ToolResult` 仍处于过渡态，尚未完全统一成最终协议
+- `no progress` 护栏未落地
+- `commerce_search` 还缺本线程内的实机闭环验证记录
+- provider live request 仍未做真实联调确认
 
-- 当前无必须立刻拍板的架构问题
-- 若开始代码迁移，建议直接在当前仓库新分支推进，而不是双仓并行
+## 7. Rejected Paths
+
+- 不先把来源读取和事实提取硬拆成更细 tool
+- 不为了迁移去做无关重构、重命名和大面积改写
+- 不把 raw DOM 原子动作暴露给 LLM 编排
+
+## 8. Next Actions
+
+1. 统一高层 tool 返回契约，减少 phase 兼容字段
+2. 补 `no progress` / 连续失败类护栏
+3. 补 `commerce_search` 真机闭环验证
+4. 根据真机反馈决定是否继续细拆 tool
 
 Updated: 2026-04-03

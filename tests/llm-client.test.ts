@@ -1,13 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildDeepSeekRequestBody,
   buildGeminiRequestBody,
+  chooseNextTool,
   extractDeepSeekJsonText,
   extractFirstJsonBlock,
   extractJsonText,
   getModelCandidates,
   parseModelJson,
 } from "../src/background/llm-client";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("llm client helpers", () => {
   it("builds a JSON-mode Gemini request", () => {
@@ -64,5 +69,24 @@ describe("llm client helpers", () => {
     });
 
     expect(text).toBe('{"ok":true}');
+  });
+
+  it("falls back to the first allowed tool when tool selection cannot call the model", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network unavailable")));
+
+    const result = await chooseNextTool({
+      goal: "调研 Playwright 和 Selenium 的区别",
+      taskType: "public_research",
+      currentStep: {
+        stepId: "search-research-results",
+        goal: "打开 Google 搜索结果页",
+        allowedTools: ["searchInSite", "extractStructuredResults"],
+        successCriteria: ["进入搜索结果页"],
+        status: "running",
+      },
+    });
+
+    expect(result.toolName).toBe("searchInSite");
+    expect(result.source).toBe("rule");
   });
 });
