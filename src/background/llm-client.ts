@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { LIMITS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
-import { nextToolSelectionSchema, queryRefinementSchema, summaryResultSchema, taskRouteSchema } from "../shared/schema";
+import { finalResultSynthesisSchema, nextToolSelectionSchema, queryRefinementSchema, taskRouteSchema } from "../shared/schema";
 import type {
   ExtractedItem,
   PlanStep,
@@ -423,7 +423,7 @@ export async function generateFinalResult(
 ) {
   const response = await requestProviderJson(
     buildFinalResultPrompt(input),
-    summaryResultSchema,
+    finalResultSynthesisSchema,
     "default",
     options,
   );

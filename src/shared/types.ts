@@ -2,33 +2,22 @@ export type PageType = "home" | "search" | "google_search" | "content" | "pdf" |
 
 export type TaskType = "commerce_search" | "public_research";
 
-export type AgentPhase = "planning" | "searching" | "extracting" | "filtering" | "reading" | "aggregating" | "done";
-
 export type PlanStepStatus = "pending" | "running" | "succeeded" | "failed" | "blocked";
 
 export type ToolName =
   | "compileTaskSpec"
-  | "compileTask"
   | "openSearchResults"
-  | "searchInSite"
   | "collectCommerceCandidates"
   | "collectResearchCandidates"
-  | "extractStructuredResults"
-  | "filterCandidates"
   | "readResearchSourceFacts"
-  | "readPageFacts"
   | "finalizeCommerceResult"
-  | "finalizeResearchResult"
-  | "aggregateTaskResults";
+  | "finalizeResearchResult";
 
-export type RuntimeStatus =
-  | "idle"
-  | "scanning"
-  | "planning"
-  | "acting"
-  | "observing"
-  | "done"
-  | "error";
+export type RuntimeStatus = "idle" | "running" | "done" | "error";
+
+export type ToolExecutionStatus = "success" | "partial" | "retryable_error" | "fatal_error";
+
+export type FinalStatus = "success" | "partial" | "failed" | "blocked";
 
 export interface ElementRect {
   x: number;
@@ -245,14 +234,6 @@ export interface SnapshotData {
   timestamp: number;
 }
 
-export interface SubtaskSpec {
-  id: string;
-  type: string;
-  goal: string;
-  allowedTools: ToolName[];
-  successCriteria: string[];
-}
-
 export interface PlanStep {
   stepId: string;
   goal: string;
@@ -261,26 +242,16 @@ export interface PlanStep {
   status: PlanStepStatus;
 }
 
-export interface TaskPlan {
-  taskType: TaskType;
-  steps: string[];
-  subtasks: SubtaskSpec[];
-}
-
-export interface SubtaskResult {
-  subtaskId: string;
-  status: "success" | "partial" | "failed";
-  data: Record<string, unknown>;
-  diagnostics: string[];
-  sources?: string[];
-  unresolvedIssues?: string[];
-}
-
 export interface FinalResult {
-  overallStatus: "success" | "partial" | "failed";
-  summaryMarkdown: string;
-  usedSubtasks: string[];
-  unresolvedIssues: string[];
+  status: FinalStatus;
+  summary: string;
+  markdown: string;
+  keyResults: string[];
+  completedSteps: string[];
+  remainingOrFailedSteps: string[];
+  errorsOrBlockers: string[];
+  artifacts: string[];
+  suggestedNextAction: string;
 }
 
 export interface PageFactExtraction {
@@ -314,7 +285,7 @@ export type AgentAction =
   | { type: "EXTRACT_PAGE_FACTS" }
   | { type: "DONE"; summary: string; items?: ExtractedItem[] };
 
-export interface ToolResult {
+export interface ActionResult {
   success: boolean;
   actionType: AgentAction["type"];
   message: string;
@@ -330,7 +301,17 @@ export interface ToolResult {
   errorCode?: string;
 }
 
-export type ActionResult = ToolResult;
+export interface ToolResult {
+  status: ToolExecutionStatus;
+  summary: string;
+  outputs: Record<string, unknown>;
+  artifacts: string[];
+  facts: Record<string, unknown>;
+  stepStatus: PlanStepStatus;
+  errorCode?: string;
+  retryHint?: string;
+  terminal?: boolean;
+}
 
 export interface StepRecord {
   step: number;
@@ -340,7 +321,7 @@ export interface StepRecord {
   nextIntent?: string;
   expectedOutcome?: string;
   action?: AgentAction;
-  actionResult?: ToolResult;
+  actionResult?: ActionResult;
   snapshotSummary?: string;
   timestamp: number;
 }
@@ -357,27 +338,24 @@ export interface DebugLogEntry {
 
 export interface ToolCallRecord {
   toolName: ToolName;
-  phase: AgentPhase;
-  status: "success" | "error";
+  status: ToolExecutionStatus;
   summary: string;
+  stepStatus: PlanStepStatus;
   timestamp: number;
 }
 
 export interface FailureRecord {
-  phase: AgentPhase;
   toolName?: ToolName;
   message: string;
+  errorCode?: string;
   timestamp: number;
 }
 
 export interface SessionMemory {
   goal: string;
   taskType: TaskType;
-  currentPhase: AgentPhase;
   plan: PlanStep[];
-  taskPlan?: TaskPlan;
   taskSpec?: TaskSpec;
-  subtaskResults: SubtaskResult[];
   toolHistory: ToolCallRecord[];
   currentFacts: Record<string, unknown>;
   stepHistory: StepRecord[];
@@ -395,8 +373,6 @@ export interface SessionMemory {
   failures: FailureRecord[];
   unresolvedIssues: string[];
   activeSourceIndex: number;
-  finalSummary?: string;
-  finalOutput?: string;
   finalResult?: FinalResult;
   runtimeMeta: {
     sessionId: string;
@@ -407,29 +383,18 @@ export interface SessionMemory {
     currentTool?: ToolName;
     currentStep: number;
     budgetLow?: boolean;
-    llmRetryCount: number;
     actionRetryCount: number;
-    pageReadyRetryCount: number;
     recoveryCount: number;
     lastRecoveryAction?: string;
     pageWaitRecoveryCount: number;
     dialogCloseRecoveryCount: number;
     searchReopenRecoveryCount: number;
     queryRefineTried: boolean;
+    sameToolRetryCount: number;
+    sameToolRetryTool?: ToolName;
+    consecutiveNoProgressCount: number;
     startedAt: number;
   };
-}
-
-export interface LlmDecision {
-  stepSummary: string;
-  nextIntent: string;
-  expectedOutcome: string;
-  action: AgentAction;
-  done: boolean;
-}
-
-export interface PlanningResult {
-  plan: string[];
 }
 
 export interface SessionPublicState {
@@ -437,10 +402,7 @@ export interface SessionPublicState {
   goal?: string;
   taskType?: TaskType;
   taskSpec?: TaskSpec;
-  taskPlan?: TaskPlan;
-  subtaskResults?: SubtaskResult[];
   status: RuntimeStatus;
-  currentPhase?: AgentPhase;
   currentStepId?: string;
   currentTool?: ToolName;
   currentStep: number;
@@ -449,7 +411,7 @@ export interface SessionPublicState {
   elapsedMs?: number;
   stepSummary?: string;
   lastAction?: AgentAction;
-  lastActionResult?: ToolResult;
+  lastActionResult?: ActionResult;
   items: ExtractedItem[];
   rawItemCount?: number;
   researchCandidates?: ResearchCandidate[];
@@ -461,8 +423,6 @@ export interface SessionPublicState {
   recoveryHint?: string;
   error?: string;
   unresolvedIssues?: string[];
-  finalSummary?: string;
-  finalOutput?: string;
   finalResult?: FinalResult;
   updatedAt: number;
 }

@@ -1,14 +1,6 @@
 import { KNOWN_CATEGORY_KEYWORDS, RESEARCH_INTENT_KEYWORDS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
-import type {
-  CommerceTaskSpec,
-  PlanStep,
-  PublicResearchTaskSpec,
-  SubtaskSpec,
-  TaskPlan,
-  TaskSpec,
-  TaskType,
-} from "../shared/types";
+import type { CommerceTaskSpec, PlanStep, PublicResearchTaskSpec, TaskSpec, TaskType } from "../shared/types";
 
 interface RefineSearchQuery {
   (goal: string): Promise<{ searchQuery: string; reason: string } | undefined>;
@@ -112,117 +104,77 @@ export async function detectTaskTypeWithLiteModel(
   };
 }
 
-function buildCommerceSubtasks(): SubtaskSpec[] {
-  return [
-    {
-      id: "compile-commerce-task",
-      type: "compile_task",
-      goal: "识别购物目标并生成京东搜索词",
-      allowedTools: ["compileTask"],
-      successCriteria: ["得到稳定搜索词", "确定候选数量和提取限制"],
-    },
-    {
-      id: "search-commerce-results",
-      type: "search",
-      goal: "打开京东搜索结果页",
-      allowedTools: ["searchInSite"],
-      successCriteria: ["当前页面进入京东搜索结果页"],
-    },
-    {
-      id: "extract-commerce-results",
-      type: "extract",
-      goal: "提取结构化商品候选",
-      allowedTools: ["extractStructuredResults"],
-      successCriteria: ["提取到至少一个结构化商品"],
-    },
-    {
-      id: "filter-commerce-results",
-      type: "filter",
-      goal: "过滤商品候选",
-      allowedTools: ["filterCandidates"],
-      successCriteria: ["保留足够的候选商品"],
-    },
-    {
-      id: "aggregate-commerce-results",
-      type: "aggregate",
-      goal: "统一汇总最终推荐结果",
-      allowedTools: ["aggregateTaskResults"],
-      successCriteria: ["输出最终 Markdown"],
-    },
-  ];
-}
-
-function buildResearchSubtasks(): SubtaskSpec[] {
-  return [
-    {
-      id: "compile-research-task",
-      type: "compile_task",
-      goal: "识别调研目标并生成 Google 查询词",
-      allowedTools: ["compileTask"],
-      successCriteria: ["得到稳定查询词", "确定候选来源数量"],
-    },
-    {
-      id: "search-research-results",
-      type: "search",
-      goal: "打开 Google 搜索结果页",
-      allowedTools: ["searchInSite"],
-      successCriteria: ["进入 Google 第一页搜索结果"],
-    },
-    {
-      id: "extract-research-results",
-      type: "extract",
-      goal: "提取 Google 第一页自然结果",
-      allowedTools: ["extractStructuredResults"],
-      successCriteria: ["提取到候选来源"],
-    },
-    {
-      id: "filter-research-results",
-      type: "filter",
-      goal: "筛选前 5 个来源候选",
-      allowedTools: ["filterCandidates"],
-      successCriteria: ["得到不超过 5 个候选来源"],
-    },
-    {
-      id: "read-research-results",
-      type: "read_sources",
-      goal: "串行读取来源页并提取事实",
-      allowedTools: ["readPageFacts"],
-      successCriteria: ["得到 3 个来源结果或候选耗尽"],
-    },
-    {
-      id: "aggregate-research-results",
-      type: "aggregate",
-      goal: "统一汇总调研输出",
-      allowedTools: ["aggregateTaskResults"],
-      successCriteria: ["输出结论、来源概览和未解决问题"],
-    },
-  ];
-}
-
-export function buildPlanSteps(subtasks: SubtaskSpec[]): PlanStep[] {
-  return subtasks.map((subtask) => ({
-    stepId: subtask.id,
-    goal: subtask.goal,
-    allowedTools: [...subtask.allowedTools],
-    successCriteria: [...subtask.successCriteria],
-    status: "pending",
-  }));
-}
-
-export function buildTaskPlan(taskType: TaskType): TaskPlan {
+export function buildPlanSteps(taskType: TaskType): PlanStep[] {
   if (taskType === "commerce_search") {
-    return {
-      taskType,
-      steps: ["解析任务并生成搜索词", "执行站内搜索", "提取搜索结果", "过滤候选商品", "统一汇总并输出结果"],
-      subtasks: buildCommerceSubtasks(),
-    };
+    return [
+      {
+        stepId: "compile-task-spec",
+        goal: "识别购物目标并生成京东搜索词",
+        allowedTools: ["compileTaskSpec"],
+        successCriteria: ["得到稳定搜索词", "确定候选数量和提取限制"],
+        status: "pending",
+      },
+      {
+        stepId: "open-search-results",
+        goal: "打开京东搜索结果页",
+        allowedTools: ["openSearchResults"],
+        successCriteria: ["当前页面进入京东搜索结果页"],
+        status: "pending",
+      },
+      {
+        stepId: "collect-commerce-candidates",
+        goal: "提取、过滤并收集商品候选",
+        allowedTools: ["collectCommerceCandidates"],
+        successCriteria: ["保留至少一个可用商品候选"],
+        status: "pending",
+      },
+      {
+        stepId: "finalize-commerce-result",
+        goal: "统一汇总最终推荐结果",
+        allowedTools: ["finalizeCommerceResult"],
+        successCriteria: ["输出结构化最终结果"],
+        status: "pending",
+      },
+    ];
   }
 
-  return {
-    taskType,
-    steps: ["解析调研任务并生成查询词", "打开 Google 搜索结果页", "提取第一页自然结果", "筛选候选来源", "逐页读取来源并提取事实", "统一汇总并输出结果"],
-    subtasks: buildResearchSubtasks(),
-  };
+  return [
+    {
+      stepId: "compile-task-spec",
+      goal: "识别调研目标并生成 Google 查询词",
+      allowedTools: ["compileTaskSpec"],
+      successCriteria: ["得到稳定查询词", "确定候选来源数量"],
+      status: "pending",
+    },
+    {
+      stepId: "open-search-results",
+      goal: "打开 Google 搜索结果页",
+      allowedTools: ["openSearchResults"],
+      successCriteria: ["进入 Google 第一页搜索结果"],
+      status: "pending",
+    },
+    {
+      stepId: "collect-research-candidates",
+      goal: "提取并筛选来源候选",
+      allowedTools: ["collectResearchCandidates"],
+      successCriteria: ["得到可读取的来源候选列表"],
+      status: "pending",
+    },
+    {
+      stepId: "read-research-source-facts",
+      goal: "串行读取来源页并提取事实",
+      allowedTools: ["readResearchSourceFacts"],
+      successCriteria: ["得到目标来源数或确认候选耗尽"],
+      status: "pending",
+    },
+    {
+      stepId: "finalize-research-result",
+      goal: "统一汇总调研输出",
+      allowedTools: ["finalizeResearchResult"],
+      successCriteria: ["输出结论、来源概览和未解决问题"],
+      status: "pending",
+    },
+  ];
 }
 
 export async function compileCommerceTask(
@@ -320,7 +272,7 @@ export async function compileTaskSpec(
 ): Promise<{
   taskType: TaskType;
   taskSpec: TaskSpec;
-  taskPlan: TaskPlan;
+  plan: PlanStep[];
 }> {
   const taskType =
     options.taskType ??
@@ -337,7 +289,7 @@ export async function compileTaskSpec(
     return {
       taskType,
       taskSpec,
-      taskPlan: buildTaskPlan(taskType),
+      plan: buildPlanSteps(taskType),
     };
   }
 
@@ -347,6 +299,6 @@ export async function compileTaskSpec(
   return {
     taskType,
     taskSpec,
-    taskPlan: buildTaskPlan(taskType),
+    plan: buildPlanSteps(taskType),
   };
 }

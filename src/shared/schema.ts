@@ -87,18 +87,6 @@ export const agentActionSchema = z.discriminatedUnion("type", [
   doneActionSchema,
 ]);
 
-export const llmDecisionSchema = z.object({
-  stepSummary: z.string().min(1),
-  nextIntent: z.string().min(1),
-  expectedOutcome: z.string().min(1),
-  action: agentActionSchema,
-  done: z.boolean(),
-});
-
-export const planningResultSchema = z.object({
-  plan: z.array(z.string().min(1)).min(2).max(8),
-});
-
 export const queryRefinementSchema = z.object({
   searchQuery: z.string().min(1),
   reason: z.string().min(1),
@@ -112,28 +100,24 @@ export const taskRouteSchema = z.object({
 export const nextToolSelectionSchema = z.object({
   toolName: z.union([
     z.literal("compileTaskSpec"),
-    z.literal("compileTask"),
     z.literal("openSearchResults"),
-    z.literal("searchInSite"),
     z.literal("collectCommerceCandidates"),
     z.literal("collectResearchCandidates"),
-    z.literal("extractStructuredResults"),
-    z.literal("filterCandidates"),
     z.literal("readResearchSourceFacts"),
-    z.literal("readPageFacts"),
     z.literal("finalizeCommerceResult"),
     z.literal("finalizeResearchResult"),
-    z.literal("aggregateTaskResults"),
   ]),
   reason: z.string().min(1),
 });
 
-export const summaryResultSchema = z.object({
+export const finalResultSynthesisSchema = z.object({
   summary: z.string().min(1),
   markdown: z.string().min(1),
+  keyResults: z.array(z.string()).default([]),
+  suggestedNextAction: z.string().min(1),
 });
 
-export const toolResultSchema = z.object({
+export const actionResultSchema = z.object({
   success: z.boolean(),
   actionType: z.union([
     z.literal("CLICK"),
