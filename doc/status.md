@@ -89,3 +89,19 @@
 4. 根据真机反馈决定是否继续细拆 tool
 
 Updated: 2026-04-03
+
+## Update Notes
+
+- Added V1 lightweight `semanticSnapshot` to `SnapshotData` without changing the current extraction and recovery flow.
+- The runtime now records a compact semantic snapshot summary in page scan debug logs.
+- Added V1 deterministic recovery paths:
+  - short page wait and rescan with explicit recovery counters
+  - one-shot dialog close recovery through `RECOVER_CLOSE_DIALOG`
+  - one-shot canonical search-page reopen for broken search results
+  - single-source failure skip in `public_research` without per-source retry
+- Added regression coverage for dialog close, canonical search reopen, wait-rescan, and single-source skip.
+- Latest validation checkpoint:
+  - `npm.cmd test`: `9` test files, `56` tests passed
+  - `npm.cmd run build`: passed
+
+Updated: 2026-04-07

@@ -1,24 +1,32 @@
 import { describe, expect, it, vi } from "vitest";
 import { collectResultListState, extractStructuredProducts } from "../src/content/extractor";
 import { scanPageAtUrl } from "../src/content/scanner";
+import type { SemanticNode } from "../src/shared/types";
 
 function mockVisibleRect() {
   return vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-    () =>
-      ({
+    function (this: HTMLElement) {
+      const width = this.hasAttribute("data-zero-size") ? 0 : 160;
+      const height = this.hasAttribute("data-zero-size") ? 0 : 36;
+      return {
         x: 0,
         y: 0,
-        width: 160,
-        height: 36,
+        width,
+        height,
         top: 0,
         left: 0,
-        right: 160,
-        bottom: 36,
+        right: width,
+        bottom: height,
         toJSON() {
           return {};
         },
-      }) as DOMRect,
+      } as DOMRect;
+    },
   );
+}
+
+function flattenSemanticNodes(node: SemanticNode): SemanticNode[] {
+  return [node, ...(node.children ?? []).flatMap((child) => flattenSemanticNodes(child))];
 }
 
 describe("extractStructuredProducts", () => {
@@ -214,6 +222,87 @@ describe("collectResultListState", () => {
     expect(snapshot.pageFacts.resultList?.productLinkCount).toBe(1);
     expect(snapshot.pageReady.ready).toBe(true);
     expect(snapshot.pageReady.checks).toEqual([]);
+
+    rectSpy.mockRestore();
+  });
+});
+
+describe("semanticSnapshot", () => {
+  it("captures a lightweight semantic skeleton for visible high-value nodes", () => {
+    const rectSpy = mockVisibleRect();
+
+    document.title = "Semantic page";
+    document.body.innerHTML = `
+      <main>
+        <h1>Playwright vs Selenium</h1>
+        <section>
+          <button aria-expanded="true">展开详情</button>
+          <a href="https://example.com/docs">官方文档</a>
+          <input type="search" aria-label="站内搜索" required />
+        </section>
+      </main>
+    `;
+
+    const snapshot = scanPageAtUrl("https://example.com/article");
+    const rootChildren = snapshot.semanticSnapshot.root.children ?? [];
+    const mainNode = rootChildren.find((node) => node.role === "main");
+    const flattened = flattenSemanticNodes(snapshot.semanticSnapshot.root);
+
+    expect(snapshot.semanticSnapshot.version).toBe(1);
+    expect(snapshot.semanticSnapshot.nodeCount).toBeGreaterThan(1);
+    expect(mainNode).toBeDefined();
+    expect(flattened.some((node) => node.role === "heading" && node.level === 1 && node.name === "Playwright vs Selenium")).toBe(true);
+    expect(flattened.some((node) => node.role === "button" && node.state?.expanded === true)).toBe(true);
+    expect(flattened.some((node) => node.role === "link" && node.name === "官方文档")).toBe(true);
+    expect(flattened.some((node) => node.role === "input" && node.state?.required === true)).toBe(true);
+
+    rectSpy.mockRestore();
+  });
+
+  it("filters hidden or zero-sized nodes and promotes semantic descendants through plain containers", () => {
+    const rectSpy = mockVisibleRect();
+
+    document.body.innerHTML = `
+      <main>
+        <div>
+          <button style="display:none">隐藏按钮</button>
+          <div data-zero-size>
+            <a href="https://example.com/zero">零尺寸链接</a>
+          </div>
+          <div>
+            <section>
+              <h2>保留标题</h2>
+            </section>
+          </div>
+        </div>
+      </main>
+    `;
+
+    const snapshot = scanPageAtUrl("https://example.com/hidden");
+    const serialized = JSON.stringify(snapshot.semanticSnapshot.root);
+
+    expect(serialized).not.toContain("隐藏按钮");
+    expect(serialized).not.toContain("零尺寸链接");
+    expect(serialized).toContain("保留标题");
+
+    rectSpy.mockRestore();
+  });
+
+  it("dedupes repeated text leaves and marks truncation when the semantic tree is too large", () => {
+    const rectSpy = mockVisibleRect();
+
+    document.body.innerHTML = `
+      <main>
+        ${Array.from({ length: 140 }, (_, index) => `<p>${index < 2 ? "重复文本" : `段落 ${index}`}</p>`).join("")}
+      </main>
+    `;
+
+    const snapshot = scanPageAtUrl("https://example.com/long");
+    const rootSerialized = JSON.stringify(snapshot.semanticSnapshot.root);
+
+    expect(snapshot.semanticSnapshot.truncated).toBe(true);
+    expect(snapshot.semanticSnapshot.nodeCount).toBeLessThanOrEqual(120);
+    expect(rootSerialized.match(/重复文本/g)?.length ?? 0).toBe(1);
 
     rectSpy.mockRestore();
   });

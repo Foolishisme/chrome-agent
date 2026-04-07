@@ -142,3 +142,27 @@
 - `doc/acceptance.md`
 
 Updated: 2026-04-03
+
+## 11. Latest Checkpoint
+
+- Date: `2026-04-07`
+- Scope completed in this checkpoint:
+  - landed V1 lightweight `semanticSnapshot`
+  - landed V1 deterministic recovery paths
+    - wait-and-rescan
+    - one-shot dialog close
+    - one-shot canonical search reopen
+    - single-source skip for `public_research`
+- Validation:
+  - `npm.cmd test`: `9` test files, `56` tests passed
+  - `npm.cmd run build`: passed
+- Current state:
+  - both `commerce_search` and `public_research` remain runnable
+  - runtime keeps the `PlanStep + allowedTools` loop
+  - current `allowedTools` contract still exists, but most current steps are still single-tool in practice
+- Remaining follow-up:
+  - `no progress / repeated failure` guardrails
+  - `commerce_search` real-world verification record
+  - provider live validation and `stop / error` UI verification
+
+Updated: 2026-04-07

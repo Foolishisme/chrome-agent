@@ -6,18 +6,31 @@ import type { ActionResult, SessionMemory, SnapshotData } from "../src/shared/ty
 function createSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
   return {
     url: "https://search.jd.com/Search?keyword=MacBook",
-    title: "MacBook - 京东搜索",
+    title: "MacBook - JD Search",
     pageType: "search",
     interactiveElements: [],
+    semanticSnapshot: {
+      version: 1,
+      url: "https://search.jd.com/Search?keyword=MacBook",
+      title: "MacBook - JD Search",
+      nodeCount: 1,
+      truncated: false,
+      root: {
+        ref: "sem_root",
+        role: "unknown",
+        name: "",
+        children: [],
+      },
+    },
     productCandidates: [],
     pageReady: {
       ready: true,
-      reason: "搜索结果页可用",
+      reason: "search results page is ready",
       checks: [],
     },
     pageFacts: {
       searchBox: { present: true, visible: true, text: "MacBook" },
-      searchSubmit: { present: true, visible: true, text: "搜索" },
+      searchSubmit: { present: true, visible: true, text: "Search" },
       resultList: {
         present: true,
         loaded: true,
@@ -33,7 +46,7 @@ function createSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
 
 function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
   return {
-    goal: "MacBook 对比前3个",
+    goal: "Compare a few MacBook options",
     taskType: "commerce_search",
     currentPhase: "filtering",
     plan: [],
@@ -60,6 +73,9 @@ function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
       actionRetryCount: 0,
       pageReadyRetryCount: 0,
       recoveryCount: 0,
+      pageWaitRecoveryCount: 0,
+      dialogCloseRecoveryCount: 0,
+      searchReopenRecoveryCount: 0,
       queryRefineTried: false,
       startedAt: Date.now(),
     },
@@ -77,28 +93,28 @@ beforeEach(() => {
 
 describe("runtime tool helpers", () => {
   it("builds the final on-site query directly from the lite model", async () => {
-    const task = await compileSearchTask("推荐一个适合学生办公的 MacBook", {
+    const task = await compileSearchTask("recommend a MacBook for study and office work", {
       refineWithLiteModel: async () => ({
-        searchQuery: "学生办公 MacBook",
-        reason: "补全办公场景关键词",
+        searchQuery: "student office MacBook",
+        reason: "adds the office-work scenario",
       }),
     });
 
     expect(task.querySource).toBe("llm-lite");
-    expect(task.searchQuery).toBe("学生办公 MacBook");
+    expect(task.searchQuery).toBe("student office MacBook");
     expect(task.llmInputLimit).toBe(10);
   });
 
   it("builds a deterministic fallback summary from extracted items", () => {
-    const summary = buildRuleBasedSummary("MacBook 对比前3个", [
-      { title: "MacBook Air 13", priceText: "7999.00", url: "https://item.jd.com/1.html", shopText: "Apple 自营" },
+    const summary = buildRuleBasedSummary("Compare a few MacBook options", [
+      { title: "MacBook Air 13", priceText: "7999.00", url: "https://item.jd.com/1.html", shopText: "Apple Store" },
       { title: "MacBook Pro 14", priceText: "12999.00", url: "https://item.jd.com/2.html" },
       { title: "MacBook Air 15", priceText: "9999.00", url: "https://item.jd.com/3.html" },
     ]);
 
     expect(summary).toContain("kept 3 candidates");
     expect(summary).toContain("MacBook Air 13");
-    expect(summary).toContain("Apple 自营");
+    expect(summary).toContain("Apple Store");
   });
 });
 
@@ -108,7 +124,7 @@ describe("runtime recovery path", () => {
     const memory = createMemory({
       taskSpec: {
         taskType: "commerce_search",
-        originalGoal: "MacBook 对比前3个",
+        originalGoal: "Compare a few MacBook options",
         topK: 3,
         llmInputLimit: 10,
         extractLimit: 12,
@@ -122,7 +138,7 @@ describe("runtime recovery path", () => {
     const scrollResult: ActionResult = {
       success: true,
       actionType: "SCROLL",
-      message: "已向下滚动",
+      message: "scrolled down",
     };
     const executeAction = vi.fn().mockResolvedValue(scrollResult);
     const settleAfterAction = vi.fn().mockResolvedValue(undefined);
@@ -174,10 +190,10 @@ describe("search page query matching", () => {
     });
     const snapshot = createSnapshot({
       url: "https://search.jd.com/Search?keyword=macbookair",
-      title: "macbookair - 商品搜索",
+      title: "macbookair - JD Search",
       pageFacts: {
         searchBox: { present: false, visible: false, text: "" },
-        searchSubmit: { present: true, visible: true, text: "搜索" },
+        searchSubmit: { present: true, visible: true, text: "Search" },
         resultList: {
           present: true,
           loaded: true,
@@ -206,6 +222,79 @@ describe("search page query matching", () => {
     expect(memory.currentFacts.searchQueryMatched).toBe(true);
   });
 
+  it("closes a blocking dialog once before continuing", async () => {
+    const tool = getToolDefinition("openSearchResults");
+    const memory = createMemory({
+      currentPhase: "searching",
+      taskType: "commerce_search",
+      taskSpec: {
+        taskType: "commerce_search",
+        originalGoal: "MacBook",
+        topK: 5,
+        llmInputLimit: 10,
+        extractLimit: 12,
+        searchQuery: "MacBook",
+        querySource: "llm-lite",
+        notes: [],
+      },
+    });
+    const blockedSnapshot = createSnapshot({
+      pageReady: {
+        ready: false,
+        reason: "dialog blocking the page",
+        checks: ["dialog"],
+      },
+      semanticSnapshot: {
+        version: 1,
+        url: "https://search.jd.com/Search?keyword=MacBook",
+        title: "MacBook - search",
+        nodeCount: 2,
+        truncated: false,
+        root: {
+          ref: "sem_root",
+          role: "unknown",
+          name: "",
+          children: [
+            {
+              ref: "sem_dialog",
+              role: "dialog",
+              name: "Cookie popup",
+              children: [],
+            },
+          ],
+        },
+      },
+    });
+    const readySnapshot = createSnapshot();
+    const executeAction = vi.fn().mockResolvedValue({
+      success: true,
+      actionType: "RECOVER_CLOSE_DIALOG",
+      message: "dialog closed",
+      recoveryKind: "close_dialog",
+      recoveryApplied: true,
+      recoveryTarget: "关闭",
+    });
+
+    const result = await tool.run({
+      memory,
+      signal: new AbortController().signal,
+      scanPage: vi.fn().mockResolvedValueOnce(blockedSnapshot).mockResolvedValueOnce(readySnapshot),
+      ensureUsableSnapshot: vi.fn().mockResolvedValue(readySnapshot),
+      executeAction,
+      settleAfterAction: vi.fn().mockResolvedValue(undefined),
+      appendLog: vi.fn(),
+      recordStep: vi.fn(),
+      pushState: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(result.nextPhase).toBe("extracting");
+    expect(executeAction).toHaveBeenCalledWith(
+      { type: "RECOVER_CLOSE_DIALOG" },
+      "Close the blocking dialog once.",
+    );
+    expect(memory.runtimeMeta.dialogCloseRecoveryCount).toBe(1);
+  });
+
   it("navigates directly to the JD search url when the current page does not match the query", async () => {
     const tool = getToolDefinition("openSearchResults");
     const memory = createMemory({
@@ -225,27 +314,27 @@ describe("search page query matching", () => {
     const snapshot = createSnapshot({
       pageType: "home",
       url: "https://www.jd.com/",
-      title: "京东首页",
+      title: "JD Home",
       pageFacts: {
         searchBox: { present: true, visible: true, text: "" },
-        searchSubmit: { present: true, visible: true, text: "搜索" },
+        searchSubmit: { present: true, visible: true, text: "Search" },
       },
     });
     const snapshotAfter = createSnapshot({
       url: "https://search.jd.com/Search?keyword=500%E8%80%B3%E6%9C%BA&enc=utf-8",
-      title: "500耳机 - 商品搜索",
+      title: "500耳机 - JD Search",
     });
     const executeAction = vi.fn().mockResolvedValue({
       success: true,
       actionType: "NAVIGATE",
-      message: "已跳转到：https://search.jd.com/Search?keyword=500%E8%80%B3%E6%9C%BA&enc=utf-8",
+      message: "navigated",
       navigated: true,
     });
 
     const result = await tool.run({
       memory,
       signal: new AbortController().signal,
-      scanPage: vi.fn().mockResolvedValue(snapshotAfter),
+      scanPage: vi.fn().mockResolvedValueOnce(snapshot).mockResolvedValueOnce(snapshotAfter),
       ensureUsableSnapshot: vi.fn().mockResolvedValue(snapshot),
       executeAction,
       settleAfterAction: vi.fn().mockResolvedValue(undefined),
@@ -262,5 +351,86 @@ describe("search page query matching", () => {
       },
       'Open the JD search results for "500耳机".',
     );
+  });
+
+  it("reopens the canonical search page once when the first result page is unexpected", async () => {
+    const tool = getToolDefinition("openSearchResults");
+    const memory = createMemory({
+      currentPhase: "searching",
+      taskType: "commerce_search",
+      taskSpec: {
+        taskType: "commerce_search",
+        originalGoal: "500耳机",
+        topK: 5,
+        llmInputLimit: 10,
+        extractLimit: 12,
+        searchQuery: "500耳机",
+        querySource: "llm-lite",
+        notes: [],
+      },
+    });
+    const homeSnapshot = createSnapshot({
+      pageType: "home",
+      url: "https://www.jd.com/",
+      title: "JD Home",
+      pageFacts: {
+        searchBox: { present: true, visible: true, text: "" },
+        searchSubmit: { present: true, visible: true, text: "Search" },
+      },
+    });
+    const unexpectedSnapshot = createSnapshot({
+      pageType: "content",
+      url: "https://example.com/unexpected",
+      title: "Unexpected page",
+      pageReady: { ready: true, reason: "loaded", checks: [] },
+    });
+    const recoveredSnapshot = createSnapshot({
+      url: "https://search.jd.com/Search?keyword=500%E8%80%B3%E6%9C%BA&enc=utf-8",
+      title: "500耳机 - JD Search",
+    });
+    const executeAction = vi
+      .fn()
+      .mockResolvedValueOnce({
+        success: true,
+        actionType: "NAVIGATE",
+        message: "opened the initial search page",
+        navigated: true,
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        actionType: "NAVIGATE",
+        message: "reopened the canonical search page",
+        navigated: true,
+      });
+
+    const result = await tool.run({
+      memory,
+      signal: new AbortController().signal,
+      scanPage: vi
+        .fn()
+        .mockResolvedValueOnce(homeSnapshot)
+        .mockResolvedValueOnce(unexpectedSnapshot)
+        .mockResolvedValueOnce(recoveredSnapshot),
+      ensureUsableSnapshot: vi
+        .fn()
+        .mockResolvedValueOnce(unexpectedSnapshot)
+        .mockResolvedValueOnce(recoveredSnapshot),
+      executeAction,
+      settleAfterAction: vi.fn().mockResolvedValue(undefined),
+      appendLog: vi.fn(),
+      recordStep: vi.fn(),
+      pushState: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(result.nextPhase).toBe("extracting");
+    expect(executeAction).toHaveBeenNthCalledWith(
+      2,
+      {
+        type: "NAVIGATE",
+        url: "https://search.jd.com/Search?keyword=500%E8%80%B3%E6%9C%BA&enc=utf-8",
+      },
+      "Reopen the canonical search results page once.",
+    );
+    expect(memory.runtimeMeta.searchReopenRecoveryCount).toBe(1);
   });
 });

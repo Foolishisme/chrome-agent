@@ -90,6 +90,31 @@ function formatDetail(detail: unknown): string | undefined {
   }
 }
 
+function summarizeSemanticSnapshot(snapshot: SnapshotData["semanticSnapshot"]) {
+  const topLevelRoleCounts: Record<string, number> = {};
+  for (const node of snapshot.root.children ?? []) {
+    topLevelRoleCounts[node.role] = (topLevelRoleCounts[node.role] ?? 0) + 1;
+  }
+
+  const topLevelRoles = Object.entries(topLevelRoleCounts)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 6)
+    .reduce<Record<string, number>>((acc, [role, count]) => {
+      acc[role] = count;
+      return acc;
+    }, {});
+
+  return {
+    nodeCount: snapshot.nodeCount,
+    truncated: snapshot.truncated,
+    topLevelRoles,
+    hasDialog: !!snapshot.root.children?.some((node) => node.role === "dialog"),
+    hasAlert: !!snapshot.root.children?.some((node) => node.role === "alert"),
+    hasMain: !!snapshot.root.children?.some((node) => node.role === "main"),
+    hasSearch: !!snapshot.root.children?.some((node) => node.role === "search"),
+  };
+}
+
 function getElapsedMs(memory: SessionMemory, now = Date.now()) {
   return Math.max(0, now - memory.runtimeMeta.startedAt);
 }
@@ -372,6 +397,10 @@ function getPostActionSettleDelay(action: AgentAction) {
     return POST_ACTION_SETTLE_MS.scroll;
   }
 
+  if (action.type === "RECOVER_CLOSE_DIALOG") {
+    return POST_ACTION_SETTLE_MS.scroll;
+  }
+
   if (action.type === "CLICK" || action.type === "NAVIGATE" || (action.type === "TYPE" && action.submit)) {
     return POST_ACTION_SETTLE_MS.navigateLike;
   }
@@ -534,6 +563,9 @@ export class BrowserAgentRuntime {
         actionRetryCount: 0,
         pageReadyRetryCount: 0,
         recoveryCount: 0,
+        pageWaitRecoveryCount: 0,
+        dialogCloseRecoveryCount: 0,
+        searchReopenRecoveryCount: 0,
         queryRefineTried: false,
         startedAt: Date.now(),
       },
@@ -787,11 +819,13 @@ export class BrowserAgentRuntime {
   private async ensureUsableSnapshot(session: ActiveSession) {
     let snapshot = await this.scanPage(session);
     if (snapshot.pageReady.ready) {
+      session.memory.runtimeMeta.pageWaitRecoveryCount = 0;
       return snapshot;
     }
 
     appendLog(session, "runtime", "warn", "Page is not ready yet; entering short wait.", snapshot.pageReady);
-    session.memory.recoveryHint = snapshot.pageReady.reason;
+    session.memory.runtimeMeta.pageWaitRecoveryCount = 1;
+    session.memory.recoveryHint = `${snapshot.pageReady.reason} (wait recovery 1/2)`;
     session.memory.liveStepSummary = "Waiting for the page to become usable.";
     session.lastPublicState = toPublicState(session.memory);
     await broadcastUpdate(session.lastPublicState);
@@ -799,14 +833,18 @@ export class BrowserAgentRuntime {
     await sleep(LIMITS.PAGE_READY_WAIT_MS);
     snapshot = await this.scanPage(session);
     if (snapshot.pageReady.ready) {
+      session.memory.runtimeMeta.pageWaitRecoveryCount = 0;
       session.memory.recoveryHint = undefined;
       return snapshot;
     }
 
     appendLog(session, "runtime", "warn", "Page is still not ready; running one last short retry.", snapshot.pageReady);
+    session.memory.runtimeMeta.pageWaitRecoveryCount = 2;
+    session.memory.recoveryHint = `${snapshot.pageReady.reason} (wait recovery 2/2)`;
     await sleep(LIMITS.PAGE_READY_SECOND_WAIT_MS);
     snapshot = await this.scanPage(session);
     if (snapshot.pageReady.ready) {
+      session.memory.runtimeMeta.pageWaitRecoveryCount = 0;
       session.memory.recoveryHint = undefined;
       return snapshot;
     }
@@ -839,6 +877,7 @@ export class BrowserAgentRuntime {
           pageType: response.snapshot.pageType,
           pageReady: response.snapshot.pageReady,
           pageFacts: response.snapshot.pageFacts,
+          semanticSnapshot: summarizeSemanticSnapshot(response.snapshot.semanticSnapshot),
         });
         return response.snapshot;
       } catch (error) {

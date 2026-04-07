@@ -196,3 +196,14 @@ Updated: 2026-04-03
 
 - Final result synthesis now goes through one generic structured LLM prompt entrypoint.
 - The results panel renders final markdown first, with optional structured details for items, sources, and unresolved issues.
+- Added V1 lightweight `semanticSnapshot` as an AX-like observation layer without replacing the existing commerce and research extractors.
+- Added V1 deterministic recovery paths:
+  - short wait-and-rescan when a page is not ready
+  - one-shot `RECOVER_CLOSE_DIALOG`
+  - one-shot canonical search-page reopen
+  - single-source skip for `public_research`
+- Current automated verification status:
+  - `npm.cmd test`: `9` test files, `56` tests passed
+  - `npm.cmd run build`: passed
+
+Updated: 2026-04-07

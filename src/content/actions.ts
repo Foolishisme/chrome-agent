@@ -122,6 +122,69 @@ async function performScroll(direction: "up" | "down", amount = 640): Promise<Ac
   };
 }
 
+function isDialogRoot(element: HTMLElement) {
+  const attrRole = element.getAttribute("role")?.toLowerCase();
+  const className = typeof element.className === "string" ? element.className.toLowerCase() : "";
+  return (
+    attrRole === "dialog" ||
+    attrRole === "alertdialog" ||
+    attrRole === "alert" ||
+    element.tagName.toLowerCase() === "dialog" ||
+    element.getAttribute("aria-modal") === "true" ||
+    className.includes("modal") ||
+    className.includes("dialog") ||
+    className.includes("overlay")
+  );
+}
+
+function matchesDialogCloseText(text: string) {
+  const normalized = text.replace(/\s+/g, "").trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return [
+    "关闭",
+    "取消",
+    "稍后",
+    "我知道了",
+    "知道了",
+    "接受",
+    "同意",
+    "×",
+    "✕",
+    "✖",
+  ].some((keyword) => normalized.includes(keyword.toLowerCase()));
+}
+
+function resolveDialogCloseTarget() {
+  const dialogRoots = Array.from(document.querySelectorAll<HTMLElement>("dialog, [role='dialog'], [role='alertdialog'], [role='alert'], [aria-modal='true'], [class*='modal'], [class*='dialog'], [class*='overlay']"))
+    .filter((element) => isDialogRoot(element) && !!element.offsetParent);
+
+  for (const dialogRoot of dialogRoots) {
+    const candidates = Array.from(dialogRoot.querySelectorAll<HTMLElement>("button, a, [role='button'], [tabindex]"))
+      .filter((element) => !!element.offsetParent)
+      .map((element) => ({
+        element,
+        label: [
+          element.getAttribute("aria-label"),
+          element.getAttribute("title"),
+          element.textContent,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .trim(),
+      }))
+      .filter((candidate) => matchesDialogCloseText(candidate.label));
+
+    if (candidates.length > 0) {
+      return candidates[0];
+    }
+  }
+
+  return undefined;
+}
+
 async function performNavigate(url: string): Promise<ActionResult> {
   window.location.assign(url);
   return {
@@ -131,6 +194,40 @@ async function performNavigate(url: string): Promise<ActionResult> {
     navigated: true,
     observation: {
       url,
+    },
+  };
+}
+
+async function performRecoverCloseDialog(): Promise<ActionResult> {
+  const target = resolveDialogCloseTarget();
+  if (!target) {
+    showToast("未找到可关闭的弹窗按钮", true);
+    return {
+      success: false,
+      actionType: "RECOVER_CLOSE_DIALOG",
+      message: "未找到可关闭的弹窗按钮",
+      recoveryKind: "close_dialog",
+      recoveryApplied: false,
+      errorCode: "DIALOG_CLOSE_NOT_FOUND",
+    };
+  }
+
+  const rect = getElementRect(target.element);
+  target.element.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+  highlightRect(rect, `关闭弹窗: ${target.label || "button"}`);
+  await new Promise((resolve) => window.setTimeout(resolve, 160));
+  target.element.click();
+
+  return {
+    success: true,
+    actionType: "RECOVER_CLOSE_DIALOG",
+    message: `已尝试关闭弹窗：${target.label || "button"}`,
+    highlightedAgentId: undefined,
+    recoveryKind: "close_dialog",
+    recoveryApplied: true,
+    recoveryTarget: target.label || "button",
+    observation: {
+      label: target.label || "button",
     },
   };
 }
@@ -228,6 +325,8 @@ export async function executeAction(action: AgentAction): Promise<ActionResult> 
       return performNavigate(action.url);
     case "SCROLL":
       return performScroll(action.direction, action.amount);
+    case "RECOVER_CLOSE_DIALOG":
+      return performRecoverCloseDialog();
     case "EXTRACT_LIST":
       return performExtractList(action.limit);
     case "EXTRACT_SEARCH_RESULTS":

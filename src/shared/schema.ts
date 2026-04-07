@@ -51,6 +51,10 @@ export const scrollActionSchema = z.object({
   amount: z.number().positive().optional(),
 });
 
+export const recoverCloseDialogActionSchema = z.object({
+  type: z.literal("RECOVER_CLOSE_DIALOG"),
+});
+
 export const extractListActionSchema = z.object({
   type: z.literal("EXTRACT_LIST"),
   limit: z.number().int().positive().optional(),
@@ -76,6 +80,7 @@ export const agentActionSchema = z.discriminatedUnion("type", [
   typeActionSchema,
   navigateActionSchema,
   scrollActionSchema,
+  recoverCloseDialogActionSchema,
   extractListActionSchema,
   extractSearchResultsActionSchema,
   extractPageFactsActionSchema,
@@ -135,6 +140,7 @@ export const toolResultSchema = z.object({
     z.literal("TYPE"),
     z.literal("NAVIGATE"),
     z.literal("SCROLL"),
+    z.literal("RECOVER_CLOSE_DIALOG"),
     z.literal("EXTRACT_LIST"),
     z.literal("EXTRACT_SEARCH_RESULTS"),
     z.literal("EXTRACT_PAGE_FACTS"),
@@ -147,5 +153,8 @@ export const toolResultSchema = z.object({
   pageFactsResult: pageFactExtractionSchema.optional(),
   navigated: z.boolean().optional(),
   highlightedAgentId: z.string().optional(),
+  recoveryKind: z.literal("close_dialog").optional(),
+  recoveryApplied: z.boolean().optional(),
+  recoveryTarget: z.string().optional(),
   errorCode: z.string().optional(),
 });

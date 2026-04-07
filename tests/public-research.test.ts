@@ -33,6 +33,9 @@ function createResearchMemory(overrides: Partial<SessionMemory> = {}): SessionMe
       actionRetryCount: 0,
       pageReadyRetryCount: 0,
       recoveryCount: 0,
+      pageWaitRecoveryCount: 0,
+      dialogCloseRecoveryCount: 0,
+      searchReopenRecoveryCount: 0,
       queryRefineTried: false,
       startedAt: Date.now(),
     },
@@ -173,6 +176,19 @@ describe("public research aggregation", () => {
         title: "Blocked source",
         pageType: "content",
         interactiveElements: [],
+        semanticSnapshot: {
+          version: 1,
+          url: "https://example.com/a",
+          title: "Blocked source",
+          nodeCount: 1,
+          truncated: false,
+          root: {
+            ref: "sem_root",
+            role: "unknown",
+            name: "",
+            children: [],
+          },
+        },
         productCandidates: [],
         pageReady: { ready: true, reason: "ok", checks: [] },
         pageFacts: {
@@ -203,6 +219,61 @@ describe("public research aggregation", () => {
     expect(memory.researchSources).toHaveLength(1);
     expect(memory.researchSources[0]?.status).toBe("partial");
     expect(memory.activeSourceIndex).toBe(1);
+  });
+
+  it("skips a failed source immediately when navigation fails", async () => {
+    const tool = getToolDefinition("readResearchSourceFacts");
+    const appendLog = vi.fn();
+    const memory = createResearchMemory({
+      currentPhase: "reading",
+      taskSpec: {
+        taskType: "public_research",
+        originalGoal: "Compare Playwright and Selenium",
+        searchQuery: "Playwright Selenium difference",
+        querySource: "llm-lite",
+        notes: [],
+        searchEngine: "google",
+        candidateLimit: 5,
+        sourceTargetCount: 2,
+      },
+      researchCandidates: [
+        { title: "Broken source", url: "https://example.com/broken", rank: 1 },
+        { title: "Readable source", url: "https://example.com/readable", rank: 2 },
+      ],
+    });
+
+    const result = await tool.run({
+      memory,
+      signal: new AbortController().signal,
+      scanPage: vi.fn(),
+      ensureUsableSnapshot: vi.fn(),
+      executeAction: vi.fn().mockResolvedValue({
+        success: false,
+        actionType: "NAVIGATE",
+        message: "navigation failed",
+        errorCode: "NAVIGATION_FAILED",
+      }),
+      settleAfterAction: vi.fn().mockResolvedValue(undefined),
+      appendLog,
+      recordStep: vi.fn(),
+      pushState: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(result.nextPhase).toBe("reading");
+    expect(memory.researchSources).toHaveLength(1);
+    expect(memory.researchSources[0]).toMatchObject({
+      status: "partial",
+      sourceUrl: "https://example.com/broken",
+    });
+    expect(memory.activeSourceIndex).toBe(1);
+    expect(appendLog).toHaveBeenCalledWith(
+      "runtime",
+      "warn",
+      "Research source skipped after a single failure.",
+      expect.objectContaining({
+        failureKind: "navigation_failed",
+      }),
+    );
   });
 
   it("builds partial final output with unresolved issues when sources are insufficient", async () => {

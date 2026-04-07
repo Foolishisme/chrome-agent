@@ -41,4 +41,12 @@ describe("llmDecisionSchema", () => {
 
     expect(parsed.type).toBe("NAVIGATE");
   });
+
+  it("accepts the restricted dialog recovery action", () => {
+    const parsed = agentActionSchema.parse({
+      type: "RECOVER_CLOSE_DIALOG",
+    });
+
+    expect(parsed.type).toBe("RECOVER_CLOSE_DIALOG");
+  });
 });

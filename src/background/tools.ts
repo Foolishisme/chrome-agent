@@ -129,6 +129,159 @@ function detectSearchBlocker(taskType: TaskSpec["taskType"], snapshot: SnapshotD
   return undefined;
 }
 
+function walkSemanticNodes(snapshot: SnapshotData["semanticSnapshot"]["root"]): Array<SnapshotData["semanticSnapshot"]["root"]> {
+  const nodes = [snapshot];
+  for (const child of snapshot.children ?? []) {
+    nodes.push(...walkSemanticNodes(child));
+  }
+  return nodes;
+}
+
+function hasSemanticRole(snapshot: SnapshotData, role: "dialog" | "alert" | "main" | "search" | "list" | "heading" | "link" | "button" | "input") {
+  return walkSemanticNodes(snapshot.semanticSnapshot.root).some((node) => node.role === role);
+}
+
+function hasRecoverableDialog(snapshot: SnapshotData) {
+  return hasSemanticRole(snapshot, "dialog") || hasSemanticRole(snapshot, "alert");
+}
+
+function hasSearchPageStructureIssue(snapshot: SnapshotData) {
+  if (snapshot.pageReady.ready) {
+    return false;
+  }
+
+  const hasMain = hasSemanticRole(snapshot, "main");
+  const hasSearch = hasSemanticRole(snapshot, "search");
+  const hasList = hasSemanticRole(snapshot, "list");
+  const hasHighValueNode =
+    hasList || hasSemanticRole(snapshot, "heading") || hasSemanticRole(snapshot, "link") || hasSemanticRole(snapshot, "button") || hasSemanticRole(snapshot, "input");
+
+  return !hasMain && !hasSearch && !hasHighValueNode;
+}
+
+async function attemptDialogCloseRecovery(
+  context: ToolExecutionContext,
+  snapshot: SnapshotData,
+  reason: string,
+): Promise<SnapshotData | undefined> {
+  if (!hasRecoverableDialog(snapshot) || context.memory.runtimeMeta.dialogCloseRecoveryCount >= 1) {
+    return undefined;
+  }
+
+  context.memory.runtimeMeta.dialogCloseRecoveryCount += 1;
+  context.memory.runtimeMeta.recoveryCount += 1;
+  context.memory.runtimeMeta.lastRecoveryAction = "RECOVER_CLOSE_DIALOG";
+  context.memory.recoveryHint = `Recovery ${context.memory.runtimeMeta.dialogCloseRecoveryCount}/1: close dialog once.`;
+  context.appendLog("runtime", "warn", "Triggering tool-local dialog-close recovery.", {
+    reason,
+    dialogCloseRecoveryCount: context.memory.runtimeMeta.dialogCloseRecoveryCount,
+  });
+
+  const action: AgentAction = { type: "RECOVER_CLOSE_DIALOG" };
+  const result = await context.executeAction(action, "Close the blocking dialog once.");
+  await context.settleAfterAction(action);
+  const snapshotAfter = await context.scanPage();
+
+  context.recordStep({
+    stepSummary: "Dialog close recovery attempted.",
+    nextIntent: "Rescan the current page state.",
+    expectedOutcome: "The blocking dialog disappears or the page becomes usable.",
+    action,
+    actionResult: result,
+    snapshot: snapshotAfter,
+  });
+
+  context.appendLog("runtime", result.success ? "info" : "warn", "Dialog close recovery finished.", {
+    success: result.success,
+    recoveryTarget: result.recoveryTarget,
+    pageReady: snapshotAfter.pageReady,
+  });
+
+  if (!result.success) {
+    return undefined;
+  }
+
+  if (!hasRecoverableDialog(snapshotAfter) || snapshotAfter.pageReady.ready) {
+    context.memory.recoveryHint = undefined;
+    return snapshotAfter;
+  }
+
+  return undefined;
+}
+
+async function ensureUsableSnapshotWithDialogRecovery(
+  context: ToolExecutionContext,
+  reason: string,
+): Promise<SnapshotData> {
+  const snapshot = await context.scanPage();
+  if (snapshot.pageReady.ready) {
+    return snapshot;
+  }
+
+  const recoveredBeforeWait = await attemptDialogCloseRecovery(context, snapshot, reason);
+  if (recoveredBeforeWait?.pageReady.ready) {
+    return recoveredBeforeWait;
+  }
+
+  try {
+    return await context.ensureUsableSnapshot();
+  } catch (error) {
+    if (error instanceof RuntimeError && error.code === "PAGE_NOT_READY") {
+      const latestSnapshot = context.memory.pageSnapshot;
+      if (latestSnapshot) {
+        const recoveredAfterWait = await attemptDialogCloseRecovery(context, latestSnapshot, reason);
+        if (recoveredAfterWait) {
+          if (recoveredAfterWait.pageReady.ready) {
+            return recoveredAfterWait;
+          }
+          return await context.ensureUsableSnapshot();
+        }
+      }
+    }
+
+    throw error;
+  }
+}
+
+async function reopenSearchResults(
+  context: ToolExecutionContext,
+  taskSpec: TaskSpec,
+  reason: string,
+): Promise<SnapshotData | undefined> {
+  if (context.memory.runtimeMeta.searchReopenRecoveryCount >= 1) {
+    return undefined;
+  }
+
+  context.memory.runtimeMeta.searchReopenRecoveryCount += 1;
+  context.memory.runtimeMeta.recoveryCount += 1;
+  context.memory.runtimeMeta.lastRecoveryAction = "NAVIGATE";
+  context.memory.recoveryHint = `Recovery ${context.memory.runtimeMeta.searchReopenRecoveryCount}/1: reopen canonical search page.`;
+  context.appendLog("runtime", "warn", "Triggering canonical search reopen recovery.", {
+    reason,
+    searchReopenRecoveryCount: context.memory.runtimeMeta.searchReopenRecoveryCount,
+    url: buildSearchUrl(taskSpec),
+  });
+
+  const action: AgentAction = {
+    type: "NAVIGATE",
+    url: buildSearchUrl(taskSpec),
+  };
+  const result = await context.executeAction(action, "Reopen the canonical search results page once.");
+  await context.settleAfterAction(action);
+  const snapshotAfter = await ensureUsableSnapshotWithDialogRecovery(context, "Recover from an unusable search page.");
+
+  context.recordStep({
+    stepSummary: "Canonical search reopen attempted.",
+    nextIntent: "Validate the search results page again.",
+    expectedOutcome: "The canonical search results page becomes usable.",
+    action,
+    actionResult: result,
+    snapshot: snapshotAfter,
+  });
+
+  return snapshotAfter;
+}
+
 export function buildRuleBasedSummary(goal: string, items: ExtractedItem[]) {
   const first = items[0];
   if (!first) {
@@ -243,6 +396,54 @@ function getBlockedReason(url: string, error?: string) {
   }
 
   return error || "页面不可读取";
+}
+
+function classifySourceFailure(url: string, error?: unknown) {
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : undefined;
+
+  if (/\.pdf(?:$|[?#])/i.test(url)) {
+    return {
+      kind: "pdf",
+      reason: "PDF 页面未做正文提取",
+    };
+  }
+
+  if (message?.includes("Could not establish connection")) {
+    return {
+      kind: "content_script_unavailable",
+      reason: "页面不可访问或未注入内容脚本",
+    };
+  }
+
+  if (message?.includes("PAGE_FACTS_EMPTY")) {
+    return {
+      kind: "page_facts_empty",
+      reason: "页面事实提取返回为空",
+    };
+  }
+
+  if (message?.includes("登录") || message?.toLowerCase().includes("login")) {
+    return {
+      kind: "login_wall",
+      reason: message,
+    };
+  }
+
+  if (
+    message?.includes("NAVIGATION_FAILED") ||
+    message?.includes("ACTION_EXECUTION_ERROR") ||
+    message?.toLowerCase().includes("navigation failed")
+  ) {
+    return {
+      kind: "navigation_failed",
+      reason: message,
+    };
+  }
+
+  return {
+    kind: "not_readable",
+    reason: getBlockedReason(url, message),
+  };
 }
 
 function isCommerceTask(taskSpec: TaskSpec | undefined): taskSpec is CommerceTaskSpec {
@@ -368,7 +569,7 @@ const searchInSiteTool: AgentToolDefinition = {
       throw new RuntimeError("Task spec is missing before search.", "TASK_SPEC_MISSING");
     }
 
-    const snapshot = await context.ensureUsableSnapshot();
+    const snapshot = await ensureUsableSnapshotWithDialogRecovery(context, "Search page blocked before submission.");
     const expectedSearchPage = context.memory.taskSpec.taskType === "commerce_search" ? "search" : "google_search";
 
     if (snapshot.pageType === expectedSearchPage && hasMatchingQuery(snapshot, context.memory.taskSpec.searchQuery)) {
@@ -397,7 +598,7 @@ const searchInSiteTool: AgentToolDefinition = {
         : `Open the Google search results for "${context.memory.taskSpec.searchQuery}".`,
     );
     await context.settleAfterAction(action);
-    const snapshotAfter = await context.scanPage();
+    let snapshotAfter = await ensureUsableSnapshotWithDialogRecovery(context, "Search results page stayed blocked after navigation.");
 
     context.memory.rawExtractedItems = [];
     context.memory.extractedItems = [];
@@ -435,6 +636,24 @@ const searchInSiteTool: AgentToolDefinition = {
       toPage: snapshotAfter.pageType,
     });
 
+    const needsSearchReopen =
+      snapshotAfter.pageType !== expectedSearchPage || hasSearchPageStructureIssue(snapshotAfter);
+    if (needsSearchReopen) {
+      const reopenedSnapshot = await reopenSearchResults(
+        context,
+        context.memory.taskSpec,
+        `Received ${snapshotAfter.pageType} after opening search results.`,
+      );
+      if (reopenedSnapshot) {
+        snapshotAfter = reopenedSnapshot;
+        context.memory.currentFacts = {
+          ...context.memory.currentFacts,
+          pageType: snapshotAfter.pageType,
+          lastSearchQuery: context.memory.taskSpec.searchQuery,
+        };
+      }
+    }
+
     const blockedReason = detectSearchBlocker(context.memory.taskType, snapshotAfter);
     if (blockedReason) {
       throw new RuntimeError(blockedReason, "SEARCH_BLOCKED");
@@ -459,7 +678,7 @@ const searchInSiteTool: AgentToolDefinition = {
 const extractStructuredResultsTool: AgentToolDefinition = {
   name: "extractStructuredResults",
   async run(context) {
-    const snapshot = await context.ensureUsableSnapshot();
+    const snapshot = await ensureUsableSnapshotWithDialogRecovery(context, "Extraction page blocked by an overlay.");
 
     if (context.memory.taskType === "commerce_search") {
       if (snapshot.pageType !== "search") {
@@ -561,7 +780,7 @@ const filterCandidatesTool: AgentToolDefinition = {
     await context.pushState("Filter candidates with task-specific rules.");
 
     if (context.memory.taskType === "commerce_search") {
-      const snapshot = await context.ensureUsableSnapshot();
+      const snapshot = await ensureUsableSnapshotWithDialogRecovery(context, "Filtering page blocked by an overlay.");
       const filtered = filterExtractedItems(context.memory.rawExtractedItems, context.memory.taskSpec as CommerceTaskSpec);
 
       context.memory.runtimeMeta.status = "observing";
@@ -674,6 +893,10 @@ const readPageFactsTool: AgentToolDefinition = {
     let sourceResult: ResearchSourceResult;
     let snapshotSummary: string | undefined;
     try {
+      if (!navigationResult.success) {
+        throw new RuntimeError(navigationResult.message, navigationResult.errorCode ?? "NAVIGATION_FAILED");
+      }
+
       const snapshot = await context.scanPage();
       snapshotSummary = `${snapshot.pageType} | ${snapshot.title}`;
       const extractionResult = await context.executeAction(
@@ -697,17 +920,22 @@ const readPageFactsTool: AgentToolDefinition = {
         textLength: pageFacts.textLength,
       };
     } catch (error) {
-      const reason = getBlockedReason(candidate.url, error instanceof Error ? error.message : undefined);
+      const failure = classifySourceFailure(candidate.url, error);
       sourceResult = {
         candidate,
         status: "partial",
         pageTitle: candidate.title,
-        summary: `该来源未能完成正文提取：${reason}`,
+        summary: `该来源未能完成正文提取：${failure.reason}`,
         keyPoints: [],
         sourceUrl: candidate.url,
-        unresolvedIssues: [reason],
+        unresolvedIssues: [failure.reason],
         textLength: 0,
       };
+      context.appendLog("runtime", "warn", "Research source skipped after a single failure.", {
+        title: candidate.title,
+        failureKind: failure.kind,
+        reason: failure.reason,
+      });
     }
 
     context.memory.researchSources = [...context.memory.researchSources, sourceResult];

@@ -46,6 +46,60 @@ export interface InteractiveElement {
   rect: ElementRect;
 }
 
+export type SemanticRole =
+  | "main"
+  | "navigation"
+  | "search"
+  | "form"
+  | "dialog"
+  | "alert"
+  | "heading"
+  | "section"
+  | "article"
+  | "list"
+  | "listitem"
+  | "link"
+  | "button"
+  | "input"
+  | "textarea"
+  | "checkbox"
+  | "radio"
+  | "tab"
+  | "tabpanel"
+  | "image"
+  | "text"
+  | "unknown";
+
+export interface SemanticNodeState {
+  expanded?: boolean;
+  selected?: boolean;
+  checked?: boolean;
+  disabled?: boolean;
+  pressed?: boolean;
+  required?: boolean;
+  invalid?: boolean;
+}
+
+export interface SemanticNode {
+  ref: string;
+  role: SemanticRole;
+  name: string;
+  text?: string;
+  level?: number;
+  state?: SemanticNodeState;
+  bounds?: ElementRect;
+  children?: SemanticNode[];
+}
+
+export interface SemanticSnapshot {
+  version: 1;
+  url: string;
+  title: string;
+  nodeCount: number;
+  truncated: boolean;
+  root: SemanticNode;
+}
+
 export interface ExtractedItem {
   title: string;
   priceText: string;
@@ -184,6 +238,7 @@ export interface SnapshotData {
   title: string;
   pageType: PageType;
   interactiveElements: InteractiveElement[];
+  semanticSnapshot: SemanticSnapshot;
   productCandidates: ExtractedItem[];
   pageReady: PageReadyState;
   pageFacts: PageFacts;
@@ -253,6 +308,7 @@ export type AgentAction =
   | { type: "TYPE"; agentId: string; text: string; submit?: boolean }
   | { type: "NAVIGATE"; url: string }
   | { type: "SCROLL"; direction: "up" | "down"; amount?: number }
+  | { type: "RECOVER_CLOSE_DIALOG" }
   | { type: "EXTRACT_LIST"; limit?: number }
   | { type: "EXTRACT_SEARCH_RESULTS"; limit?: number }
   | { type: "EXTRACT_PAGE_FACTS" }
@@ -268,6 +324,9 @@ export interface ToolResult {
   pageFactsResult?: PageFactExtraction;
   navigated?: boolean;
   highlightedAgentId?: string;
+  recoveryKind?: "close_dialog";
+  recoveryApplied?: boolean;
+  recoveryTarget?: string;
   errorCode?: string;
 }
 
@@ -353,6 +412,9 @@ export interface SessionMemory {
     pageReadyRetryCount: number;
     recoveryCount: number;
     lastRecoveryAction?: string;
+    pageWaitRecoveryCount: number;
+    dialogCloseRecoveryCount: number;
+    searchReopenRecoveryCount: number;
     queryRefineTried: boolean;
     startedAt: number;
   };
