@@ -1,12 +1,12 @@
 import { SENSITIVE_KEYWORDS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
-import type { ActionResult, AgentAction, LlmDecision, SessionMemory, SnapshotData } from "../shared/types";
+import type { ActionResult, AgentAction, SessionMemory, SnapshotData } from "../shared/types";
 
 const FALLBACK_AGENT_IDS = new Set(["el_search_input", "el_search_submit"]);
 
 export function ensureAgentExists(snapshot: SnapshotData | undefined, agentId: string) {
   if (!snapshot) {
-    throw new RuntimeError("当前没有页面快照，无法定位元素。", "SNAPSHOT_MISSING");
+    throw new RuntimeError("Current page snapshot is missing.", "SNAPSHOT_MISSING");
   }
 
   const matched = snapshot.interactiveElements.find((item) => item.agentId === agentId);
@@ -25,7 +25,7 @@ export function ensureAgentExists(snapshot: SnapshotData | undefined, agentId: s
     };
   }
 
-  throw new RuntimeError(`agentId 不存在：${agentId}`, "AGENT_ID_NOT_FOUND");
+  throw new RuntimeError(`agentId not found: ${agentId}`, "AGENT_ID_NOT_FOUND");
 }
 
 export function ensureActionAllowed(snapshot: SnapshotData | undefined, action: AgentAction) {
@@ -33,47 +33,16 @@ export function ensureActionAllowed(snapshot: SnapshotData | undefined, action: 
     const target = ensureAgentExists(snapshot, action.agentId);
     const combined = `${target.text} ${target.agentId}`.toLowerCase();
     if (SENSITIVE_KEYWORDS.some((keyword) => combined.includes(keyword.toLowerCase()))) {
-      throw new RuntimeError("命中敏感动作拦截规则。", "SENSITIVE_ACTION_BLOCKED");
+      throw new RuntimeError("Blocked by a sensitive action rule.", "SENSITIVE_ACTION_BLOCKED");
     }
   }
 
   if (action.type === "EXTRACT_LIST" && snapshot?.pageType !== "search") {
-    throw new RuntimeError("只有搜索结果页允许提取商品列表。", "INVALID_PAGE_FOR_EXTRACT");
+    throw new RuntimeError("Product extraction is only allowed on JD search pages.", "INVALID_PAGE_FOR_EXTRACT");
   }
 
   if (action.type === "EXTRACT_SEARCH_RESULTS" && snapshot?.pageType !== "google_search") {
-    throw new RuntimeError("只有 Google 搜索结果页允许提取来源列表。", "INVALID_PAGE_FOR_SEARCH_RESULTS");
-  }
-}
-
-export function normalizeDecision(decision: LlmDecision): LlmDecision {
-  if (decision.action.type === "DONE" && !decision.done) {
-    return { ...decision, done: true };
-  }
-  return decision;
-}
-
-export function hasReachedCompletion(memory: SessionMemory, decision?: LlmDecision): boolean {
-  const items =
-    decision?.action.type === "DONE" && decision.action.items && decision.action.items.length > 0
-      ? decision.action.items
-      : memory.extractedItems;
-  const successfulResearchSourceCount = memory.researchSources.filter((source) => source.status === "success").length;
-
-  return items.length >= 3 || successfulResearchSourceCount >= 3;
-}
-
-export function ensureDoneAllowed(memory: SessionMemory, decision: LlmDecision) {
-  if (decision.action.type !== "DONE") {
-    return;
-  }
-
-  if (!["search", "content", "google_search", "pdf"].includes(memory.runtimeMeta.pageType)) {
-    throw new RuntimeError("当前页面阶段不允许结束任务。", "DONE_PAGE_BLOCKED");
-  }
-
-  if (!hasReachedCompletion(memory, decision)) {
-    throw new RuntimeError("商品数量不足，不能提前结束任务。", "DONE_ITEMS_BLOCKED");
+    throw new RuntimeError("Search-result extraction is only allowed on Google result pages.", "INVALID_PAGE_FOR_SEARCH_RESULTS");
   }
 }
 
@@ -128,18 +97,18 @@ export function compareExpectedOutcome(
     const before = beforeSnapshot?.pageFacts.searchBox.text ?? "";
     const after = afterSnapshot.pageFacts.searchBox.text ?? "";
     if (after.includes(action.text) || (before !== after && after.length > 0)) {
-      return { matched: true, reason: "搜索框内容已更新。" };
+      return { matched: true, reason: "Search input content changed." };
     }
   }
 
   if (action.type === "CLICK") {
     if (beforeSnapshot?.url !== afterSnapshot.url || beforeSnapshot?.pageType !== afterSnapshot.pageType) {
-      return { matched: true, reason: "点击后页面状态发生变化。" };
+      return { matched: true, reason: "The page changed after the click." };
     }
   }
 
   if (action.type === "SCROLL") {
-    return { matched: true, reason: "滚动动作已执行。" };
+    return { matched: true, reason: "The scroll action executed." };
   }
 
   if (action.type === "EXTRACT_LIST") {
@@ -147,12 +116,12 @@ export function compareExpectedOutcome(
     if (extractedCount > 0) {
       return {
         matched: true,
-        reason: extractedCount >= 3 ? "已提取到足够商品。" : `已提取到 ${extractedCount} 个商品，仍可继续补充。`,
+        reason: extractedCount >= 3 ? "Enough products were extracted." : `Extracted ${extractedCount} product(s), which still counts as progress.`,
       };
     }
 
     if (!afterSnapshot.pageReady.ready) {
-      return { matched: false, reason: "页面尚未就绪，提取结果暂不可用。" };
+      return { matched: false, reason: "The page is not ready yet, so extraction is not meaningful." };
     }
   }
 
@@ -161,27 +130,25 @@ export function compareExpectedOutcome(
     if (extractedCount > 0) {
       return {
         matched: true,
-        reason: extractedCount >= 5 ? "已提取到足够来源候选。" : `已提取到 ${extractedCount} 个来源候选。`,
+        reason: extractedCount >= 5 ? "Enough sources were extracted." : `Extracted ${extractedCount} source candidate(s), which still counts as progress.`,
       };
     }
 
     if (!afterSnapshot.pageReady.ready) {
-      return { matched: false, reason: "页面尚未就绪，Google 结果暂不可用。" };
+      return { matched: false, reason: "The page is not ready yet, so Google extraction is not meaningful." };
     }
   }
 
-  if (action.type === "EXTRACT_PAGE_FACTS") {
-    if (actionResult?.pageFactsResult) {
-      return {
-        matched: true,
-        reason: actionResult.pageFactsResult.status === "success" ? "已提取页面事实。" : "页面只提取到部分事实。",
-      };
-    }
+  if (action.type === "EXTRACT_PAGE_FACTS" && actionResult?.pageFactsResult) {
+    return {
+      matched: true,
+      reason: actionResult.pageFactsResult.status === "success" ? "Page facts were extracted." : "Only partial page facts were extracted.",
+    };
   }
 
   if (expectedOutcome.trim().length > 0) {
-    return { matched: false, reason: "未观察到与预期匹配的页面变化。" };
+    return { matched: false, reason: "No page change matched the expected outcome yet." };
   }
 
-  return { matched: true, reason: "没有设置额外的预期结果。" };
+  return { matched: true, reason: "No additional expected outcome was configured." };
 }

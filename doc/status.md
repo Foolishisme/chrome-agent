@@ -6,102 +6,91 @@
 
 ## 2. Current Focus
 
-当前主线已经进入“范式迁移落地”的收口阶段：
+当前主线已经从“过渡层迁移”切到“canonical v1 收口完成后的稳定化”：
 
-- Runtime 按 `PlanStep + allowedTools` 驱动
-- Tools 由 LLM 在当前 step 的 `allowedTools` 内选择
-- Runtime 最小护栏先落了“执行步数 + 运行时间”
-- Side Panel 已切到 `对话 | 运行状态 | 结果`
+- Runtime 已是 canonical plan loop
+- Tools 已按 `src/background/tools/` 拆分
+- 状态模型、tool 契约、最终输出契约已统一
+- Side Panel 已改为读取 `finalResult`
 
 ## 3. Done
 
-- `src/background/prompting.ts` / `src/background/llm-client.ts`
-  - final answer synthesis now uses one generic structured prompt entrypoint
-  - the LLM final output is no longer tied to separate hardcoded commerce and research prompt templates
-- `src/sidepanel/index.ts`
-  - results now render final markdown first for both task modules
-  - structured items, sources, and unresolved issues are shown as optional supplemental blocks
+### 3.1 协议
 
 - `src/shared/types.ts`
-  - 已落地 `PlanStep`
-  - `SessionMemory.plan` / `SessionPublicState.plan` 已切到结构化步骤
-  - `StepRecord` 已记录所属 `planStepId`
-- `src/background/runtime.ts`
-  - 已移除旧的 `phase -> tool` 主调度逻辑
-  - 已改为按当前 `PlanStep.allowedTools` 选择 tool
-  - 已落最小护栏：
-    - `softStepLimit = 15`
-    - `softElapsedMs = 120000`
-    - `maxTotalSteps = 20`
-    - `maxElapsedMs = 180000`
-  - 异常或手动停止时会补结构化终态结果
+  - canonical `ToolName` 已收口
+  - `ActionResult` / 高层 `ToolResult` 已分离
+  - `FinalResult` 已统一
+  - `currentPhase / taskPlan / subtaskResults / finalSummary / finalOutput` 已退出主链
+
+- `src/shared/schema.ts`
+  - `nextToolSelectionSchema` 只允许 canonical tool
+  - `finalResultSynthesisSchema` 已对齐新 `FinalResult`
+  - `actionResultSchema` 已替代旧 action-level `ToolResult`
+
+### 3.2 Runtime / Tools
+
+- `src/background/runtime-core.ts`
+  - runtime 已改为静态 plan 驱动循环
+  - 单工具 step 不调用 LLM
+  - 多工具 step 才调用 `chooseNextTool`
+  - 已落地重复失败和无进展护栏
+
+- `src/background/tools/`
+  - 已拆为共享 helper、registry 和 7 个 canonical tool 文件
+
 - `src/background/tools.ts`
-  - 已与新的 `PlanStep[]` 内存契约对齐
-  - 高层 step 计数已收回 runtime 统一维护
+  - 已退化为 barrel export
+
+### 3.3 UI
+
 - `src/sidepanel/index.ts`
-  - 已改成三段式展示：
-    - 对话
-    - 运行状态
-    - 结果
-  - 执行时间线已按计划步骤正序分组展示
-  - 调试日志已改为正序展示
-- 自动化验证
-  - `npm.cmd test` 通过
-  - `npm.cmd run build` 通过
+  - 结果区优先展示 `finalResult.markdown`
+  - 问题与建议下一步从 `finalResult` 读取
+  - 不再依赖 `currentPhase`
 
-## 4. Real-World Validation
+- `src/sidepanel/i18n.ts`
+  - runtime 状态已收口为 `idle | running | done | error`
 
-本线程已有用户实机反馈：
+### 3.4 文档
 
-- 扩展可加载
-- Side Panel 可启动 session
-- `public_research` 路径已跑通
+- `doc/adr/0002-converge-runtime-tool-contracts.md` 已新增
+- `spec / constraints / plan / status / acceptance` 已对齐当前代码事实
 
-实机反馈同时暴露了一个 UI 问题：
+## 4. Validation
 
-- 执行时间线之前把步骤细节直接拼在计划步骤后面，且展示顺序为倒序
-- 本轮已按“计划步骤分组 + 步骤细节内聚 + 正序展示”修正
+最新验证检查点：
 
-## 5. In Progress
+- `npm.cmd test`
+  - 9 个测试文件，60 个测试通过
+- `npm.cmd run build`
+  - 通过
 
-- 继续把高层 tool 返回契约从过渡态收口到最终形态
-- 继续减少 tools 内对 `currentPhase` 的兼容依赖
-- 准备补 `no progress` / 连续失败类护栏
+时间：`2026-04-07`
 
-## 6. Blockers
+## 5. Remaining Risks
 
-- 高层 `ToolResult` 仍处于过渡态，尚未完全统一成最终协议
-- `no progress` 护栏未落地
-- `commerce_search` 还缺本线程内的实机闭环验证记录
-- provider live request 仍未做真实联调确认
+当前主要剩余风险：
 
-## 7. Rejected Paths
+- `commerce_search` 仍缺本轮真机闭环记录
+- stop / error / budget guardrails 仍缺真机可视化验证记录
+- 目前仍不支持执行中动态改 plan
+- `artifacts` 字段协议已固定，但真实文件 artifact 仍未进入主链
 
-- 不先把来源读取和事实提取硬拆成更细 tool
-- 不为了迁移去做无关重构、重命名和大面积改写
-- 不把 raw DOM 原子动作暴露给 LLM 编排
+## 6. Rejected Paths
 
-## 8. Next Actions
+本轮明确放弃：
 
-1. 统一高层 tool 返回契约，减少 phase 兼容字段
-2. 补 `no progress` / 连续失败类护栏
-3. 补 `commerce_search` 真机闭环验证
-4. 根据真机反馈决定是否继续细拆 tool
+- 继续保留旧 alias tool
+- 继续让 runtime 维护 `phase` 兼容逻辑
+- 为了形式整齐继续堆中间抽象
+- 在没有真实证据前继续细拆 tool
 
-Updated: 2026-04-03
+## 7. Next Actions
 
-## Update Notes
-
-- Added V1 lightweight `semanticSnapshot` to `SnapshotData` without changing the current extraction and recovery flow.
-- The runtime now records a compact semantic snapshot summary in page scan debug logs.
-- Added V1 deterministic recovery paths:
-  - short page wait and rescan with explicit recovery counters
-  - one-shot dialog close recovery through `RECOVER_CLOSE_DIALOG`
-  - one-shot canonical search-page reopen for broken search results
-  - single-source failure skip in `public_research` without per-source retry
-- Added regression coverage for dialog close, canonical search reopen, wait-rescan, and single-source skip.
-- Latest validation checkpoint:
-  - `npm.cmd test`: `9` test files, `56` tests passed
-  - `npm.cmd run build`: passed
+1. 记录 `commerce_search` 真机闭环
+2. 记录 stop / error / budget guardrails 真机表现
+3. 根据真实失败模式决定是否继续细拆 tool
+4. 再评估文件 / PDF artifact 主链
 
 Updated: 2026-04-07

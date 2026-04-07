@@ -252,7 +252,7 @@ function renderTimelineStep(step: StepRecord) {
 }
 
 function renderConversationSection() {
-  const currentProgress = currentState.error ?? currentState.stepSummary ?? currentState.finalSummary ?? messages.assistantWaiting;
+  const currentProgress = currentState.error ?? currentState.stepSummary ?? currentState.finalResult?.summary ?? messages.assistantWaiting;
 
   return `
     <div class="controls">
@@ -460,7 +460,7 @@ function renderStructuredSources() {
 }
 
 function renderStructuredIssues() {
-  const issues = currentState.finalResult?.unresolvedIssues ?? currentState.unresolvedIssues ?? [];
+  const issues = currentState.finalResult?.errorsOrBlockers ?? currentState.unresolvedIssues ?? [];
   if (issues.length === 0) {
     return `<div class="muted">${escapeHtml(messages.emptyValue)}</div>`;
   }
@@ -469,7 +469,7 @@ function renderStructuredIssues() {
 }
 
 function renderResultsSection() {
-  const overallStatus = currentState.finalResult?.overallStatus;
+  const overallStatus = currentState.finalResult?.status;
   const overallStatusLabel =
     overallStatus === "success"
       ? messages.resultOk
@@ -477,6 +477,8 @@ function renderResultsSection() {
         ? messages.resultPartial
         : overallStatus === "failed"
           ? messages.resultFail
+          : overallStatus === "blocked"
+            ? messages.resultBlocked
           : undefined;
   const errorMarkup = currentState.error ? `<div class="error-box">${escapeHtml(currentState.error)}</div>` : "";
   const artifactSections: string[] = [];
@@ -489,17 +491,26 @@ function renderResultsSection() {
     artifactSections.push(renderArtifactDetail(messages.resultSourcesTitle, renderStructuredSources()));
   }
 
-  if ((currentState.finalResult?.unresolvedIssues.length ?? currentState.unresolvedIssues?.length ?? 0) > 0) {
+  if ((currentState.finalResult?.errorsOrBlockers.length ?? currentState.unresolvedIssues?.length ?? 0) > 0) {
     artifactSections.push(renderArtifactDetail(messages.resultIssuesTitle, renderStructuredIssues()));
+  }
+
+  if (currentState.finalResult?.suggestedNextAction) {
+    artifactSections.push(
+      renderArtifactDetail(
+        messages.resultNextActionTitle,
+        `<p>${escapeHtml(currentState.finalResult.suggestedNextAction)}</p>`,
+      ),
+    );
   }
 
   return `
     ${errorMarkup}
     ${overallStatusLabel ? `<p class="muted"><strong>${escapeHtml(messages.runtime)}:</strong> ${escapeHtml(overallStatusLabel)}</p>` : ""}
-    ${renderMarkdownBlock(currentState.finalOutput)}
+    ${renderMarkdownBlock(currentState.finalResult?.markdown)}
     ${
-      currentState.finalSummary
-        ? `<p class="muted"><strong>${escapeHtml(messages.resultSummaryTitle)}:</strong> ${escapeHtml(currentState.finalSummary)}</p>`
+      currentState.finalResult?.summary
+        ? `<p class="muted"><strong>${escapeHtml(messages.resultSummaryTitle)}:</strong> ${escapeHtml(currentState.finalResult.summary)}</p>`
         : `<p class="muted">${escapeHtml(messages.resultsHint)}</p>`
     }
     ${

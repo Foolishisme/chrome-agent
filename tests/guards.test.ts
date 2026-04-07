@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { compareExpectedOutcome, ensureDoneAllowed, ensureAgentExists, isRepeatedAction } from "../src/background/guards";
-import type { LlmDecision, SessionMemory, SnapshotData } from "../src/shared/types";
+import { compareExpectedOutcome, ensureAgentExists, isRepeatedAction } from "../src/background/guards";
+import type { SessionMemory, SnapshotData } from "../src/shared/types";
 
 function createSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
   return {
@@ -24,12 +24,12 @@ function createSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
     productCandidates: [],
     pageReady: {
       ready: true,
-      reason: "搜索结果页可用",
+      reason: "search results page is ready",
       checks: [],
     },
     pageFacts: {
-      searchBox: { present: true, visible: true, text: "笔记本" },
-      searchSubmit: { present: true, visible: true, text: "搜索" },
+      searchBox: { present: true, visible: true, text: "laptop" },
+      searchSubmit: { present: true, visible: true, text: "Search" },
       resultList: {
         present: true,
         loaded: true,
@@ -46,7 +46,7 @@ function createSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
 function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
   return {
     goal: "Find laptops",
-    currentPhase: "extracting",
+    taskType: "commerce_search",
     plan: [],
     toolHistory: [],
     currentFacts: {},
@@ -54,22 +54,28 @@ function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
     logs: [],
     rawExtractedItems: [],
     extractedItems: [],
+    researchCandidates: [],
+    researchSources: [],
     failures: [],
+    unresolvedIssues: [],
+    activeSourceIndex: 0,
     runtimeMeta: {
       sessionId: "session-1",
       tabId: 1,
       pageType: "search",
-      status: "observing",
+      status: "running",
       currentTool: undefined,
+      currentStepId: undefined,
       currentStep: 2,
-      llmRetryCount: 0,
       actionRetryCount: 0,
-      pageReadyRetryCount: 0,
       recoveryCount: 0,
       pageWaitRecoveryCount: 0,
       dialogCloseRecoveryCount: 0,
       searchReopenRecoveryCount: 0,
       queryRefineTried: false,
+      sameToolRetryCount: 0,
+      sameToolRetryTool: undefined,
+      consecutiveNoProgressCount: 0,
       startedAt: Date.now(),
     },
     ...overrides,
@@ -77,31 +83,12 @@ function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
 }
 
 describe("guardrails", () => {
-  it("blocks DONE when fewer than 3 items are available", () => {
-    const memory = createMemory({
-      extractedItems: [{ title: "A", priceText: "1", url: "https://a.com" }],
-    });
-
-    const decision: LlmDecision = {
-      stepSummary: "Finish",
-      nextIntent: "Stop",
-      expectedOutcome: "Done",
-      done: true,
-      action: {
-        type: "DONE",
-        summary: "Summary",
-      },
-    };
-
-    expect(() => ensureDoneAllowed(memory, decision)).toThrow();
-  });
-
   it("detects repeated failed actions", () => {
     const memory = createMemory({
       stepHistory: [
         {
           step: 1,
-          status: "acting",
+          status: "running",
           stepSummary: "Click search",
           action: { type: "CLICK", agentId: "el_search_submit" },
           actionResult: { success: false, actionType: "CLICK", message: "Failed" },
@@ -109,7 +96,7 @@ describe("guardrails", () => {
         },
         {
           step: 2,
-          status: "acting",
+          status: "running",
           stepSummary: "Click search",
           action: { type: "CLICK", agentId: "el_search_submit" },
           actionResult: { success: false, actionType: "CLICK", message: "Failed again" },
@@ -136,18 +123,18 @@ describe("guardrails", () => {
     const result = compareExpectedOutcome(
       undefined,
       createSnapshot(),
-      "提取商品列表",
+      "Extract product cards",
       { type: "EXTRACT_LIST" },
       {
         success: true,
         actionType: "EXTRACT_LIST",
-        message: "已提取 1 个商品",
+        message: "Extracted 1 product.",
         items: [{ title: "A", priceText: "1", url: "https://a.com" }],
       },
     );
 
     expect(result.matched).toBe(true);
-    expect(result.reason).toContain("1 个商品");
+    expect(result.reason).toContain("1 product");
   });
 
   it("marks extract as not matched when page is still not ready", () => {
@@ -156,12 +143,12 @@ describe("guardrails", () => {
       createSnapshot({
         pageReady: {
           ready: false,
-          reason: "搜索结果仍在加载",
-          checks: ["搜索结果仍在加载"],
+          reason: "still loading",
+          checks: ["still loading"],
         },
         pageFacts: {
-          searchBox: { present: true, visible: true, text: "笔记本" },
-          searchSubmit: { present: true, visible: true, text: "搜索" },
+          searchBox: { present: true, visible: true, text: "laptop" },
+          searchSubmit: { present: true, visible: true, text: "Search" },
           resultList: {
             present: true,
             loaded: false,
@@ -171,17 +158,17 @@ describe("guardrails", () => {
           },
         },
       }),
-      "提取商品列表",
+      "Extract product cards",
       { type: "EXTRACT_LIST" },
       {
         success: false,
         actionType: "EXTRACT_LIST",
-        message: "未提取到商品",
+        message: "No products extracted",
         items: [],
       },
     );
 
     expect(result.matched).toBe(false);
-    expect(result.reason).toContain("页面尚未就绪");
+    expect(result.reason).toContain("not ready");
   });
 });

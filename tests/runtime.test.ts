@@ -1,16 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { BrowserAgentRuntime, evaluateRuntimeBudget, isReceiverMissingError, sendMessageToTab } from "../src/background/runtime";
 import { LIMITS } from "../src/shared/constants";
 import { RuntimeError } from "../src/shared/errors";
-import type { SessionMemory } from "../src/shared/types";
+import type { PlanStep, SessionMemory, ToolResult } from "../src/shared/types";
+
+const { chooseNextToolMock } = vi.hoisted(() => ({
+  chooseNextToolMock: vi.fn(),
+}));
+
+vi.mock("../src/background/llm-client", async () => {
+  const actual = await vi.importActual<typeof import("../src/background/llm-client")>("../src/background/llm-client");
+  return {
+    ...actual,
+    chooseNextTool: chooseNextToolMock,
+    classifyTaskType: vi.fn(),
+  };
+});
+
+import { BrowserAgentRuntime, evaluateRuntimeBudget, isReceiverMissingError, sendMessageToTab } from "../src/background/runtime";
 
 function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
   return {
-    goal: "调研 Playwright 和 Selenium 的区别",
+    goal: "Research the difference between Playwright and Selenium",
     taskType: "public_research",
-    currentPhase: "planning",
     plan: [],
-    subtaskResults: [],
     toolHistory: [],
     currentFacts: {},
     stepHistory: [],
@@ -26,28 +38,47 @@ function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
       sessionId: "session-1",
       tabId: 1,
       pageType: "unknown",
-      status: "planning",
+      status: "running",
       currentStepId: undefined,
       currentTool: undefined,
       currentStep: 0,
       budgetLow: false,
-      llmRetryCount: 0,
       actionRetryCount: 0,
-      pageReadyRetryCount: 0,
       recoveryCount: 0,
       pageWaitRecoveryCount: 0,
       dialogCloseRecoveryCount: 0,
       searchReopenRecoveryCount: 0,
       queryRefineTried: false,
+      sameToolRetryCount: 0,
+      sameToolRetryTool: undefined,
+      consecutiveNoProgressCount: 0,
       startedAt: Date.now(),
     },
     ...overrides,
   };
 }
 
+function createSession(memory: SessionMemory) {
+  return {
+    memory,
+    stopped: false,
+    abortController: new AbortController(),
+    lastPublicState: {
+      status: "running" as const,
+      currentStep: memory.runtimeMeta.currentStep,
+      plan: memory.plan,
+      items: [],
+      logs: [],
+      timeline: [],
+      updatedAt: Date.now(),
+    },
+  };
+}
+
 describe("runtime messaging recovery", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
+    chooseNextToolMock.mockReset();
   });
 
   it("detects the missing receiver error", () => {
@@ -153,22 +184,11 @@ describe("runtime page wait recovery", () => {
   it("rescans once and continues when the page becomes ready", async () => {
     vi.useFakeTimers();
     const runtime = new BrowserAgentRuntime() as unknown as {
-      ensureUsableSnapshot(session: { memory: SessionMemory; lastPublicState: unknown }): Promise<unknown>;
+      ensureUsableSnapshot(session: ReturnType<typeof createSession>): Promise<unknown>;
       scanPage: ReturnType<typeof vi.fn>;
     };
     const memory = createMemory();
-    const session = {
-      memory,
-      lastPublicState: {
-        status: "observing",
-        currentStep: 0,
-        plan: [],
-        items: [],
-        logs: [],
-        timeline: [],
-        updatedAt: Date.now(),
-      },
-    };
+    const session = createSession(memory);
     runtime.scanPage = vi
       .fn()
       .mockResolvedValueOnce({
@@ -227,22 +247,11 @@ describe("runtime page wait recovery", () => {
   it("throws PAGE_NOT_READY after two short wait rescans", async () => {
     vi.useFakeTimers();
     const runtime = new BrowserAgentRuntime() as unknown as {
-      ensureUsableSnapshot(session: { memory: SessionMemory; lastPublicState: unknown }): Promise<unknown>;
+      ensureUsableSnapshot(session: ReturnType<typeof createSession>): Promise<unknown>;
       scanPage: ReturnType<typeof vi.fn>;
     };
     const memory = createMemory();
-    const session = {
-      memory,
-      lastPublicState: {
-        status: "observing",
-        currentStep: 0,
-        plan: [],
-        items: [],
-        logs: [],
-        timeline: [],
-        updatedAt: Date.now(),
-      },
-    };
+    const session = createSession(memory);
     runtime.scanPage = vi.fn().mockResolvedValue({
       url: "https://example.com/loading",
       title: "Loading",
@@ -266,7 +275,7 @@ describe("runtime page wait recovery", () => {
     });
 
     const pending = runtime.ensureUsableSnapshot(session);
-    const rejection = expect(pending).rejects.toMatchObject<Partial<RuntimeError>>({
+    const rejection = expect(pending).rejects.toMatchObject({
       code: "PAGE_NOT_READY",
     });
     await vi.advanceTimersByTimeAsync(LIMITS.PAGE_READY_WAIT_MS + LIMITS.PAGE_READY_SECOND_WAIT_MS);
@@ -275,5 +284,103 @@ describe("runtime page wait recovery", () => {
     expect(memory.runtimeMeta.pageWaitRecoveryCount).toBe(2);
     expect(memory.recoveryHint).toContain("wait recovery 2/2");
     expect(runtime.scanPage).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("runtime orchestration guardrails", () => {
+  beforeEach(() => {
+    vi.stubGlobal("chrome", {
+      runtime: {
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+  });
+
+  it("does not call the model when a step exposes only one tool", async () => {
+    const runtime = new BrowserAgentRuntime() as unknown as {
+      chooseToolForStep(session: ReturnType<typeof createSession>, step: PlanStep): Promise<string>;
+    };
+    const memory = createMemory({
+      plan: [
+        {
+          stepId: "open-search-results",
+          goal: "Open search results",
+          allowedTools: ["openSearchResults"],
+          successCriteria: [],
+          status: "running",
+        },
+      ],
+    });
+
+    const selected = await runtime.chooseToolForStep(createSession(memory), memory.plan[0]!);
+
+    expect(selected).toBe("openSearchResults");
+    expect(chooseNextToolMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a model-selected tool outside allowedTools", async () => {
+    chooseNextToolMock.mockResolvedValue({
+      toolName: "finalizeResearchResult",
+      reason: "bad selection",
+      source: "llm-lite",
+    });
+
+    const runtime = new BrowserAgentRuntime() as unknown as {
+      chooseToolForStep(session: ReturnType<typeof createSession>, step: PlanStep): Promise<string>;
+    };
+    const memory = createMemory({
+      plan: [
+        {
+          stepId: "branching-step",
+          goal: "Select a tool",
+          allowedTools: ["openSearchResults", "collectResearchCandidates"],
+          successCriteria: [],
+          status: "running",
+        },
+      ],
+    });
+
+    await expect(runtime.chooseToolForStep(createSession(memory), memory.plan[0]!)).rejects.toMatchObject({
+      code: "TOOL_NOT_ALLOWED",
+    });
+  });
+
+  it("stops after the same tool returns retryable errors three times", () => {
+    const runtime = new BrowserAgentRuntime() as unknown as {
+      applyRetryGuardrails(session: ReturnType<typeof createSession>, toolName: string, result: ToolResult, madeProgress: boolean): void;
+    };
+    const session = createSession(createMemory());
+    const result: ToolResult = {
+      status: "retryable_error",
+      summary: "temporary failure",
+      outputs: {},
+      artifacts: [],
+      facts: {},
+      stepStatus: "running",
+      retryHint: "try again",
+    };
+
+    runtime.applyRetryGuardrails(session, "openSearchResults", result, false);
+    runtime.applyRetryGuardrails(session, "openSearchResults", result, false);
+    expect(() => runtime.applyRetryGuardrails(session, "openSearchResults", result, false)).toThrowError(/retry limit/i);
+  });
+
+  it("stops after three consecutive no-progress tool runs", () => {
+    const runtime = new BrowserAgentRuntime() as unknown as {
+      applyRetryGuardrails(session: ReturnType<typeof createSession>, toolName: string, result: ToolResult, madeProgress: boolean): void;
+    };
+    const session = createSession(createMemory());
+    const result: ToolResult = {
+      status: "partial",
+      summary: "no progress",
+      outputs: {},
+      artifacts: [],
+      facts: {},
+      stepStatus: "running",
+    };
+
+    runtime.applyRetryGuardrails(session, "readResearchSourceFacts", result, false);
+    runtime.applyRetryGuardrails(session, "readResearchSourceFacts", result, false);
+    expect(() => runtime.applyRetryGuardrails(session, "readResearchSourceFacts", result, false)).toThrowError(/no meaningful progress/i);
   });
 });

@@ -42,12 +42,14 @@ type MessageBundle = {
   resultOk: string;
   resultFail: string;
   resultPartial: string;
+  resultBlocked: string;
   resultsHint: string;
   resultSummaryTitle: string;
   resultArtifactsTitle: string;
   resultItemsTitle: string;
   resultSourcesTitle: string;
   resultIssuesTitle: string;
+  resultNextActionTitle: string;
   product: string;
   price: string;
   shop: string;
@@ -73,7 +75,7 @@ const messages: Record<Locale, MessageBundle> = {
   "zh-CN": {
     appTitle: "Browser Agent MVP",
     heroTitle: "Browser Agent MVP",
-    heroDescription: "当前界面聚焦三块：对话、运行状态和结果。",
+    heroDescription: "当前界面聚焦对话、运行状态和结果。",
     conversationTitle: "对话",
     runtimeStatusTitle: "运行状态",
     resultsTitle: "结果",
@@ -104,17 +106,19 @@ const messages: Record<Locale, MessageBundle> = {
     logsEmpty: "还没有调试日志。",
     logDetail: "详情",
     planTitle: "计划步骤",
-    planTools: "可选工具",
+    planTools: "允许工具",
     planCriteria: "成功标准",
     resultOk: "成功",
     resultFail: "失败",
     resultPartial: "部分成功",
+    resultBlocked: "阻塞",
     resultsHint: "会话完成后，结果会显示在这里。",
     resultSummaryTitle: "结果摘要",
-    resultArtifactsTitle: "结构化补充",
+    resultArtifactsTitle: "结构化细节",
     resultItemsTitle: "候选项",
     resultSourcesTitle: "来源详情",
-    resultIssuesTitle: "未解决问题",
+    resultIssuesTitle: "问题与阻塞",
+    resultNextActionTitle: "建议下一步",
     product: "商品",
     price: "价格",
     shop: "店铺",
@@ -133,14 +137,11 @@ const messages: Record<Locale, MessageBundle> = {
     budgetHealthy: "正常",
     taskTypeLabels: {
       commerce_search: "商城调研",
-      public_research: "普通调研",
+      public_research: "公网调研",
     },
     statusLabels: {
       idle: "空闲",
-      scanning: "扫描中",
-      planning: "规划中",
-      acting: "执行中",
-      observing: "观察中",
+      running: "运行中",
       done: "已完成",
       error: "异常",
     },
@@ -191,12 +192,14 @@ const messages: Record<Locale, MessageBundle> = {
     resultOk: "OK",
     resultFail: "FAIL",
     resultPartial: "PARTIAL",
+    resultBlocked: "BLOCKED",
     resultsHint: "Results will appear here after the session completes.",
     resultSummaryTitle: "Result Summary",
     resultArtifactsTitle: "Structured Details",
     resultItemsTitle: "Items",
     resultSourcesTitle: "Sources",
-    resultIssuesTitle: "Unresolved Issues",
+    resultIssuesTitle: "Issues & Blockers",
+    resultNextActionTitle: "Suggested Next Action",
     product: "Product",
     price: "Price",
     shop: "Shop",
@@ -219,10 +222,7 @@ const messages: Record<Locale, MessageBundle> = {
     },
     statusLabels: {
       idle: "Idle",
-      scanning: "Scanning",
-      planning: "Planning",
-      acting: "Acting",
-      observing: "Observing",
+      running: "Running",
       done: "Done",
       error: "Error",
     },

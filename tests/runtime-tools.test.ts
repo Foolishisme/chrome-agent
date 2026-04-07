@@ -48,9 +48,7 @@ function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
   return {
     goal: "Compare a few MacBook options",
     taskType: "commerce_search",
-    currentPhase: "filtering",
     plan: [],
-    subtaskResults: [],
     toolHistory: [],
     currentFacts: {},
     stepHistory: [],
@@ -66,17 +64,19 @@ function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
       sessionId: "session-1",
       tabId: 1,
       pageType: "search",
-      status: "observing",
+      status: "running",
       currentTool: undefined,
+      currentStepId: undefined,
       currentStep: 2,
-      llmRetryCount: 0,
       actionRetryCount: 0,
-      pageReadyRetryCount: 0,
       recoveryCount: 0,
       pageWaitRecoveryCount: 0,
       dialogCloseRecoveryCount: 0,
       searchReopenRecoveryCount: 0,
       queryRefineTried: false,
+      sameToolRetryCount: 0,
+      sameToolRetryTool: undefined,
+      consecutiveNoProgressCount: 0,
       startedAt: Date.now(),
     },
     ...overrides,
@@ -119,7 +119,7 @@ describe("runtime tool helpers", () => {
 });
 
 describe("runtime recovery path", () => {
-  it("keeps scroll recovery available when results are insufficient but the page is ready", async () => {
+  it("uses scroll recovery inside the commerce collection tool", async () => {
     const tool = getToolDefinition("collectCommerceCandidates");
     const memory = createMemory({
       taskSpec: {
@@ -132,15 +132,27 @@ describe("runtime recovery path", () => {
         querySource: "llm-lite",
         notes: [],
       },
-      rawExtractedItems: [{ title: "MacBook Air 13", priceText: "7999.00", url: "https://item.jd.com/1.html" }],
     });
     const snapshot = createSnapshot();
-    const scrollResult: ActionResult = {
-      success: true,
-      actionType: "SCROLL",
-      message: "scrolled down",
-    };
-    const executeAction = vi.fn().mockResolvedValue(scrollResult);
+    const executeAction = vi
+      .fn<(...args: unknown[]) => Promise<ActionResult>>()
+      .mockResolvedValueOnce({
+        success: false,
+        actionType: "EXTRACT_LIST",
+        message: "no items",
+        items: [],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        actionType: "SCROLL",
+        message: "scrolled down",
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        actionType: "EXTRACT_LIST",
+        message: "extracted one item",
+        items: [{ title: "MacBook Air 13", priceText: "7999.00", url: "https://item.jd.com/1.html" }],
+      });
     const settleAfterAction = vi.fn().mockResolvedValue(undefined);
     const scanPage = vi.fn().mockResolvedValue(snapshot);
     const recordStep = vi.fn();
@@ -157,11 +169,9 @@ describe("runtime recovery path", () => {
       pushState: vi.fn().mockResolvedValue(undefined),
     });
 
-    expect(result.nextPhase).toBe("extracting");
-    expect(executeAction).toHaveBeenCalledWith(
-      { type: "SCROLL", direction: "down", amount: 920 },
-      "Scroll to load more result cards.",
-    );
+    expect(result.status).toBe("partial");
+    expect(result.stepStatus).toBe("succeeded");
+    expect(executeAction).toHaveBeenNthCalledWith(2, { type: "SCROLL", direction: "down", amount: 920 }, "Scroll to load more result cards.");
     expect(memory.runtimeMeta.recoveryCount).toBe(1);
     expect(recordStep).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -175,7 +185,6 @@ describe("search page query matching", () => {
   it("accepts a matching search result page even when the search input is missing", async () => {
     const tool = getToolDefinition("openSearchResults");
     const memory = createMemory({
-      currentPhase: "searching",
       taskType: "commerce_search",
       taskSpec: {
         taskType: "commerce_search",
@@ -217,15 +226,14 @@ describe("search page query matching", () => {
       pushState: vi.fn().mockResolvedValue(undefined),
     });
 
-    expect(result.nextPhase).toBe("extracting");
+    expect(result.stepStatus).toBe("succeeded");
+    expect(result.outputs.searchQueryMatched).toBe(true);
     expect(executeAction).not.toHaveBeenCalled();
-    expect(memory.currentFacts.searchQueryMatched).toBe(true);
   });
 
   it("closes a blocking dialog once before continuing", async () => {
     const tool = getToolDefinition("openSearchResults");
     const memory = createMemory({
-      currentPhase: "searching",
       taskType: "commerce_search",
       taskSpec: {
         taskType: "commerce_search",
@@ -272,7 +280,7 @@ describe("search page query matching", () => {
       message: "dialog closed",
       recoveryKind: "close_dialog",
       recoveryApplied: true,
-      recoveryTarget: "关闭",
+      recoveryTarget: "close",
     });
 
     const result = await tool.run({
@@ -287,7 +295,7 @@ describe("search page query matching", () => {
       pushState: vi.fn().mockResolvedValue(undefined),
     });
 
-    expect(result.nextPhase).toBe("extracting");
+    expect(result.stepStatus).toBe("succeeded");
     expect(executeAction).toHaveBeenCalledWith(
       { type: "RECOVER_CLOSE_DIALOG" },
       "Close the blocking dialog once.",
@@ -298,15 +306,14 @@ describe("search page query matching", () => {
   it("navigates directly to the JD search url when the current page does not match the query", async () => {
     const tool = getToolDefinition("openSearchResults");
     const memory = createMemory({
-      currentPhase: "searching",
       taskType: "commerce_search",
       taskSpec: {
         taskType: "commerce_search",
-        originalGoal: "500耳机",
+        originalGoal: "500 headphones",
         topK: 5,
         llmInputLimit: 10,
         extractLimit: 12,
-        searchQuery: "500耳机",
+        searchQuery: "500 headphones",
         querySource: "llm-lite",
         notes: [],
       },
@@ -321,8 +328,8 @@ describe("search page query matching", () => {
       },
     });
     const snapshotAfter = createSnapshot({
-      url: "https://search.jd.com/Search?keyword=500%E8%80%B3%E6%9C%BA&enc=utf-8",
-      title: "500耳机 - JD Search",
+      url: "https://search.jd.com/Search?keyword=500+headphones&enc=utf-8",
+      title: "500 headphones - JD Search",
     });
     const executeAction = vi.fn().mockResolvedValue({
       success: true,
@@ -343,28 +350,27 @@ describe("search page query matching", () => {
       pushState: vi.fn().mockResolvedValue(undefined),
     });
 
-    expect(result.nextPhase).toBe("extracting");
+    expect(result.stepStatus).toBe("succeeded");
     expect(executeAction).toHaveBeenCalledWith(
       {
         type: "NAVIGATE",
-        url: "https://search.jd.com/Search?keyword=500%E8%80%B3%E6%9C%BA&enc=utf-8",
+        url: "https://search.jd.com/Search?keyword=500+headphones&enc=utf-8",
       },
-      'Open the JD search results for "500耳机".',
+      'Open the JD search results for "500 headphones".',
     );
   });
 
   it("reopens the canonical search page once when the first result page is unexpected", async () => {
     const tool = getToolDefinition("openSearchResults");
     const memory = createMemory({
-      currentPhase: "searching",
       taskType: "commerce_search",
       taskSpec: {
         taskType: "commerce_search",
-        originalGoal: "500耳机",
+        originalGoal: "500 headphones",
         topK: 5,
         llmInputLimit: 10,
         extractLimit: 12,
-        searchQuery: "500耳机",
+        searchQuery: "500 headphones",
         querySource: "llm-lite",
         notes: [],
       },
@@ -385,8 +391,8 @@ describe("search page query matching", () => {
       pageReady: { ready: true, reason: "loaded", checks: [] },
     });
     const recoveredSnapshot = createSnapshot({
-      url: "https://search.jd.com/Search?keyword=500%E8%80%B3%E6%9C%BA&enc=utf-8",
-      title: "500耳机 - JD Search",
+      url: "https://search.jd.com/Search?keyword=500+headphones&enc=utf-8",
+      title: "500 headphones - JD Search",
     });
     const executeAction = vi
       .fn()
@@ -422,12 +428,12 @@ describe("search page query matching", () => {
       pushState: vi.fn().mockResolvedValue(undefined),
     });
 
-    expect(result.nextPhase).toBe("extracting");
+    expect(result.stepStatus).toBe("succeeded");
     expect(executeAction).toHaveBeenNthCalledWith(
       2,
       {
         type: "NAVIGATE",
-        url: "https://search.jd.com/Search?keyword=500%E8%80%B3%E6%9C%BA&enc=utf-8",
+        url: "https://search.jd.com/Search?keyword=500+headphones&enc=utf-8",
       },
       "Reopen the canonical search results page once.",
     );

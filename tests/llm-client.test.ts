@@ -52,7 +52,7 @@ describe("llm client helpers", () => {
   });
 
   it("extracts the first JSON block when extra text is appended", () => {
-    const raw = `{"plan":["step1","step2"]}\n补充说明`;
+    const raw = `{"plan":["step1","step2"]}\nExtra explanation`;
     expect(extractFirstJsonBlock(raw)).toBe(`{"plan":["step1","step2"]}`);
     expect(parseModelJson(raw)).toEqual({ plan: ["step1", "step2"] });
   });
@@ -75,18 +75,18 @@ describe("llm client helpers", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network unavailable")));
 
     const result = await chooseNextTool({
-      goal: "调研 Playwright 和 Selenium 的区别",
+      goal: "Research the difference between Playwright and Selenium",
       taskType: "public_research",
       currentStep: {
-        stepId: "search-research-results",
-        goal: "打开 Google 搜索结果页",
-        allowedTools: ["searchInSite", "extractStructuredResults"],
-        successCriteria: ["进入搜索结果页"],
+        stepId: "open-search-results",
+        goal: "Open the Google search results page.",
+        allowedTools: ["openSearchResults", "collectResearchCandidates"],
+        successCriteria: ["The search results page is open."],
         status: "running",
       },
     });
 
-    expect(result.toolName).toBe("searchInSite");
+    expect(result.toolName).toBe("openSearchResults");
     expect(result.source).toBe("rule");
   });
 });

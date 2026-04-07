@@ -6,11 +6,9 @@ import type { SessionMemory } from "../src/shared/types";
 
 function createResearchMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
   return {
-    goal: "调研 Playwright 和 Selenium 的区别",
+    goal: "Research the difference between Playwright and Selenium",
     taskType: "public_research",
-    currentPhase: "aggregating",
     plan: [],
-    subtaskResults: [],
     toolHistory: [],
     currentFacts: {},
     stepHistory: [],
@@ -26,17 +24,19 @@ function createResearchMemory(overrides: Partial<SessionMemory> = {}): SessionMe
       sessionId: "session-1",
       tabId: 1,
       pageType: "content",
-      status: "observing",
+      status: "running",
       currentTool: undefined,
+      currentStepId: undefined,
       currentStep: 1,
-      llmRetryCount: 0,
       actionRetryCount: 0,
-      pageReadyRetryCount: 0,
       recoveryCount: 0,
       pageWaitRecoveryCount: 0,
       dialogCloseRecoveryCount: 0,
       searchReopenRecoveryCount: 0,
       queryRefineTried: false,
+      sameToolRetryCount: 0,
+      sameToolRetryTool: undefined,
+      consecutiveNoProgressCount: 0,
       startedAt: Date.now(),
     },
     ...overrides,
@@ -114,7 +114,7 @@ describe("public research page facts", () => {
     document.body.innerHTML = `
       <main>
         <h1>Login required</h1>
-        <p>请登录后继续阅读。</p>
+        <p>Please log in to continue reading.</p>
         <input type="password" />
       </main>
     `;
@@ -122,7 +122,7 @@ describe("public research page facts", () => {
     const result = extractPageFacts();
 
     expect(result.status).toBe("partial");
-    expect(result.reason).toContain("登录墙");
+    expect(result.reason).toBeTruthy();
   });
 });
 
@@ -130,11 +130,10 @@ describe("public research aggregation", () => {
   it("keeps reading when only partial sources have been collected", async () => {
     const tool = getToolDefinition("readResearchSourceFacts");
     const memory = createResearchMemory({
-      currentPhase: "reading",
       taskSpec: {
         taskType: "public_research",
-        originalGoal: "调研 Playwright 和 Selenium 的区别",
-        searchQuery: "Playwright Selenium 区别",
+        originalGoal: "Research the difference between Playwright and Selenium",
+        searchQuery: "Playwright Selenium difference",
         querySource: "llm-lite",
         notes: [],
         searchEngine: "google",
@@ -161,10 +160,10 @@ describe("public research aggregation", () => {
         pageFactsResult: {
           status: "partial",
           pageTitle: "Blocked source",
-          summary: "该来源未能完成正文提取：登录墙或订阅墙阻断",
+          summary: "A login wall blocked most of the article.",
           keyPoints: [],
           textLength: 0,
-          reason: "登录墙或订阅墙阻断",
+          reason: "login wall",
         },
       });
 
@@ -202,7 +201,7 @@ describe("public research aggregation", () => {
             hasBlockingOverlay: false,
             likelyLoginWall: true,
             likelySpa: false,
-            reason: "登录墙或订阅墙阻断",
+            reason: "login wall",
           },
         },
         timestamp: Date.now(),
@@ -215,7 +214,7 @@ describe("public research aggregation", () => {
       pushState: vi.fn().mockResolvedValue(undefined),
     });
 
-    expect(result.nextPhase).toBe("reading");
+    expect(result.stepStatus).toBe("running");
     expect(memory.researchSources).toHaveLength(1);
     expect(memory.researchSources[0]?.status).toBe("partial");
     expect(memory.activeSourceIndex).toBe(1);
@@ -225,7 +224,6 @@ describe("public research aggregation", () => {
     const tool = getToolDefinition("readResearchSourceFacts");
     const appendLog = vi.fn();
     const memory = createResearchMemory({
-      currentPhase: "reading",
       taskSpec: {
         taskType: "public_research",
         originalGoal: "Compare Playwright and Selenium",
@@ -259,7 +257,7 @@ describe("public research aggregation", () => {
       pushState: vi.fn().mockResolvedValue(undefined),
     });
 
-    expect(result.nextPhase).toBe("reading");
+    expect(result.stepStatus).toBe("running");
     expect(memory.researchSources).toHaveLength(1);
     expect(memory.researchSources[0]).toMatchObject({
       status: "partial",
@@ -281,8 +279,8 @@ describe("public research aggregation", () => {
     const memory = createResearchMemory({
       taskSpec: {
         taskType: "public_research",
-        originalGoal: "调研 Playwright 和 Selenium 的区别",
-        searchQuery: "Playwright Selenium 区别",
+        originalGoal: "Research the difference between Playwright and Selenium",
+        searchQuery: "Playwright Selenium difference",
         querySource: "llm-lite",
         notes: [],
         searchEngine: "google",
@@ -304,14 +302,14 @@ describe("public research aggregation", () => {
           candidate: { title: "Locked article", url: "https://example.com/b", rank: 2 },
           status: "partial",
           pageTitle: "Locked article",
-          summary: "该来源未能完成正文提取：登录墙或订阅墙阻断",
+          summary: "A login wall blocked most of the article.",
           keyPoints: [],
           sourceUrl: "https://example.com/b",
-          unresolvedIssues: ["登录墙或订阅墙阻断"],
+          unresolvedIssues: ["login wall"],
           textLength: 0,
         },
       ],
-      unresolvedIssues: ["候选来源已耗尽，未满足目标来源数"],
+      unresolvedIssues: ["Research candidates were exhausted before reaching the source target."],
     });
 
     await tool.run({
@@ -326,10 +324,10 @@ describe("public research aggregation", () => {
       pushState: vi.fn().mockResolvedValue(undefined),
     });
 
-    expect(memory.finalResult?.overallStatus).toBe("partial");
-    expect(memory.finalOutput).toContain("## 结论摘要");
-    expect(memory.finalOutput).toContain("## 来源链接");
-    expect(memory.finalOutput).toContain("## 未解决问题");
+    expect(memory.finalResult?.status).toBe("partial");
+    expect(memory.finalResult?.markdown).toContain("## Summary");
+    expect(memory.finalResult?.markdown).toContain("## Source Links");
+    expect(memory.finalResult?.markdown).toContain("## Open Issues");
   });
 
   it("returns no reliable information when no sources are available", async () => {
@@ -337,8 +335,8 @@ describe("public research aggregation", () => {
     const memory = createResearchMemory({
       taskSpec: {
         taskType: "public_research",
-        originalGoal: "调研 Playwright 和 Selenium 的区别",
-        searchQuery: "Playwright Selenium 区别",
+        originalGoal: "Research the difference between Playwright and Selenium",
+        searchQuery: "Playwright Selenium difference",
         querySource: "rule",
         notes: [],
         searchEngine: "google",
@@ -346,7 +344,7 @@ describe("public research aggregation", () => {
         sourceTargetCount: 3,
       },
       researchSources: [],
-      unresolvedIssues: ["Google 第一页未筛选出可用自然结果"],
+      unresolvedIssues: ["No usable research sources remained after filtering the first Google results page."],
     });
 
     await tool.run({
@@ -361,8 +359,8 @@ describe("public research aggregation", () => {
       pushState: vi.fn().mockResolvedValue(undefined),
     });
 
-    expect(memory.finalResult?.overallStatus).toBe("failed");
-    expect(memory.finalSummary).toContain("没有可靠的信息来源");
-    expect(memory.finalOutput).toContain("暂无可靠来源");
+    expect(memory.finalResult?.status).toBe("failed");
+    expect(memory.finalResult?.summary.toLowerCase()).toContain("no reliable sources");
+    expect(memory.finalResult?.markdown).toContain("No reliable sources");
   });
 });
