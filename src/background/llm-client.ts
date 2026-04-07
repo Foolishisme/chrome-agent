@@ -2,14 +2,21 @@ import { z } from "zod";
 import { LIMITS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
 import { nextToolSelectionSchema, queryRefinementSchema, summaryResultSchema, taskRouteSchema } from "../shared/schema";
-import type { ExtractedItem, PlanStep, PublicResearchTaskSpec, ResearchSourceResult, SearchTaskSpec, TaskType, ToolName } from "../shared/types";
+import type {
+  ExtractedItem,
+  PlanStep,
+  PublicResearchTaskSpec,
+  ResearchSourceResult,
+  SearchTaskSpec,
+  TaskType,
+  ToolName,
+} from "../shared/types";
 import {
+  buildFinalResultPrompt,
   buildTaskRoutePrompt,
   buildCommerceQueryRefinementPrompt,
-  buildCommerceSummaryPrompt,
   buildNextToolPrompt,
   buildResearchQueryRefinementPrompt,
-  buildResearchSummaryPrompt,
 } from "./prompting";
 
 type ProviderName = "gemini" | "deepseek";
@@ -403,35 +410,19 @@ export async function refineResearchQuery(goal: string, options: RequestOptions 
   };
 }
 
-export async function generateCommerceSummary(
-  goal: string,
-  taskSpec: SearchTaskSpec,
-  items: ExtractedItem[],
+export async function generateFinalResult(
+  input: {
+    goal: string;
+    taskType: TaskType;
+    taskSpec: SearchTaskSpec | PublicResearchTaskSpec;
+    items?: ExtractedItem[];
+    sources?: ResearchSourceResult[];
+    unresolvedIssues?: string[];
+  },
   options: RequestOptions = {},
 ) {
   const response = await requestProviderJson(
-    buildCommerceSummaryPrompt(goal, taskSpec, items),
-    summaryResultSchema,
-    "default",
-    options,
-  );
-
-  return {
-    ...response.data,
-    model: response.model,
-    provider: response.provider,
-  };
-}
-
-export async function generateResearchSummary(
-  goal: string,
-  taskSpec: PublicResearchTaskSpec,
-  sources: ResearchSourceResult[],
-  unresolvedIssues: string[],
-  options: RequestOptions = {},
-) {
-  const response = await requestProviderJson(
-    buildResearchSummaryPrompt(goal, taskSpec, sources, unresolvedIssues),
+    buildFinalResultPrompt(input),
     summaryResultSchema,
     "default",
     options,

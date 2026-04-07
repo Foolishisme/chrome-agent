@@ -17,8 +17,7 @@ import type {
 } from "../shared/types";
 import { buildPlanSteps, compileTaskSpec } from "./query-compiler";
 import {
-  generateCommerceSummary,
-  generateResearchSummary,
+  generateFinalResult,
   refineCommerceSearchQuery,
   refineResearchQuery,
 } from "./llm-client";
@@ -773,10 +772,13 @@ const aggregateTaskResultsTool: AgentToolDefinition = {
         overallStatus = "failed";
       } else {
         try {
-          const response = await generateCommerceSummary(
-            context.memory.goal,
-            context.memory.taskSpec,
-            context.memory.extractedItems,
+          const response = await generateFinalResult(
+            {
+              goal: context.memory.goal,
+              taskType: context.memory.taskType,
+              taskSpec: context.memory.taskSpec,
+              items: context.memory.extractedItems,
+            },
             { signal: context.signal },
           );
           summary = response.summary;
@@ -812,11 +814,14 @@ const aggregateTaskResultsTool: AgentToolDefinition = {
         });
       } else {
         try {
-          const response = await generateResearchSummary(
-            context.memory.goal,
-            context.memory.taskSpec,
-            context.memory.researchSources,
-            unresolvedIssues,
+          const response = await generateFinalResult(
+            {
+              goal: context.memory.goal,
+              taskType: context.memory.taskType,
+              taskSpec: context.memory.taskSpec,
+              sources: context.memory.researchSources,
+              unresolvedIssues,
+            },
             { signal: context.signal },
           );
           summary = response.summary;

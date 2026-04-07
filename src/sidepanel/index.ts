@@ -2,7 +2,6 @@ import { DEFAULT_GOAL } from "../shared/constants";
 import type {
   DebugLogEntry,
   PlanStep,
-  ResearchSourceResult,
   SessionPublicState,
   StepRecord,
 } from "../shared/types";
@@ -376,45 +375,100 @@ function renderRuntimeSection() {
   `;
 }
 
-function renderResearchSources(sources: ResearchSourceResult[] | undefined) {
-  if (!sources || sources.length === 0) {
+function renderArtifactDetail(title: string, content: string, open = false) {
+  return `
+    <details class="source-card"${open ? " open" : ""}>
+      <summary class="source-summary">
+        <span>${escapeHtml(title)}</span>
+      </summary>
+      <div class="source-body">${content}</div>
+    </details>
+  `;
+}
+
+function renderStructuredItems() {
+  if (currentState.items.length === 0) {
+    return `<div class="muted">${escapeHtml(messages.noItems)}</div>`;
+  }
+
+  const rows = currentState.items
+    .map(
+      (item, index) => `
+        <details class="source-card">
+          <summary class="source-summary">
+            <span>${index + 1}. ${escapeHtml(item.title)}</span>
+            <span class="pill">${escapeHtml(item.priceText || messages.emptyValue)}</span>
+          </summary>
+          <div class="source-body">
+            <div><strong>${escapeHtml(messages.price)}:</strong> ${escapeHtml(item.priceText || messages.emptyValue)}</div>
+            <div><strong>${escapeHtml(messages.shop)}:</strong> ${escapeHtml(item.shopText ?? messages.unknownShop)}</div>
+            <div><strong>${escapeHtml(messages.summary)}:</strong> ${escapeHtml(item.summary ?? (item.tags?.join(" / ") ?? messages.unknownSummary))}</div>
+            <div><strong>${escapeHtml(messages.sourceLink)}:</strong> <a class="result-link" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.url)}</a></div>
+          </div>
+        </details>
+      `,
+    )
+    .join("");
+
+  return `<div class="timeline">${rows}</div>`;
+}
+
+function renderStructuredSources() {
+  if ((currentState.researchSources?.length ?? 0) === 0) {
     return `<div class="muted">${escapeHtml(messages.noSources)}</div>`;
   }
 
-  return sources
-    .map((source, index) => {
-      const statusLabel =
-        source.status === "success" ? messages.resultOk : source.status === "partial" ? messages.resultPartial : messages.resultFail;
-      const points =
-        source.keyPoints.length > 0
-          ? `<ul class="debug-list">${source.keyPoints.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul>`
-          : `<div class="muted">${escapeHtml(messages.emptyValue)}</div>`;
-      const issues =
-        source.unresolvedIssues.length > 0
-          ? `<ul class="debug-list">${source.unresolvedIssues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>`
-          : `<div class="muted">${escapeHtml(messages.emptyValue)}</div>`;
+  return `
+    <div class="timeline">
+      ${
+        currentState.researchSources
+          ?.map((source, index) => {
+            const statusLabel =
+              source.status === "success"
+                ? messages.resultOk
+                : source.status === "partial"
+                  ? messages.resultPartial
+                  : messages.resultFail;
+            const points =
+              source.keyPoints.length > 0
+                ? `<ul class="debug-list">${source.keyPoints.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul>`
+                : `<div class="muted">${escapeHtml(messages.emptyValue)}</div>`;
+            const issues =
+              source.unresolvedIssues.length > 0
+                ? `<ul class="debug-list">${source.unresolvedIssues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>`
+                : `<div class="muted">${escapeHtml(messages.emptyValue)}</div>`;
 
-      return `
-        <details class="source-card">
-          <summary class="source-summary">
-            <span>${index + 1}. ${escapeHtml(source.pageTitle || source.candidate.title)}</span>
-            <span class="pill">${escapeHtml(statusLabel)}</span>
-          </summary>
-          <div class="source-body">
-            <div><strong>${escapeHtml(messages.sourceSummary)}:</strong> ${escapeHtml(source.summary || messages.emptyValue)}</div>
-            <div><strong>${escapeHtml(messages.sourceLink)}:</strong> <a class="result-link" href="${escapeHtml(source.sourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(source.sourceUrl)}</a></div>
-            <div><strong>${escapeHtml(messages.sourcePoints)}:</strong> ${points}</div>
-            <div><strong>${escapeHtml(messages.sourceIssues)}:</strong> ${issues}</div>
-          </div>
-        </details>
-      `;
-    })
-    .join("");
+            return `
+              <details class="source-card">
+                <summary class="source-summary">
+                  <span>${index + 1}. ${escapeHtml(source.pageTitle || source.candidate.title)}</span>
+                  <span class="pill">${escapeHtml(statusLabel)}</span>
+                </summary>
+                <div class="source-body">
+                  <div><strong>${escapeHtml(messages.sourceSummary)}:</strong> ${escapeHtml(source.summary || messages.emptyValue)}</div>
+                  <div><strong>${escapeHtml(messages.sourceLink)}:</strong> <a class="result-link" href="${escapeHtml(source.sourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(source.sourceUrl)}</a></div>
+                  <div><strong>${escapeHtml(messages.sourcePoints)}:</strong> ${points}</div>
+                  <div><strong>${escapeHtml(messages.sourceIssues)}:</strong> ${issues}</div>
+                </div>
+              </details>
+            `;
+          })
+          .join("") ?? ""
+      }
+    </div>
+  `;
+}
+
+function renderStructuredIssues() {
+  const issues = currentState.finalResult?.unresolvedIssues ?? currentState.unresolvedIssues ?? [];
+  if (issues.length === 0) {
+    return `<div class="muted">${escapeHtml(messages.emptyValue)}</div>`;
+  }
+
+  return `<ul class="debug-list">${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>`;
 }
 
 function renderResultsSection() {
-  const taskSpec = currentState.taskSpec;
-  const isResearch = taskSpec?.taskType === "public_research" || (currentState.researchSources?.length ?? 0) > 0;
   const overallStatus = currentState.finalResult?.overallStatus;
   const overallStatusLabel =
     overallStatus === "success"
@@ -425,51 +479,37 @@ function renderResultsSection() {
           ? messages.resultFail
           : undefined;
   const errorMarkup = currentState.error ? `<div class="error-box">${escapeHtml(currentState.error)}</div>` : "";
+  const artifactSections: string[] = [];
 
-  if (isResearch) {
-    return `
-      ${errorMarkup}
-      ${overallStatusLabel ? `<p class="muted"><strong>${escapeHtml(messages.runtime)}:</strong> ${escapeHtml(overallStatusLabel)}</p>` : ""}
-      ${renderMarkdownBlock(currentState.finalOutput)}
-      <div class="timeline">${renderResearchSources(currentState.researchSources)}</div>
-    `;
+  if (currentState.items.length > 0) {
+    artifactSections.push(renderArtifactDetail(messages.resultItemsTitle, renderStructuredItems()));
   }
 
-  const itemsRows =
-    currentState.items.length > 0
-      ? currentState.items
-          .map(
-            (item) => `
-              <tr>
-                <td><a class="result-link" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.title)}</a></td>
-                <td>${escapeHtml(item.priceText)}</td>
-                <td>${escapeHtml(item.shopText ?? messages.unknownShop)}</td>
-                <td>${escapeHtml(item.summary ?? (item.tags?.join(" / ") ?? messages.unknownSummary))}</td>
-              </tr>
-            `,
-          )
-          .join("")
-      : `<tr><td colspan="4" class="muted">${escapeHtml(messages.noItems)}</td></tr>`;
+  if ((currentState.researchSources?.length ?? 0) > 0) {
+    artifactSections.push(renderArtifactDetail(messages.resultSourcesTitle, renderStructuredSources()));
+  }
+
+  if ((currentState.finalResult?.unresolvedIssues.length ?? currentState.unresolvedIssues?.length ?? 0) > 0) {
+    artifactSections.push(renderArtifactDetail(messages.resultIssuesTitle, renderStructuredIssues()));
+  }
 
   return `
     ${errorMarkup}
     ${overallStatusLabel ? `<p class="muted"><strong>${escapeHtml(messages.runtime)}:</strong> ${escapeHtml(overallStatusLabel)}</p>` : ""}
     ${renderMarkdownBlock(currentState.finalOutput)}
-    <table class="result-table">
-      <thead>
-        <tr>
-          <th>${escapeHtml(messages.product)}</th>
-          <th>${escapeHtml(messages.price)}</th>
-          <th>${escapeHtml(messages.shop)}</th>
-          <th>${escapeHtml(messages.summary)}</th>
-        </tr>
-      </thead>
-      <tbody>${itemsRows}</tbody>
-    </table>
     ${
       currentState.finalSummary
-        ? `<p class="muted"><strong>${escapeHtml(messages.recommendation)}:</strong> ${escapeHtml(currentState.finalSummary)}</p>`
+        ? `<p class="muted"><strong>${escapeHtml(messages.resultSummaryTitle)}:</strong> ${escapeHtml(currentState.finalSummary)}</p>`
         : `<p class="muted">${escapeHtml(messages.resultsHint)}</p>`
+    }
+    ${
+      artifactSections.length > 0
+        ? `
+          <div class="timeline">
+            ${renderArtifactDetail(messages.resultArtifactsTitle, artifactSections.join(""), true)}
+          </div>
+        `
+        : ""
     }
   `;
 }

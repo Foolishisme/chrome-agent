@@ -1,4 +1,11 @@
-import type { ExtractedItem, PlanStep, PublicResearchTaskSpec, ResearchSourceResult, SearchTaskSpec, TaskType } from "../shared/types";
+import type {
+  ExtractedItem,
+  PlanStep,
+  PublicResearchTaskSpec,
+  ResearchSourceResult,
+  SearchTaskSpec,
+  TaskType,
+} from "../shared/types";
 
 export function buildTaskRoutePrompt(goal: string) {
   return [
@@ -21,16 +28,16 @@ export function buildCommerceQueryRefinementPrompt(goal: string) {
     "Return JSON only.",
     'Schema: {"searchQuery":"...","reason":"..."}',
     "One-shot examples:",
-    'User goal: 3000 笔记本',
-    'Output: {"searchQuery":"轻薄本 3000元","reason":"“笔记本”过宽，收敛到 3000 元预算下更常见的京东搜索词"}',
+    'User goal: 3000 元以内轻薄本',
+    'Output: {"searchQuery":"轻薄本 3000元","reason":"保留预算并收敛到更适合京东站内搜索的商品词"}',
     'User goal: 学生用苹果电脑写论文',
-    'Output: {"searchQuery":"MacBook 学生 办公","reason":"保留品牌并补上学生办公场景"}',
+    'Output: {"searchQuery":"MacBook 学生 办公","reason":"保留品牌并补充明确场景"}',
     'User goal: 5000 游戏电脑',
-    'Output: {"searchQuery":"游戏本 5000元","reason":"把宽泛的“游戏电脑”收敛成更适合京东站内搜索的商品词"}',
+    'Output: {"searchQuery":"游戏本 5000元","reason":"把宽泛需求改写成更适合商品检索的短词"}',
     "Rules:",
     "- Rewrite directly from the user goal. Do not depend on a rule-generated draft query.",
     "- Keep the product category explicit.",
-    "- Keep price or budget information when present, and normalize money to the form like 3000元 when helpful.",
+    "- Keep price or budget information when present.",
     "- When the user goal is broad, narrow it to a more search-friendly product phrase for JD.com.",
     "- Prefer scene, form factor, target user, or brand only when they are clearly implied by the goal.",
     "- Do not add recommendation reasons, sorting criteria, or marketing wording.",
@@ -82,46 +89,43 @@ export function buildNextToolPrompt(options: {
   ].join("\n");
 }
 
-export function buildCommerceSummaryPrompt(goal: string, taskSpec: SearchTaskSpec, items: ExtractedItem[]) {
+export function buildFinalResultPrompt(options: {
+  goal: string;
+  taskType: TaskType;
+  taskSpec: SearchTaskSpec | PublicResearchTaskSpec;
+  items?: ExtractedItem[];
+  sources?: ResearchSourceResult[];
+  unresolvedIssues?: string[];
+}) {
   return [
-    "You summarize shopping candidates for a browser agent.",
+    "You synthesize the final browser-agent answer from structured evidence.",
     "Return JSON only.",
     'Schema: {"summary":"...","markdown":"..."}',
+    "One-shot examples:",
+    'Input: {"goal":"推荐 3000 元以内的轻薄本","taskType":"commerce_search","items":[{"title":"A","priceText":"2999","url":"https://example.com/a","summary":"轻薄，日常办公"}],"sources":[],"unresolvedIssues":[]}',
+    'Output: {"summary":"已基于结构化候选整理出预算内建议。","markdown":"## 推荐结论\\n预算内已有可选项，优先看便携性和日常办公体验。\\n\\n## 推荐项\\n- [A](https://example.com/a) | 2999 | 轻薄，日常办公"}',
+    'Input: {"goal":"调研 Playwright 和 Selenium 的区别","taskType":"public_research","items":[],"sources":[{"pageTitle":"Playwright docs","sourceUrl":"https://example.com/p","summary":"更偏现代 Web 自动化","keyPoints":["自动等待"],"status":"success","unresolvedIssues":[]}],"unresolvedIssues":["部分来源不可读"]}',
+    'Output: {"summary":"已基于可读来源整理出核心差异，并保留未解决问题。","markdown":"## 结论\\nPlaywright 更偏现代 Web 自动化能力。\\n\\n## 依据\\n- Playwright docs: 更偏现代 Web 自动化\\n\\n## 未解决问题\\n- 部分来源不可读"}',
     "Rules:",
-    "- Use only the provided structured items.",
-    "- Select the most relevant items for the user goal instead of listing every candidate.",
-    `- The user asked for ${taskSpec.topK} final recommendations. You may return fewer only if the candidates are clearly weak.`,
-    `- You are given up to ${taskSpec.llmInputLimit} structured candidates after code-side filtering.`,
-    "- Prioritize budget fit, price, and obvious selling points.",
-    "- Keep the wording short and factual.",
-    '- "markdown" must be a readable final answer with short sections and selected items.',
-    '- "summary" must be a one-paragraph compact recap.',
-    `User goal: ${goal}`,
-    `Task spec: ${JSON.stringify(taskSpec, null, 2)}`,
-    `Items: ${JSON.stringify(items, null, 2)}`,
-  ].join("\n");
-}
-
-export function buildResearchSummaryPrompt(
-  goal: string,
-  taskSpec: PublicResearchTaskSpec,
-  sources: ResearchSourceResult[],
-  unresolvedIssues: string[],
-) {
-  return [
-    "You summarize public web research for a browser agent.",
-    "Return JSON only.",
-    'Schema: {"summary":"...","markdown":"..."}',
-    "Rules:",
-    "- Use only the structured source results provided.",
-    "- Preserve uncertainty when a source is partial or blocked.",
-    '- "markdown" must contain these sections in Chinese: 结论摘要, 来源要点, 来源链接, 未解决问题.',
-    '- In 来源要点, keep each source concise and factual.',
-    '- In 来源链接, list each source title and URL once.',
-    "- If unresolved issues are empty, say 暂无.",
-    `User goal: ${goal}`,
-    `Task spec: ${JSON.stringify(taskSpec, null, 2)}`,
-    `Sources: ${JSON.stringify(sources, null, 2)}`,
-    `Unresolved issues: ${JSON.stringify(unresolvedIssues, null, 2)}`,
+    "- Use only the provided structured evidence. Do not invent facts.",
+    "- Produce a concise Chinese final answer.",
+    '- "summary" must be a compact recap for the UI.',
+    '- "markdown" must be a readable final answer for the result panel.',
+    "- Use sections only when they help. Do not force a fixed template.",
+    "- When item candidates are present, shortlist only the strongest ones.",
+    "- When source results are present, preserve uncertainty and mention unresolved issues when relevant.",
+    "- Do not mention runtime internals, tools, selectors, or execution details.",
+    `Input: ${JSON.stringify(
+      {
+        goal: options.goal,
+        taskType: options.taskType,
+        taskSpec: options.taskSpec,
+        items: options.items ?? [],
+        sources: options.sources ?? [],
+        unresolvedIssues: options.unresolvedIssues ?? [],
+      },
+      null,
+      2,
+    )}`,
   ].join("\n");
 }

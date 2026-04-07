@@ -191,3 +191,8 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 - [pitfalls.md](./doc/pitfalls.md)
 
 Updated: 2026-04-03
+
+## Update Notes
+
+- Final result synthesis now goes through one generic structured LLM prompt entrypoint.
+- The results panel renders final markdown first, with optional structured details for items, sources, and unresolved issues.

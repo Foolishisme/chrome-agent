@@ -15,6 +15,13 @@
 
 ## 3. Done
 
+- `src/background/prompting.ts` / `src/background/llm-client.ts`
+  - final answer synthesis now uses one generic structured prompt entrypoint
+  - the LLM final output is no longer tied to separate hardcoded commerce and research prompt templates
+- `src/sidepanel/index.ts`
+  - results now render final markdown first for both task modules
+  - structured items, sources, and unresolved issues are shown as optional supplemental blocks
+
 - `src/shared/types.ts`
   - 已落地 `PlanStep`
   - `SessionMemory.plan` / `SessionPublicState.plan` 已切到结构化步骤

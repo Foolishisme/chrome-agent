@@ -43,6 +43,11 @@ type MessageBundle = {
   resultFail: string;
   resultPartial: string;
   resultsHint: string;
+  resultSummaryTitle: string;
+  resultArtifactsTitle: string;
+  resultItemsTitle: string;
+  resultSourcesTitle: string;
+  resultIssuesTitle: string;
   product: string;
   price: string;
   shop: string;
@@ -68,7 +73,7 @@ const messages: Record<Locale, MessageBundle> = {
   "zh-CN": {
     appTitle: "Browser Agent MVP",
     heroTitle: "Browser Agent MVP",
-    heroDescription: "当前界面按新范式展示：对话、运行状态和结果。",
+    heroDescription: "当前界面聚焦三块：对话、运行状态和结果。",
     conversationTitle: "对话",
     runtimeStatusTitle: "运行状态",
     resultsTitle: "结果",
@@ -105,6 +110,11 @@ const messages: Record<Locale, MessageBundle> = {
     resultFail: "失败",
     resultPartial: "部分成功",
     resultsHint: "会话完成后，结果会显示在这里。",
+    resultSummaryTitle: "结果摘要",
+    resultArtifactsTitle: "结构化补充",
+    resultItemsTitle: "候选项",
+    resultSourcesTitle: "来源详情",
+    resultIssuesTitle: "未解决问题",
     product: "商品",
     price: "价格",
     shop: "店铺",
@@ -112,7 +122,7 @@ const messages: Record<Locale, MessageBundle> = {
     recommendation: "推荐说明",
     unknownShop: "-",
     unknownSummary: "-",
-    noItems: "还没有结果项。",
+    noItems: "还没有候选项。",
     noSources: "还没有来源结果。",
     sourceSummary: "来源摘要",
     sourceLink: "来源链接",
@@ -145,7 +155,7 @@ const messages: Record<Locale, MessageBundle> = {
   "en-US": {
     appTitle: "Browser Agent MVP",
     heroTitle: "Browser Agent MVP",
-    heroDescription: "The side panel now focuses on conversation, runtime state, and results.",
+    heroDescription: "The side panel focuses on conversation, runtime state, and results.",
     conversationTitle: "Conversation",
     runtimeStatusTitle: "Runtime State",
     resultsTitle: "Results",
@@ -182,6 +192,11 @@ const messages: Record<Locale, MessageBundle> = {
     resultFail: "FAIL",
     resultPartial: "PARTIAL",
     resultsHint: "Results will appear here after the session completes.",
+    resultSummaryTitle: "Result Summary",
+    resultArtifactsTitle: "Structured Details",
+    resultItemsTitle: "Items",
+    resultSourcesTitle: "Sources",
+    resultIssuesTitle: "Unresolved Issues",
     product: "Product",
     price: "Price",
     shop: "Shop",
