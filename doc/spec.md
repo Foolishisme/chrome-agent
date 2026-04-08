@@ -42,7 +42,7 @@
 - `commerce_search`
   - 京东站内商品搜索、提取、过滤和推荐输出
 - `public_research`
-  - Google 搜索、来源筛选、逐页读取和调研汇总
+  - Google 搜索、第一页来源筛选与重排序、逐页读取和调研汇总
 
 当前不应假设：
 
@@ -50,7 +50,7 @@
 - 已支持多站点通用 adapter
 - 已支持下单、支付或其他高风险执行
 - 已支持把 raw DOM 原子动作直接暴露给 LLM
-- 已支持文件 / PDF artifact 主链
+- 已支持完整文件系统导出或 PDF artifact 主链
 
 ## 4. 组件边界
 
@@ -62,6 +62,7 @@ LLM 负责：
 - 生成静态初始 plan
 - 在多工具 step 内选择下一步 tool
 - 生成最终输出
+- 对第一页 research 候选做轻量重排序
 
 LLM 不负责：
 
@@ -203,11 +204,13 @@ Runtime 不负责：
 - `terminal?`
 
 当前 `artifacts` 字段已固定，但默认仍为空数组。
+仅当用户明确要求“文档 / 报告 / markdown / 文件”时，最终结果才会附带 markdown artifact。
 
 ### 6.4 FinalResult
 
 最终输出统一为：
 
+- `outputMode`: `inline | artifact`
 - `status`: `success | partial | failed | blocked`
 - `summary`
 - `markdown`
@@ -259,7 +262,7 @@ Runtime 不负责：
 
 其中：
 
-- `collectResearchCandidates` 内部处理提取和过滤
+- `collectResearchCandidates` 内部处理第一页提取、过滤和轻量重排序
 - `readResearchSourceFacts` 允许同一 step 重复执行，直到达到来源目标或候选耗尽
 
 ## 9. 最小护栏
@@ -286,11 +289,17 @@ Side Panel 当前只读取：
 
 - runtime 顶层状态：`idle | running | done | error`
 - 当前 step / 当前 tool / elapsed / budget
+- 运行细节：goal / 当前进展 / timeline / logs / source detail
+- `finalResult.outputMode`
 - `finalResult.markdown`
-- `finalResult.status`
-- `finalResult.errorsOrBlockers`
-- `finalResult.suggestedNextAction`
+- `finalResult.summary`
+- `finalResult.artifacts`
 
-UI 不再展示 `currentPhase`。
+UI 不再展示 `currentPhase`，结果区只展示最终交付物：
+
+- `inline`：直接结果正文
+- `artifact`：短摘要 + 文档卡片
+
+文档产物不是默认输出，只有在用户明确要求文档交付时才生成。
 
 Updated: 2026-04-07

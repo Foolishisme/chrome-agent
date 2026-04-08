@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { LIMITS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
-import { finalResultSynthesisSchema, nextToolSelectionSchema, queryRefinementSchema, taskRouteSchema } from "../shared/schema";
+import { finalResultSynthesisSchema, nextToolSelectionSchema, queryRefinementSchema, researchCandidateReorderSchema, taskRouteSchema } from "../shared/schema";
 import type {
   ExtractedItem,
   PlanStep,
   PublicResearchTaskSpec,
+  ResearchCandidate,
   ResearchSourceResult,
   SearchTaskSpec,
   TaskType,
@@ -13,10 +14,11 @@ import type {
 } from "../shared/types";
 import {
   buildFinalResultPrompt,
-  buildTaskRoutePrompt,
   buildCommerceQueryRefinementPrompt,
   buildNextToolPrompt,
+  buildResearchCandidateReorderPrompt,
   buildResearchQueryRefinementPrompt,
+  buildTaskRoutePrompt,
 } from "./prompting";
 
 type ProviderName = "gemini" | "deepseek";
@@ -481,6 +483,73 @@ export async function chooseNextTool(
     return {
       toolName: fallbackTool,
       reason: error instanceof Error ? `fallback to first allowed tool: ${error.message}` : "fallback to first allowed tool",
+      source: "rule",
+    };
+  }
+}
+
+export async function reorderResearchCandidates(
+  options: {
+    goal: string;
+    searchQuery: string;
+    candidates: ResearchCandidate[];
+  },
+  requestOptions: RequestOptions = {},
+): Promise<{
+  candidates: ResearchCandidate[];
+  reason: string;
+  source: "llm-lite" | "rule";
+  model?: string;
+  provider?: ProviderName;
+}> {
+  if (options.candidates.length <= 1) {
+    return {
+      candidates: options.candidates,
+      reason: "skip reorder because there are not enough candidates",
+      source: "rule",
+    };
+  }
+
+  try {
+    const response = await requestProviderJson(
+      buildResearchCandidateReorderPrompt({
+        goal: options.goal,
+        searchQuery: options.searchQuery,
+        candidates: options.candidates.map((candidate, index) => ({
+          index,
+          title: candidate.title,
+          url: candidate.url,
+          source: candidate.source,
+          snippet: candidate.snippet,
+          rank: candidate.rank,
+        })),
+      }),
+      researchCandidateReorderSchema,
+      "simple",
+      requestOptions,
+    );
+
+    const orderedIndexes = response.data.orderedIndexes;
+    const expectedIndexes = new Set(options.candidates.map((_, index) => index));
+    if (
+      orderedIndexes.length !== options.candidates.length ||
+      orderedIndexes.some((index) => !expectedIndexes.has(index)) ||
+      new Set(orderedIndexes).size !== options.candidates.length
+    ) {
+      throw new RuntimeError("The model returned an invalid research candidate reorder.", "INVALID_CANDIDATE_REORDER");
+    }
+
+    return {
+      candidates: orderedIndexes.map((index) => options.candidates[index]!),
+      reason: response.data.reason ?? "reordered first-page research candidates",
+      source: "llm-lite",
+      model: response.model,
+      provider: response.provider,
+    };
+  } catch (error) {
+    return {
+      candidates: options.candidates,
+      reason: error instanceof Error ? `fallback to filtered order: ${error.message}` : "fallback to filtered order",
       source: "rule",
     };
   }

@@ -4,6 +4,18 @@ import { getToolDefinition } from "../src/background/tools";
 import { extractGoogleSearchResults, extractPageFacts } from "../src/content/research";
 import type { SessionMemory } from "../src/shared/types";
 
+const { reorderResearchCandidatesMock } = vi.hoisted(() => ({
+  reorderResearchCandidatesMock: vi.fn(),
+}));
+
+vi.mock("../src/background/llm-client", async () => {
+  const actual = await vi.importActual<typeof import("../src/background/llm-client")>("../src/background/llm-client");
+  return {
+    ...actual,
+    reorderResearchCandidates: reorderResearchCandidatesMock,
+  };
+});
+
 function createResearchMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
   return {
     goal: "Research the difference between Playwright and Selenium",
@@ -44,6 +56,110 @@ function createResearchMemory(overrides: Partial<SessionMemory> = {}): SessionMe
 }
 
 describe("public research candidate handling", () => {
+  it("reorders filtered first-page candidates before reading sources", async () => {
+    reorderResearchCandidatesMock.mockResolvedValueOnce({
+      candidates: [
+        { title: "Official guide", url: "https://example.com/official", rank: 2 },
+        { title: "Blog summary", url: "https://example.com/blog", rank: 1 },
+      ],
+      reason: "prefer official source first",
+      source: "llm-lite",
+    });
+
+    const tool = getToolDefinition("collectResearchCandidates");
+    const memory = createResearchMemory({
+      taskSpec: {
+        taskType: "public_research",
+        originalGoal: "Research AI agents",
+        outputMode: "inline",
+        searchQuery: "AI agents",
+        querySource: "llm-lite",
+        notes: [],
+        searchEngine: "google",
+        candidateLimit: 5,
+        sourceTargetCount: 3,
+      },
+    });
+
+    const result = await tool.run({
+      memory,
+      signal: new AbortController().signal,
+      scanPage: vi.fn().mockResolvedValue({
+        url: "https://www.google.com/search?q=ai+agents",
+        title: "ai agents - Google Search",
+        pageType: "google_search",
+        interactiveElements: [],
+        semanticSnapshot: {
+          version: 1,
+          url: "https://www.google.com/search?q=ai+agents",
+          title: "ai agents - Google Search",
+          nodeCount: 1,
+          truncated: false,
+          root: { ref: "sem_root", role: "unknown", name: "", children: [] },
+        },
+        productCandidates: [],
+        pageReady: { ready: true, reason: "ok", checks: [] },
+        pageFacts: {
+          searchBox: { present: true, visible: true, text: "ai agents" },
+          searchSubmit: { present: true, visible: true, text: "Search" },
+          searchResults: {
+            present: true,
+            loaded: true,
+            resultCount: 2,
+            naturalCount: 2,
+            adCount: 0,
+          },
+        },
+        timestamp: Date.now(),
+      }),
+      ensureUsableSnapshot: vi.fn().mockResolvedValue({
+        url: "https://www.google.com/search?q=ai+agents",
+        title: "ai agents - Google Search",
+        pageType: "google_search",
+        interactiveElements: [],
+        semanticSnapshot: {
+          version: 1,
+          url: "https://www.google.com/search?q=ai+agents",
+          title: "ai agents - Google Search",
+          nodeCount: 1,
+          truncated: false,
+          root: { ref: "sem_root", role: "unknown", name: "", children: [] },
+        },
+        productCandidates: [],
+        pageReady: { ready: true, reason: "ok", checks: [] },
+        pageFacts: {
+          searchBox: { present: true, visible: true, text: "ai agents" },
+          searchSubmit: { present: true, visible: true, text: "Search" },
+          searchResults: {
+            present: true,
+            loaded: true,
+            resultCount: 2,
+            naturalCount: 2,
+            adCount: 0,
+          },
+        },
+        timestamp: Date.now(),
+      }),
+      executeAction: vi.fn().mockResolvedValue({
+        success: true,
+        actionType: "EXTRACT_SEARCH_RESULTS",
+        message: "Extracted 2 source candidates.",
+        researchCandidates: [
+          { title: "Blog summary", url: "https://example.com/blog", rank: 1 },
+          { title: "Official guide", url: "https://example.com/official", rank: 2 },
+        ],
+      }),
+      settleAfterAction: vi.fn(),
+      appendLog: vi.fn(),
+      recordStep: vi.fn(),
+      pushState: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(result.status).toBe("success");
+    expect(memory.researchCandidates.map((candidate) => candidate.title)).toEqual(["Official guide", "Blog summary"]);
+    expect(reorderResearchCandidatesMock).toHaveBeenCalledOnce();
+  });
+
   it("extracts Google-style results and keeps heading links", () => {
     document.body.innerHTML = `
       <div class="MjjYud">
@@ -105,7 +221,7 @@ describe("public research page facts", () => {
 
     expect(result.status).toBe("success");
     expect(result.pageTitle).toBe("Playwright vs Selenium");
-    expect(result.keyPoints.length).toBeGreaterThan(0);
+    expect(result.bodyExcerpt.length).toBeGreaterThan(0);
     expect(result.textLength).toBeGreaterThan(200);
   });
 
@@ -133,6 +249,7 @@ describe("public research aggregation", () => {
       taskSpec: {
         taskType: "public_research",
         originalGoal: "Research the difference between Playwright and Selenium",
+        outputMode: "inline",
         searchQuery: "Playwright Selenium difference",
         querySource: "llm-lite",
         notes: [],
@@ -160,9 +277,9 @@ describe("public research aggregation", () => {
         pageFactsResult: {
           status: "partial",
           pageTitle: "Blocked source",
-          summary: "A login wall blocked most of the article.",
-          keyPoints: [],
+          bodyExcerpt: "",
           textLength: 0,
+          extractionStrategy: "fallback",
           reason: "login wall",
         },
       });
@@ -292,8 +409,7 @@ describe("public research aggregation", () => {
           candidate: { title: "Playwright docs", url: "https://example.com/a", rank: 1 },
           status: "success",
           pageTitle: "Playwright docs",
-          summary: "Playwright has built-in auto-waiting.",
-          keyPoints: ["Auto-waiting", "Browser contexts"],
+          bodyExcerpt: "Playwright has built-in auto-waiting. It also uses browser contexts for isolation.",
           sourceUrl: "https://example.com/a",
           unresolvedIssues: [],
           textLength: 320,
@@ -302,8 +418,7 @@ describe("public research aggregation", () => {
           candidate: { title: "Locked article", url: "https://example.com/b", rank: 2 },
           status: "partial",
           pageTitle: "Locked article",
-          summary: "A login wall blocked most of the article.",
-          keyPoints: [],
+          bodyExcerpt: "",
           sourceUrl: "https://example.com/b",
           unresolvedIssues: ["login wall"],
           textLength: 0,
@@ -325,9 +440,11 @@ describe("public research aggregation", () => {
     });
 
     expect(memory.finalResult?.status).toBe("partial");
+    expect(memory.finalResult?.outputMode).toBe("inline");
     expect(memory.finalResult?.markdown).toContain("## Summary");
     expect(memory.finalResult?.markdown).toContain("## Source Links");
     expect(memory.finalResult?.markdown).toContain("## Open Issues");
+    expect(memory.finalResult?.artifacts).toHaveLength(0);
   });
 
   it("returns no reliable information when no sources are available", async () => {
@@ -336,6 +453,7 @@ describe("public research aggregation", () => {
       taskSpec: {
         taskType: "public_research",
         originalGoal: "Research the difference between Playwright and Selenium",
+        outputMode: "artifact",
         searchQuery: "Playwright Selenium difference",
         querySource: "rule",
         notes: [],
@@ -360,7 +478,13 @@ describe("public research aggregation", () => {
     });
 
     expect(memory.finalResult?.status).toBe("failed");
+    expect(memory.finalResult?.outputMode).toBe("artifact");
     expect(memory.finalResult?.summary.toLowerCase()).toContain("no reliable sources");
-    expect(memory.finalResult?.markdown).toContain("No reliable sources");
+    expect(memory.finalResult?.markdown).toBe("");
+    expect(memory.finalResult?.artifacts[0]).toMatchObject({
+      kind: "markdown",
+      fileName: "research-result.md",
+    });
+    expect(memory.finalResult?.artifacts[0]?.content).toContain("## Summary");
   });
 });

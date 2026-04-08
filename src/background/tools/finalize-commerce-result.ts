@@ -84,6 +84,7 @@ export const finalizeCommerceResultTool: AgentToolDefinition = {
       outputs: {
         finalResult,
       },
+      artifacts: finalResult.artifacts,
       facts: {
         finalStatus,
       },

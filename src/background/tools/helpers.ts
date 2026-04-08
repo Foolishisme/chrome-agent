@@ -6,7 +6,9 @@ import type {
   CommerceTaskSpec,
   ExtractedItem,
   FinalResult,
+  OutputMode,
   PublicResearchTaskSpec,
+  ResultArtifact,
   ResearchSourceResult,
   SessionMemory,
   SnapshotData,
@@ -352,14 +354,14 @@ export function buildResearchFinalMarkdown(summary: string, sources: ResearchSou
     "## Summary",
     summary,
     "",
-    "## Source Notes",
+    "## Source Excerpts",
     ...(sources.length > 0
       ? sources.map((source, index) => {
           const title = source.pageTitle || source.candidate.title;
           const detail =
             source.status === "success"
-              ? source.summary
-              : `${source.summary || "Only partial facts were extracted."}${source.unresolvedIssues.length > 0 ? ` (${source.unresolvedIssues.join("; ")})` : ""}`;
+              ? source.bodyExcerpt || "No excerpt was captured."
+              : `${source.bodyExcerpt || "Only partial facts were extracted."}${source.unresolvedIssues.length > 0 ? ` (${source.unresolvedIssues.join("; ")})` : ""}`;
           return `- ${index + 1}. ${title}: ${detail}`;
         })
       : ["- No reliable sources"]),
@@ -466,6 +468,24 @@ export function isResearchTask(taskSpec: TaskSpec | undefined): taskSpec is Publ
   return !!taskSpec && taskSpec.taskType === "public_research";
 }
 
+function createMarkdownArtifact(memory: SessionMemory, markdown: string, summary: string): ResultArtifact {
+  const isCommerce = memory.taskType === "commerce_search";
+
+  return {
+    id: isCommerce ? "commerce-result-markdown" : "research-result-markdown",
+    kind: "markdown",
+    title: isCommerce ? "Commerce Result Report" : "Research Result Report",
+    fileName: isCommerce ? "commerce-result.md" : "research-result.md",
+    mimeType: "text/markdown",
+    content: markdown,
+    summary,
+  };
+}
+
+export function getOutputMode(taskSpec: TaskSpec | undefined): OutputMode {
+  return taskSpec?.outputMode ?? "inline";
+}
+
 export function createFinalResult(
   memory: SessionMemory,
   options: {
@@ -479,16 +499,19 @@ export function createFinalResult(
 ): FinalResult {
   const completedSteps = memory.plan.filter((step) => step.status === "succeeded").map((step) => step.stepId);
   const remainingOrFailedSteps = memory.plan.filter((step) => step.status !== "succeeded").map((step) => step.stepId);
+  const outputMode = getOutputMode(memory.taskSpec);
+  const artifacts = outputMode === "artifact" ? [createMarkdownArtifact(memory, options.markdown, options.summary)] : [];
 
   return {
+    outputMode,
     status: options.status,
     summary: options.summary,
-    markdown: options.markdown,
+    markdown: outputMode === "inline" ? options.markdown : "",
     keyResults: options.keyResults ?? [],
     completedSteps,
     remainingOrFailedSteps,
     errorsOrBlockers: dedupeIssues(options.errorsOrBlockers ?? memory.unresolvedIssues),
-    artifacts: [],
+    artifacts,
     suggestedNextAction:
       options.suggestedNextAction ??
       (options.status === "success"

@@ -1,4 +1,4 @@
-import type { ActionResult, AgentAction, SessionPublicState, SnapshotData } from "./types";
+import type { ActionResult, AgentAction, ManualExtractionRecord, SessionPublicState, SnapshotData } from "./types";
 
 export type StartSessionMessage = {
   type: "START_SESSION";
@@ -11,6 +11,18 @@ export type StopSessionMessage = {
 
 export type RequestSessionStateMessage = {
   type: "REQUEST_SESSION_STATE";
+};
+
+export type ExtractCurrentPageMessage = {
+  type: "EXTRACT_CURRENT_PAGE";
+};
+
+export type RequestManualExtractionHistoryMessage = {
+  type: "REQUEST_MANUAL_EXTRACTION_HISTORY";
+};
+
+export type ClearManualExtractionHistoryMessage = {
+  type: "CLEAR_MANUAL_EXTRACTION_HISTORY";
 };
 
 export type RequestSnapshotMessage = {
@@ -36,6 +48,9 @@ export type RuntimeMessage =
   | StartSessionMessage
   | StopSessionMessage
   | RequestSessionStateMessage
+  | ExtractCurrentPageMessage
+  | RequestManualExtractionHistoryMessage
+  | ClearManualExtractionHistoryMessage
   | RequestSnapshotMessage
   | ExecuteActionMessage
   | SessionUpdateMessage
@@ -56,5 +71,12 @@ export interface SnapshotResponse {
 export interface ExecuteActionResponse {
   ok: boolean;
   result?: ActionResult;
+  error?: string;
+}
+
+export interface ManualExtractionResponse {
+  ok: boolean;
+  record?: ManualExtractionRecord;
+  history?: ManualExtractionRecord[];
   error?: string;
 }

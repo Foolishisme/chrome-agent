@@ -8,6 +8,7 @@ import {
   extractJsonText,
   getModelCandidates,
   parseModelJson,
+  reorderResearchCandidates,
 } from "../src/background/llm-client";
 
 afterEach(() => {
@@ -88,5 +89,65 @@ describe("llm client helpers", () => {
 
     expect(result.toolName).toBe("openSearchResults");
     expect(result.source).toBe("rule");
+  });
+
+  it("reorders research candidates when the model returns a valid index order", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: '{"orderedIndexes":[1,0],"reason":"prefer the official source first"}',
+              },
+            },
+          ],
+        }),
+      }),
+    );
+
+    const result = await reorderResearchCandidates({
+      goal: "Research AI agent development",
+      searchQuery: "AI agent development",
+      candidates: [
+        { title: "Commentary", url: "https://example.com/commentary", rank: 1 },
+        { title: "Official docs", url: "https://example.com/docs", rank: 2 },
+      ],
+    });
+
+    expect(result.source).toBe("llm-lite");
+    expect(result.candidates.map((candidate) => candidate.title)).toEqual(["Official docs", "Commentary"]);
+  });
+
+  it("falls back to the filtered order when candidate reorder is invalid", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: '{"orderedIndexes":[1,1],"reason":"bad reorder"}',
+              },
+            },
+          ],
+        }),
+      }),
+    );
+
+    const result = await reorderResearchCandidates({
+      goal: "Research AI agent development",
+      searchQuery: "AI agent development",
+      candidates: [
+        { title: "Commentary", url: "https://example.com/commentary", rank: 1 },
+        { title: "Official docs", url: "https://example.com/docs", rank: 2 },
+      ],
+    });
+
+    expect(result.source).toBe("rule");
+    expect(result.candidates.map((candidate) => candidate.title)).toEqual(["Commentary", "Official docs"]);
   });
 });

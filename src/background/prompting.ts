@@ -89,6 +89,34 @@ export function buildNextToolPrompt(options: {
   ].join("\n");
 }
 
+export function buildResearchCandidateReorderPrompt(options: {
+  goal: string;
+  searchQuery: string;
+  candidates: Array<{
+    index: number;
+    title: string;
+    url: string;
+    source?: string;
+    snippet?: string;
+    rank: number;
+  }>;
+}) {
+  return [
+    "You reorder first-page public web research candidates for a browser agent.",
+    "Return JSON only.",
+    'Schema: {"orderedIndexes":[0,1,2],"reason":"..."}',
+    "Rules:",
+    "- Reorder only the provided candidates. Do not add or remove any candidate.",
+    "- Prefer candidates that are more likely to be primary, credible, directly relevant, and information-dense.",
+    "- Prefer official sites, established media, institutions, papers, and high-signal explainers over generic aggregators or marketing pages.",
+    "- Keep the full set of indexes exactly once each.",
+    "- Favor candidates that are most useful to read first, not just most famous domains.",
+    `User goal: ${options.goal}`,
+    `Search query: ${options.searchQuery}`,
+    `Candidates: ${JSON.stringify(options.candidates, null, 2)}`,
+  ].join("\n");
+}
+
 export function buildFinalResultPrompt(options: {
   goal: string;
   taskType: TaskType;
@@ -99,26 +127,27 @@ export function buildFinalResultPrompt(options: {
 }) {
   return [
     "## Role",
-    "You are a Professional Senior Decision Consultant.",
-    "Your goal is to transform raw browser-agent evidence into a premium, low-friction decision report for the user.",
+    "You are a professional decision-writing assistant.",
+    "Transform raw browser-agent evidence into a concise, decision-useful final answer for the user.",
     "",
     "## Output Schema",
     "Return JSON only.",
     'Schema: {"summary":"1-sentence compact recap for the UI.","markdown":"The full report content using the structure below.","keyResults":["1-4 short bullets"],"suggestedNextAction":"One concrete next step."}',
     "",
-    "## Core Directives",
-    "1. **Zero Noise**: ABSOLUTELY STRIP all SEO fluff (e.g., [2026新品], 【官方正品】, 满减优惠) and platform tags. Reconstruct product names as 'Brand + Model'.",
-    "2. **The Flow**: Follow strict Markdown order: Executive Summary -> Comparison Table -> Categorized Recommendations -> Evidence Sources.",
-    "3. **Comparison Table**: Create a markdown table for the best 3-5 candidates. Columns: [Item/Model | Price | Key Highlight | Value Score].",
-    "4. **Categorization**: Group recommendations by logic (e.g., 'Best Value', 'Top Performance', 'Alternative Choice').",
-    "5. **Chinese Language**: Output professional, concise Chinese. Do not repeat facts.",
+    "## Hard Rules",
+    "1. Output professional, concise Chinese.",
+    "2. Start with a short overall conclusion or executive summary.",
+    "3. If there are multiple candidates / options / sources worth comparing, prefer a markdown table early in the answer.",
+    "4. The final section MUST be information sources, using standard markdown links [Title](URL).",
+    "5. Remove SEO fluff, platform marketing words, and repetitive noise.",
     "",
-    "## Structure Rules",
-    "- **Executive Summary**: Start with a clear statement of found results and overall quality.",
-    "- **Table**: Mandatory if >1 item is found. Keep cell content very short.",
-    "- **Detail**: 1-2 sentences per category, focusing on the reasoning ('Why this?').",
-    "- **Evidence Sources**: List standard markdown links [Title](URL) at the bottom for verification.",
-    "- **Unresolved**: Briefly mention critical unresolved issues if relevant to decision-making.",
+    "## Writing Guidance",
+    "- Do NOT force a rigid template when the material does not support it.",
+    "- Prefer a total-then-breakdown structure: short conclusion first, then comparison or breakdown, then sources.",
+    "- If a table is used, keep cells short and decision-oriented.",
+    "- You may add sections such as recommendations, comparison, caveats, or open issues only when they help.",
+    "- Mention critical unresolved issues only when they affect the user's decision.",
+    "- Treat research source bodyExcerpt as the primary evidence body, and do not assume source summaries already exist.",
     "",
     `Input: ${JSON.stringify(
       {

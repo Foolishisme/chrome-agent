@@ -1,5 +1,8 @@
+import { Readability } from "@mozilla/readability";
 import { LIMITS } from "../shared/constants";
 import type { PageContentState, PageFactExtraction, ResearchCandidate, SearchResultsState } from "../shared/types";
+
+const MAX_EXCERPT_CHARS = 2_000;
 
 function textOf(node: Element | null | undefined) {
   return node?.textContent?.replace(/\s+/g, " ").trim() ?? "";
@@ -115,6 +118,35 @@ function buildTextSegments(root: ParentNode) {
     .filter((text) => text.length >= 24);
 }
 
+function buildSegmentsFromText(text: string) {
+  return text
+    .split(/\n+/)
+    .map((segment) => segment.replace(/\s+/g, " ").trim())
+    .filter((segment) => segment.length >= 24);
+}
+
+function buildExcerptFromSegments(segments: string[], maxChars = MAX_EXCERPT_CHARS) {
+  const picked: string[] = [];
+  let total = 0;
+
+  for (const segment of segments) {
+    const nextLength = total + segment.length + (picked.length > 0 ? 2 : 0);
+    if (picked.length > 0 && nextLength > maxChars) {
+      break;
+    }
+
+    if (picked.length === 0 && segment.length > maxChars) {
+      picked.push(segment.slice(0, maxChars));
+      break;
+    }
+
+    picked.push(segment);
+    total = nextLength;
+  }
+
+  return picked.join("\n\n").trim();
+}
+
 function cloneReadableRoot(root: HTMLElement) {
   const clone = root.cloneNode(true) as HTMLElement;
   clone.querySelectorAll("script, style, noscript, nav, footer, header, aside, form, button, input, svg, canvas").forEach((node) => {
@@ -157,6 +189,30 @@ function detectBlockingReason(text: string, hasPasswordInput: boolean, textLengt
   return undefined;
 }
 
+function extractWithReadability() {
+  try {
+    const clonedDocument = document.cloneNode(true) as Document;
+    const parsed = new Readability(clonedDocument).parse();
+    if (!parsed?.textContent) {
+      return undefined;
+    }
+
+    const cleanedText = parsed.textContent.replace(/\s+/g, " ").trim();
+    const segments = buildSegmentsFromText(parsed.textContent);
+    if (cleanedText.length < LIMITS.PAGE_TEXT_MIN_LENGTH || segments.length < 2) {
+      return undefined;
+    }
+
+      return {
+        pageTitle: parsed.title?.trim() || document.title || "Untitled",
+        bodyExcerpt: buildExcerptFromSegments(segments),
+        textLength: cleanedText.length,
+      };
+  } catch {
+    return undefined;
+  }
+}
+
 export function collectPageContentState(): PageContentState {
   const root = resolveReadableRoot();
   const clone = cloneReadableRoot(root);
@@ -185,10 +241,21 @@ export function extractPageFacts(): PageFactExtraction {
     return {
       status: "partial",
       pageTitle: document.title || "PDF",
-      summary: "当前页面为 PDF，未执行正文提取。",
-      keyPoints: [],
+      bodyExcerpt: "",
       textLength: 0,
+      extractionStrategy: "fallback",
       reason: "PDF 页面未做正文提取",
+    };
+  }
+
+  const readabilityResult = extractWithReadability();
+  if (readabilityResult) {
+    return {
+      status: "success",
+      pageTitle: readabilityResult.pageTitle,
+      bodyExcerpt: readabilityResult.bodyExcerpt,
+      textLength: readabilityResult.textLength,
+      extractionStrategy: "readability",
     };
   }
 
@@ -200,16 +267,15 @@ export function extractPageFacts(): PageFactExtraction {
     !!document.querySelector("input[type='password']"),
     textLength,
   );
-  const summary = segments[0] ?? "";
-  const keyPoints = segments.slice(0, 3);
+  const bodyExcerpt = buildExcerptFromSegments(segments);
 
   if (reason) {
     return {
       status: "partial",
       pageTitle: document.title || "Untitled",
-      summary: summary || reason,
-      keyPoints,
+      bodyExcerpt,
       textLength,
+      extractionStrategy: "fallback",
       reason,
     };
   }
@@ -217,8 +283,8 @@ export function extractPageFacts(): PageFactExtraction {
   return {
     status: "success",
     pageTitle: document.title || "Untitled",
-    summary,
-    keyPoints,
+    bodyExcerpt,
     textLength,
+    extractionStrategy: "fallback",
   };
 }

@@ -1,4 +1,5 @@
 import { RuntimeError } from "../../shared/errors";
+import { reorderResearchCandidates } from "../llm-client";
 import { filterResearchCandidates } from "../result-filter";
 import { createToolResult, type AgentToolDefinition } from "./shared";
 import { dedupeIssues, ensureUsableSnapshotWithDialogRecovery, isResearchTask } from "./helpers";
@@ -37,22 +38,42 @@ export const collectResearchCandidatesTool: AgentToolDefinition = {
     const snapshotAfter = await context.scanPage();
     const rawCandidates = extractResult.researchCandidates ?? [];
     const filtered = filterResearchCandidates(rawCandidates, context.memory.taskSpec.candidateLimit);
+    const reordered = await reorderResearchCandidates(
+      {
+        goal: context.memory.goal,
+        searchQuery: context.memory.taskSpec.searchQuery,
+        candidates: filtered.candidates,
+      },
+      { signal: context.signal },
+    );
 
-    context.memory.researchCandidates = filtered.candidates;
+    context.memory.researchCandidates = reordered.candidates;
     context.memory.filterDiagnostics = filtered.diagnostics;
     context.memory.recoveryHint = undefined;
     context.memory.lastError = extractResult.success ? undefined : extractResult.message;
+    context.appendLog(
+      reordered.source === "llm-lite" ? "llm" : "runtime",
+      reordered.source === "llm-lite" ? "info" : "warn",
+      reordered.source === "llm-lite"
+        ? "Reordered first-page research candidates with the lite model."
+        : "Kept the filtered research candidate order.",
+      {
+        reason: reordered.reason,
+        before: filtered.candidates.map((candidate) => candidate.title),
+        after: reordered.candidates.map((candidate) => candidate.title),
+      },
+    );
 
     context.recordStep({
-      stepSummary: "Google results extracted and filtered.",
-      nextIntent: filtered.candidates.length > 0 ? "Read the selected source pages." : "Generate a partial research result.",
-      expectedOutcome: "A deduped source list is available.",
+      stepSummary: "Google results extracted, filtered, and reordered.",
+      nextIntent: reordered.candidates.length > 0 ? "Read the selected source pages." : "Generate a partial research result.",
+      expectedOutcome: "A ranked source list is available.",
       action,
       actionResult: extractResult,
       snapshot: snapshotAfter,
     });
 
-    if (filtered.candidates.length === 0) {
+    if (reordered.candidates.length === 0) {
       context.memory.unresolvedIssues = dedupeIssues([
         ...context.memory.unresolvedIssues,
         "No usable research sources remained after filtering the first Google results page.",
@@ -60,19 +81,20 @@ export const collectResearchCandidatesTool: AgentToolDefinition = {
     }
 
     return createToolResult({
-      status: filtered.candidates.length > 0 ? "success" : "partial",
+      status: reordered.candidates.length > 0 ? "success" : "partial",
       summary:
-        filtered.candidates.length > 0
-          ? `Prepared ${filtered.candidates.length} research candidates.`
+        reordered.candidates.length > 0
+          ? `Prepared ${reordered.candidates.length} research candidates.`
           : "No usable research candidates remained after filtering.",
       outputs: {
         extractedCount: rawCandidates.length,
-        keptCount: filtered.candidates.length,
-        candidates: filtered.candidates,
+        keptCount: reordered.candidates.length,
+        candidates: reordered.candidates,
+        reorderReason: reordered.reason,
       },
       facts: {
         lastResearchCandidateCount: rawCandidates.length,
-        filteredSourceCount: filtered.candidates.length,
+        filteredSourceCount: reordered.candidates.length,
       },
       stepStatus: "succeeded",
     });

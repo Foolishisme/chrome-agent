@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compilePublicResearchTask, compileSearchTask, detectTaskType, detectTaskTypeWithLiteModel } from "../src/background/query-compiler";
+import { compilePublicResearchTask, compileSearchTask, detectOutputMode, detectTaskType, detectTaskTypeWithLiteModel } from "../src/background/query-compiler";
 
 describe("query compiler", () => {
   it("builds the search query directly from the lite model", async () => {
@@ -16,6 +16,7 @@ describe("query compiler", () => {
     expect(task.extractLimit).toBeGreaterThanOrEqual(12);
     expect(task.searchQuery).toBe("轻薄本 5000元");
     expect(task.querySource).toBe("llm-lite");
+    expect(task.outputMode).toBe("inline");
   });
 
   it("requires the lite model planner to produce the final on-site query", async () => {
@@ -80,5 +81,10 @@ describe("query compiler", () => {
     expect(task.searchQuery).toContain("Playwright");
     expect(task.searchQuery).toContain("Selenium");
     expect(task.notes[0]).toContain("回退到规则");
+  });
+
+  it("only enables artifact output for explicit report/document requests", () => {
+    expect(detectOutputMode("100元的电动牙刷推荐")).toBe("inline");
+    expect(detectOutputMode("帮我生成一份电动牙刷选购报告")).toBe("artifact");
   });
 });

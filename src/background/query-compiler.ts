@@ -1,6 +1,6 @@
 import { KNOWN_CATEGORY_KEYWORDS, RESEARCH_INTENT_KEYWORDS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
-import type { CommerceTaskSpec, PlanStep, PublicResearchTaskSpec, TaskSpec, TaskType } from "../shared/types";
+import type { CommerceTaskSpec, OutputMode, PlanStep, PublicResearchTaskSpec, TaskSpec, TaskType } from "../shared/types";
 
 interface RefineSearchQuery {
   (goal: string): Promise<{ searchQuery: string; reason: string } | undefined>;
@@ -55,6 +55,19 @@ function buildFallbackResearchQuery(goal: string) {
     .trim();
 
   return normalized || goal.trim();
+}
+
+export function detectOutputMode(goal: string): OutputMode {
+  const normalized = goal.trim();
+
+  if (
+    /(?:生成|输出|导出|写成|整理成|保存为|给我(?:一份)?|做成)(?:\S|\s){0,12}(?:报告|文档|markdown|md|文件)/i.test(normalized) ||
+    /(?:报告|文档|markdown|md|文件)(?:\S|\s){0,8}(?:输出|生成|导出|整理)/i.test(normalized)
+  ) {
+    return "artifact";
+  }
+
+  return "inline";
 }
 
 export function detectTaskType(goal: string): TaskType {
@@ -199,6 +212,7 @@ export async function compileCommerceTask(
   return {
     taskType: "commerce_search",
     originalGoal: goal,
+    outputMode: detectOutputMode(goal),
     topK,
     llmInputLimit,
     extractLimit,
@@ -220,6 +234,7 @@ export async function compilePublicResearchTask(
     return {
       taskType: "public_research",
       originalGoal: goal,
+      outputMode: detectOutputMode(goal),
       searchQuery: buildFallbackResearchQuery(goal),
       querySource: "rule",
       notes: ["小模型不可用，回退到规则生成 Google 查询词"],
@@ -239,6 +254,7 @@ export async function compilePublicResearchTask(
     return {
       taskType: "public_research",
       originalGoal: goal,
+      outputMode: detectOutputMode(goal),
       searchQuery,
       querySource: "llm-lite",
       notes: [refined?.reason ?? "小模型生成 Google 查询词"],
@@ -251,6 +267,7 @@ export async function compilePublicResearchTask(
     return {
       taskType: "public_research",
       originalGoal: goal,
+      outputMode: detectOutputMode(goal),
       searchQuery: buildFallbackResearchQuery(goal),
       querySource: "rule",
       notes: [`小模型不可用，回退到规则生成 Google 查询词：${message}`],

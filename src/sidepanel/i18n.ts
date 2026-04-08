@@ -14,6 +14,8 @@ type MessageBundle = {
   start: string;
   retry: string;
   stop: string;
+  extractCurrentPage: string;
+  clearExtractedSamples: string;
   userGoal: string;
   assistantSummary: string;
   assistantWaiting: string;
@@ -36,6 +38,7 @@ type MessageBundle = {
   logsTitle: string;
   logsEmpty: string;
   logDetail: string;
+  runtimeDetailsTitle: string;
   planTitle: string;
   planTools: string;
   planCriteria: string;
@@ -45,7 +48,16 @@ type MessageBundle = {
   resultBlocked: string;
   resultsHint: string;
   resultSummaryTitle: string;
-  resultArtifactsTitle: string;
+  resultCopyButton: string;
+  resultDocumentsTitle: string;
+  resultCopyReady: string;
+  resultCopyFailed: string;
+  resultCopyUnavailable: string;
+  documentCopyButton: string;
+  documentDownloadButton: string;
+  documentEmpty: string;
+  downloadReady: string;
+  downloadFailed: string;
   resultItemsTitle: string;
   resultSourcesTitle: string;
   resultIssuesTitle: string;
@@ -59,10 +71,23 @@ type MessageBundle = {
   unknownSummary: string;
   noItems: string;
   noSources: string;
-  sourceSummary: string;
+  sourceExcerpt: string;
   sourceLink: string;
-  sourcePoints: string;
   sourceIssues: string;
+  manualSamplesTitle: string;
+  manualSamplesHint: string;
+  manualSamplesEmpty: string;
+  manualSampleStatus: string;
+  manualSampleStrategy: string;
+  manualSampleUrl: string;
+  manualSampleTextLength: string;
+  manualSampleReason: string;
+  manualSampleReadable: string;
+  manualSampleParagraphs: string;
+  manualSampleSaved: string;
+  manualSampleSaveFailed: string;
+  manualSampleClearReady: string;
+  manualSampleClearFailed: string;
   emptyValue: string;
   budgetLow: string;
   budgetHealthy: string;
@@ -83,6 +108,8 @@ const messages: Record<Locale, MessageBundle> = {
     start: "开始",
     retry: "重试",
     stop: "停止",
+    extractCurrentPage: "提取当前页",
+    clearExtractedSamples: "清空样本",
     userGoal: "用户目标",
     assistantSummary: "当前进展",
     assistantWaiting: "等待会话启动。",
@@ -105,6 +132,7 @@ const messages: Record<Locale, MessageBundle> = {
     logsTitle: "调试日志",
     logsEmpty: "还没有调试日志。",
     logDetail: "详情",
+    runtimeDetailsTitle: "运行细节",
     planTitle: "计划步骤",
     planTools: "允许工具",
     planCriteria: "成功标准",
@@ -114,7 +142,16 @@ const messages: Record<Locale, MessageBundle> = {
     resultBlocked: "阻塞",
     resultsHint: "会话完成后，结果会显示在这里。",
     resultSummaryTitle: "结果摘要",
-    resultArtifactsTitle: "结构化细节",
+    resultCopyButton: "复制结果",
+    resultDocumentsTitle: "文档产物",
+    resultCopyReady: "已复制到剪贴板。",
+    resultCopyFailed: "复制失败，请检查浏览器剪贴板权限。",
+    resultCopyUnavailable: "当前没有可复制的结果内容。",
+    documentCopyButton: "复制文档",
+    documentDownloadButton: "下载文档",
+    documentEmpty: "还没有文档产物。",
+    downloadReady: "下载已触发。",
+    downloadFailed: "下载失败，请稍后重试。",
     resultItemsTitle: "候选项",
     resultSourcesTitle: "来源详情",
     resultIssuesTitle: "问题与阻塞",
@@ -128,10 +165,23 @@ const messages: Record<Locale, MessageBundle> = {
     unknownSummary: "-",
     noItems: "还没有候选项。",
     noSources: "还没有来源结果。",
-    sourceSummary: "来源摘要",
+    sourceExcerpt: "来源正文片段",
     sourceLink: "来源链接",
-    sourcePoints: "来源要点",
     sourceIssues: "未解决问题",
+    manualSamplesTitle: "本地提取样本",
+    manualSamplesHint: "打开任意网页后点击“提取当前页”，结果会保存在本地，方便连续对比 10 个页面。",
+    manualSamplesEmpty: "还没有本地提取样本。",
+    manualSampleStatus: "提取状态",
+    manualSampleStrategy: "提取策略",
+    manualSampleUrl: "页面链接",
+    manualSampleTextLength: "正文长度",
+    manualSampleReason: "问题原因",
+    manualSampleReadable: "可读性",
+    manualSampleParagraphs: "段落数",
+    manualSampleSaved: "当前页面提取结果已保存到本地。",
+    manualSampleSaveFailed: "当前页面提取失败，请检查页面是否可读和可执行。",
+    manualSampleClearReady: "本地提取样本已清空。",
+    manualSampleClearFailed: "清空本地提取样本失败。",
     emptyValue: "-",
     budgetLow: "接近上限",
     budgetHealthy: "正常",
@@ -164,6 +214,8 @@ const messages: Record<Locale, MessageBundle> = {
     start: "Start",
     retry: "Retry",
     stop: "Stop",
+    extractCurrentPage: "Extract Page",
+    clearExtractedSamples: "Clear Samples",
     userGoal: "User Goal",
     assistantSummary: "Current Progress",
     assistantWaiting: "Waiting for session start.",
@@ -186,6 +238,7 @@ const messages: Record<Locale, MessageBundle> = {
     logsTitle: "Debug Logs",
     logsEmpty: "No debug logs yet.",
     logDetail: "Detail",
+    runtimeDetailsTitle: "Runtime Details",
     planTitle: "Plan Steps",
     planTools: "Allowed Tools",
     planCriteria: "Success Criteria",
@@ -195,7 +248,16 @@ const messages: Record<Locale, MessageBundle> = {
     resultBlocked: "BLOCKED",
     resultsHint: "Results will appear here after the session completes.",
     resultSummaryTitle: "Result Summary",
-    resultArtifactsTitle: "Structured Details",
+    resultCopyButton: "Copy Result",
+    resultDocumentsTitle: "Documents",
+    resultCopyReady: "Copied to clipboard.",
+    resultCopyFailed: "Copy failed. Check clipboard permissions.",
+    resultCopyUnavailable: "There is no result content to copy yet.",
+    documentCopyButton: "Copy Document",
+    documentDownloadButton: "Download Document",
+    documentEmpty: "No document artifacts yet.",
+    downloadReady: "Download started.",
+    downloadFailed: "Download failed. Try again later.",
     resultItemsTitle: "Items",
     resultSourcesTitle: "Sources",
     resultIssuesTitle: "Issues & Blockers",
@@ -209,10 +271,23 @@ const messages: Record<Locale, MessageBundle> = {
     unknownSummary: "-",
     noItems: "No items yet.",
     noSources: "No source results yet.",
-    sourceSummary: "Source Summary",
+    sourceExcerpt: "Source Excerpt",
     sourceLink: "Source Link",
-    sourcePoints: "Source Points",
     sourceIssues: "Unresolved Issues",
+    manualSamplesTitle: "Local Extraction Samples",
+    manualSamplesHint: "Open any page and extract it. Results are stored locally for comparison.",
+    manualSamplesEmpty: "No local extraction samples yet.",
+    manualSampleStatus: "Extraction Status",
+    manualSampleStrategy: "Strategy",
+    manualSampleUrl: "Page URL",
+    manualSampleTextLength: "Text Length",
+    manualSampleReason: "Reason",
+    manualSampleReadable: "Readable",
+    manualSampleParagraphs: "Paragraphs",
+    manualSampleSaved: "Saved the current page extraction locally.",
+    manualSampleSaveFailed: "Failed to extract the current page.",
+    manualSampleClearReady: "Local extraction samples were cleared.",
+    manualSampleClearFailed: "Failed to clear local extraction samples.",
     emptyValue: "-",
     budgetLow: "Low",
     budgetHealthy: "Healthy",

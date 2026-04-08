@@ -1,7 +1,9 @@
 import { DEFAULT_GOAL } from "../shared/constants";
 import type {
   DebugLogEntry,
+  ManualExtractionRecord,
   PlanStep,
+  ResultArtifact,
   SessionPublicState,
   StepRecord,
 } from "../shared/types";
@@ -21,6 +23,11 @@ let currentState: SessionPublicState = {
 };
 
 let lastGoal = DEFAULT_GOAL;
+let uiNotice = "";
+let uiNoticeTone: "info" | "error" = "info";
+let uiNoticeTimer: number | undefined;
+let manualExtractionHistory: ManualExtractionRecord[] = [];
+let manualExtractionBusy = false;
 
 function escapeHtml(value: unknown) {
   const text = value === undefined || value === null ? "" : String(value);
@@ -41,6 +48,73 @@ function formatDuration(ms: number | undefined) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function getDefaultResultCopyText() {
+  const markdown = currentState.finalResult?.markdown?.trim();
+  if (markdown) {
+    return markdown;
+  }
+
+  const summary = currentState.finalResult?.summary?.trim();
+  if (summary) {
+    return summary;
+  }
+
+  return "";
+}
+
+function setUiNotice(message: string, tone: "info" | "error" = "info") {
+  uiNotice = message;
+  uiNoticeTone = tone;
+
+  if (uiNoticeTimer !== undefined) {
+    window.clearTimeout(uiNoticeTimer);
+  }
+
+  uiNoticeTimer = window.setTimeout(() => {
+    uiNotice = "";
+    uiNoticeTimer = undefined;
+    render();
+  }, 2500);
+
+  render();
+}
+
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const helper = document.createElement("textarea");
+  helper.value = text;
+  helper.setAttribute("readonly", "true");
+  helper.style.position = "fixed";
+  helper.style.opacity = "0";
+  document.body.appendChild(helper);
+  helper.focus();
+  helper.select();
+  document.execCommand("copy");
+  document.body.removeChild(helper);
+}
+
+function downloadArtifact(artifact: ResultArtifact) {
+  const blob = new Blob([artifact.content], {
+    type: artifact.mimeType,
+  });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = artifact.fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(objectUrl);
+}
+
+function getDocumentArtifacts() {
+  return (currentState.finalResult?.artifacts ?? []).filter((artifact) => artifact.kind === "markdown");
 }
 
 function renderInlineMarkdown(text: unknown) {
@@ -252,7 +326,7 @@ function renderTimelineStep(step: StepRecord) {
 }
 
 function renderConversationSection() {
-  const currentProgress = currentState.error ?? currentState.stepSummary ?? currentState.finalResult?.summary ?? messages.assistantWaiting;
+  const manualDisabled = manualExtractionBusy || currentState.status === "running";
 
   return `
     <div class="controls">
@@ -262,8 +336,30 @@ function renderConversationSection() {
         <button id="retry-button" class="button-secondary">${escapeHtml(messages.retry)}</button>
         <button id="stop-button" class="button-danger">${escapeHtml(messages.stop)}</button>
       </div>
+      <div class="button-row button-row-secondary">
+        <button
+          id="extract-current-page-button"
+          class="button-secondary"
+          ${manualDisabled ? "disabled" : ""}
+        >
+          ${escapeHtml(messages.extractCurrentPage)}
+        </button>
+        <button
+          id="clear-samples-button"
+          class="button-secondary"
+          ${manualExtractionBusy || manualExtractionHistory.length === 0 ? "disabled" : ""}
+        >
+          ${escapeHtml(messages.clearExtractedSamples)}
+        </button>
+      </div>
     </div>
-    <div class="debug-grid" style="margin-top: 12px;">
+  `;
+}
+
+function renderRuntimeSection() {
+  const currentProgress = currentState.error ?? currentState.stepSummary ?? currentState.finalResult?.summary ?? messages.assistantWaiting;
+  const runtimeHeadline = `
+    <div class="debug-grid" style="margin-bottom: 12px;">
       <div class="debug-card" style="grid-column: 1 / -1;">
         <span class="status-label">${escapeHtml(messages.userGoal)}</span>
         <div class="debug-value">${escapeHtml(currentState.goal ?? lastGoal)}</div>
@@ -274,9 +370,7 @@ function renderConversationSection() {
       </div>
     </div>
   `;
-}
 
-function renderRuntimeSection() {
   const runtimeSummary = `
     <div class="status-grid">
       <div class="status-card">
@@ -360,6 +454,7 @@ function renderRuntimeSection() {
       : `<div class="muted">${escapeHtml(messages.logsEmpty)}</div>`;
 
   return `
+    ${runtimeHeadline}
     ${runtimeSummary}
     ${renderNestedDetails(
       messages.timelineTitle,
@@ -372,6 +467,7 @@ function renderRuntimeSection() {
       true,
     )}
     ${renderNestedDetails(messages.logsTitle, logsMarkup)}
+    ${renderRuntimeDetailsSection()}
   `;
 }
 
@@ -382,6 +478,35 @@ function renderArtifactDetail(title: string, content: string, open = false) {
         <span>${escapeHtml(title)}</span>
       </summary>
       <div class="source-body">${content}</div>
+    </details>
+  `;
+}
+
+function renderDocumentArtifact(artifact: ResultArtifact, index: number) {
+  return `
+    <details class="source-card">
+      <summary class="source-summary document-summary">
+        <span>${escapeHtml(artifact.title)}</span>
+        <span class="document-actions">
+          <button
+            type="button"
+            class="button-secondary action-button action-button-small"
+            data-copy-artifact-index="${index}"
+          >
+            ${escapeHtml(messages.documentCopyButton)}
+          </button>
+          <button
+            type="button"
+            class="button-secondary action-button action-button-small"
+            data-download-artifact-index="${index}"
+          >
+            ${escapeHtml(messages.documentDownloadButton)}
+          </button>
+        </span>
+      </summary>
+      <div class="source-body">
+        ${renderMarkdownBlock(artifact.content)}
+      </div>
     </details>
   `;
 }
@@ -429,10 +554,6 @@ function renderStructuredSources() {
                 : source.status === "partial"
                   ? messages.resultPartial
                   : messages.resultFail;
-            const points =
-              source.keyPoints.length > 0
-                ? `<ul class="debug-list">${source.keyPoints.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul>`
-                : `<div class="muted">${escapeHtml(messages.emptyValue)}</div>`;
             const issues =
               source.unresolvedIssues.length > 0
                 ? `<ul class="debug-list">${source.unresolvedIssues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>`
@@ -445,9 +566,8 @@ function renderStructuredSources() {
                   <span class="pill">${escapeHtml(statusLabel)}</span>
                 </summary>
                 <div class="source-body">
-                  <div><strong>${escapeHtml(messages.sourceSummary)}:</strong> ${escapeHtml(source.summary || messages.emptyValue)}</div>
+                  <div><strong>${escapeHtml(messages.sourceExcerpt)}:</strong> ${escapeHtml(source.bodyExcerpt || messages.emptyValue)}</div>
                   <div><strong>${escapeHtml(messages.sourceLink)}:</strong> <a class="result-link" href="${escapeHtml(source.sourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(source.sourceUrl)}</a></div>
-                  <div><strong>${escapeHtml(messages.sourcePoints)}:</strong> ${points}</div>
                   <div><strong>${escapeHtml(messages.sourceIssues)}:</strong> ${issues}</div>
                 </div>
               </details>
@@ -468,35 +588,23 @@ function renderStructuredIssues() {
   return `<ul class="debug-list">${issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>`;
 }
 
-function renderResultsSection() {
-  const overallStatus = currentState.finalResult?.status;
-  const overallStatusLabel =
-    overallStatus === "success"
-      ? messages.resultOk
-      : overallStatus === "partial"
-        ? messages.resultPartial
-        : overallStatus === "failed"
-          ? messages.resultFail
-          : overallStatus === "blocked"
-            ? messages.resultBlocked
-          : undefined;
-  const errorMarkup = currentState.error ? `<div class="error-box">${escapeHtml(currentState.error)}</div>` : "";
-  const artifactSections: string[] = [];
+function renderRuntimeDetailsSection() {
+  const detailSections: string[] = [];
 
   if (currentState.items.length > 0) {
-    artifactSections.push(renderArtifactDetail(messages.resultItemsTitle, renderStructuredItems()));
+    detailSections.push(renderArtifactDetail(messages.resultItemsTitle, renderStructuredItems()));
   }
 
   if ((currentState.researchSources?.length ?? 0) > 0) {
-    artifactSections.push(renderArtifactDetail(messages.resultSourcesTitle, renderStructuredSources()));
+    detailSections.push(renderArtifactDetail(messages.resultSourcesTitle, renderStructuredSources()));
   }
 
   if ((currentState.finalResult?.errorsOrBlockers.length ?? currentState.unresolvedIssues?.length ?? 0) > 0) {
-    artifactSections.push(renderArtifactDetail(messages.resultIssuesTitle, renderStructuredIssues()));
+    detailSections.push(renderArtifactDetail(messages.resultIssuesTitle, renderStructuredIssues()));
   }
 
   if (currentState.finalResult?.suggestedNextAction) {
-    artifactSections.push(
+    detailSections.push(
       renderArtifactDetail(
         messages.resultNextActionTitle,
         `<p>${escapeHtml(currentState.finalResult.suggestedNextAction)}</p>`,
@@ -504,24 +612,128 @@ function renderResultsSection() {
     );
   }
 
+  if (detailSections.length === 0) {
+    return "";
+  }
+
+  return renderNestedDetails(
+    messages.runtimeDetailsTitle,
+    `<div class="timeline">${detailSections.join("")}</div>`,
+  );
+}
+
+function renderResultsSection() {
+  const resultCopyText = getDefaultResultCopyText();
+  const documentArtifacts = getDocumentArtifacts();
+  const outputMode = currentState.finalResult?.outputMode ?? (documentArtifacts.length > 0 ? "artifact" : "inline");
+  const errorMarkup = currentState.error ? `<div class="error-box">${escapeHtml(currentState.error)}</div>` : "";
+  const noticeMarkup = uiNotice ? `<div class="notice-box notice-${uiNoticeTone}">${escapeHtml(uiNotice)}</div>` : "";
+
+  const documentsMarkup =
+    documentArtifacts.length > 0
+      ? `
+        <div class="timeline">
+          ${renderArtifactDetail(
+            messages.resultDocumentsTitle,
+            documentArtifacts.map((artifact, index) => renderDocumentArtifact(artifact, index)).join(""),
+            true,
+          )}
+        </div>
+        `
+      : "";
+
+  if (!currentState.finalResult) {
+    return `
+      ${errorMarkup}
+      ${noticeMarkup}
+      <p class="muted">${escapeHtml(messages.resultsHint)}</p>
+    `;
+  }
+
+  if (outputMode === "artifact") {
+    return `
+      ${errorMarkup}
+      ${noticeMarkup}
+      <p class="muted"><strong>${escapeHtml(messages.resultSummaryTitle)}:</strong> ${escapeHtml(currentState.finalResult.summary)}</p>
+      ${documentsMarkup || `<div class="muted">${escapeHtml(messages.documentEmpty)}</div>`}
+    `;
+  }
+
   return `
     ${errorMarkup}
-    ${overallStatusLabel ? `<p class="muted"><strong>${escapeHtml(messages.runtime)}:</strong> ${escapeHtml(overallStatusLabel)}</p>` : ""}
-    ${renderMarkdownBlock(currentState.finalResult?.markdown)}
-    ${
-      currentState.finalResult?.summary
-        ? `<p class="muted"><strong>${escapeHtml(messages.resultSummaryTitle)}:</strong> ${escapeHtml(currentState.finalResult.summary)}</p>`
-        : `<p class="muted">${escapeHtml(messages.resultsHint)}</p>`
-    }
-    ${
-      artifactSections.length > 0
-        ? `
-          <div class="timeline">
-            ${renderArtifactDetail(messages.resultArtifactsTitle, artifactSections.join(""), true)}
-          </div>
-        `
-        : ""
-    }
+    <div class="result-toolbar">
+      <button
+        id="copy-result-button"
+        type="button"
+        class="button-secondary action-button"
+        ${resultCopyText ? "" : "disabled"}
+      >
+        ${escapeHtml(messages.resultCopyButton)}
+      </button>
+    </div>
+    ${noticeMarkup}
+    ${renderMarkdownBlock(currentState.finalResult.markdown)}
+  `;
+}
+
+function renderManualExtractionRecord(record: ManualExtractionRecord, index: number) {
+  const readableText =
+    record.contentState === undefined ? messages.emptyValue : record.contentState.readable ? messages.resultOk : messages.resultPartial;
+  const paragraphText = record.contentState?.paragraphCount ?? messages.emptyValue;
+  const issueText = record.extraction.reason ?? record.contentState?.reason ?? messages.emptyValue;
+
+  return `
+    <details class="source-card"${index === 0 ? " open" : ""}>
+      <summary class="source-summary">
+        <span>${escapeHtml(record.pageTitle || record.url)}</span>
+        <span class="pill">${escapeHtml(record.extraction.status === "success" ? messages.resultOk : messages.resultPartial)}</span>
+      </summary>
+      <div class="source-body">
+        <div><strong>${escapeHtml(messages.manualSampleUrl)}:</strong> <a class="result-link" href="${escapeHtml(record.url)}" target="_blank" rel="noreferrer">${escapeHtml(record.url)}</a></div>
+        <div><strong>${escapeHtml(messages.manualSampleStatus)}:</strong> ${escapeHtml(record.extraction.status)}</div>
+        <div><strong>${escapeHtml(messages.manualSampleStrategy)}:</strong> ${escapeHtml(record.extraction.extractionStrategy ?? messages.emptyValue)}</div>
+        <div><strong>${escapeHtml(messages.manualSampleTextLength)}:</strong> ${escapeHtml(record.extraction.textLength)}</div>
+        <div><strong>${escapeHtml(messages.manualSampleReadable)}:</strong> ${escapeHtml(readableText)}</div>
+        <div><strong>${escapeHtml(messages.manualSampleParagraphs)}:</strong> ${escapeHtml(paragraphText)}</div>
+        <div><strong>${escapeHtml(messages.sourceExcerpt)}:</strong> ${escapeHtml(record.extraction.bodyExcerpt || messages.emptyValue)}</div>
+        <div><strong>${escapeHtml(messages.manualSampleReason)}:</strong> ${escapeHtml(issueText)}</div>
+        <div><strong>${escapeHtml(messages.timelineResult)}:</strong> ${escapeHtml(new Date(record.extractedAt).toLocaleString())}</div>
+      </div>
+    </details>
+  `;
+}
+
+function renderManualSamplesSection() {
+  const actions = `
+    <div class="result-toolbar">
+      <button
+        id="extract-current-page-button-panel"
+        type="button"
+        class="button-secondary action-button"
+        ${manualExtractionBusy || currentState.status === "running" ? "disabled" : ""}
+      >
+        ${escapeHtml(messages.extractCurrentPage)}
+      </button>
+      <button
+        id="clear-samples-button-panel"
+        type="button"
+        class="button-secondary action-button"
+        ${manualExtractionBusy || manualExtractionHistory.length === 0 ? "disabled" : ""}
+      >
+        ${escapeHtml(messages.clearExtractedSamples)}
+      </button>
+    </div>
+  `;
+
+  const content =
+    manualExtractionHistory.length > 0
+      ? `<div class="timeline">${manualExtractionHistory.map((record, index) => renderManualExtractionRecord(record, index)).join("")}</div>`
+      : `<div class="muted">${escapeHtml(messages.manualSamplesEmpty)}</div>`;
+
+  return `
+    <p class="muted">${escapeHtml(messages.manualSamplesHint)}</p>
+    ${actions}
+    ${content}
   `;
 }
 
@@ -541,6 +753,7 @@ function render() {
         <h2>${escapeHtml(messages.resultsTitle)}</h2>
         ${renderResultsSection()}
       </section>
+      ${renderTopLevelSection(messages.manualSamplesTitle, renderManualSamplesSection(), manualExtractionHistory.length > 0)}
     </div>
   `;
 
@@ -548,6 +761,14 @@ function render() {
   const startButton = document.getElementById("start-button");
   const retryButton = document.getElementById("retry-button");
   const stopButton = document.getElementById("stop-button");
+  const extractButtons = [
+    document.getElementById("extract-current-page-button"),
+    document.getElementById("extract-current-page-button-panel"),
+  ].filter(Boolean);
+  const clearButtons = [
+    document.getElementById("clear-samples-button"),
+    document.getElementById("clear-samples-button-panel"),
+  ].filter(Boolean);
 
   startButton?.addEventListener("click", async () => {
     const goal = goalInput?.value.trim() || DEFAULT_GOAL;
@@ -568,6 +789,129 @@ function render() {
   stopButton?.addEventListener("click", async () => {
     await chrome.runtime.sendMessage({
       type: "STOP_SESSION",
+    });
+  });
+
+  const handleManualExtraction = async () => {
+    manualExtractionBusy = true;
+    render();
+
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        type: "EXTRACT_CURRENT_PAGE",
+      })) as {
+        ok: boolean;
+        history?: ManualExtractionRecord[];
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(response.error || messages.manualSampleSaveFailed);
+      }
+
+      manualExtractionHistory = response.history ?? manualExtractionHistory;
+      setUiNotice(messages.manualSampleSaved);
+    } catch {
+      setUiNotice(messages.manualSampleSaveFailed, "error");
+    } finally {
+      manualExtractionBusy = false;
+      render();
+    }
+  };
+
+  extractButtons.forEach((button) => {
+    button?.addEventListener("click", () => {
+      void handleManualExtraction();
+    });
+  });
+
+  const handleClearSamples = async () => {
+    manualExtractionBusy = true;
+    render();
+
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        type: "CLEAR_MANUAL_EXTRACTION_HISTORY",
+      })) as {
+        ok: boolean;
+        history?: ManualExtractionRecord[];
+      };
+
+      if (!response.ok) {
+        throw new Error(messages.manualSampleClearFailed);
+      }
+
+      manualExtractionHistory = response.history ?? [];
+      setUiNotice(messages.manualSampleClearReady);
+    } catch {
+      setUiNotice(messages.manualSampleClearFailed, "error");
+    } finally {
+      manualExtractionBusy = false;
+      render();
+    }
+  };
+
+  clearButtons.forEach((button) => {
+    button?.addEventListener("click", () => {
+      void handleClearSamples();
+    });
+  });
+
+  const copyResultButton = document.getElementById("copy-result-button");
+  copyResultButton?.addEventListener("click", async () => {
+    const text = getDefaultResultCopyText();
+    if (!text) {
+      setUiNotice(messages.resultCopyUnavailable, "error");
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(text);
+      setUiNotice(messages.resultCopyReady);
+    } catch {
+      setUiNotice(messages.resultCopyFailed, "error");
+    }
+  });
+
+  document.querySelectorAll<HTMLElement>("[data-copy-artifact-index]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const index = Number.parseInt(button.dataset.copyArtifactIndex ?? "", 10);
+      const artifact = getDocumentArtifacts()[index];
+      if (!artifact) {
+        setUiNotice(messages.documentEmpty, "error");
+        return;
+      }
+
+      try {
+        await copyTextToClipboard(artifact.content);
+        setUiNotice(messages.resultCopyReady);
+      } catch {
+        setUiNotice(messages.resultCopyFailed, "error");
+      }
+    });
+  });
+
+  document.querySelectorAll<HTMLElement>("[data-download-artifact-index]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const index = Number.parseInt(button.dataset.downloadArtifactIndex ?? "", 10);
+      const artifact = getDocumentArtifacts()[index];
+      if (!artifact) {
+        setUiNotice(messages.documentEmpty, "error");
+        return;
+      }
+
+      try {
+        downloadArtifact(artifact);
+        setUiNotice(messages.downloadReady);
+      } catch {
+        setUiNotice(messages.downloadFailed, "error");
+      }
     });
   });
 }
@@ -591,12 +935,24 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 
 async function bootstrap() {
-  const response = (await chrome.runtime.sendMessage({
-    type: "REQUEST_SESSION_STATE",
-  })) as { ok: boolean; payload?: SessionPublicState };
+  const [stateResponse, historyResponse] = (await Promise.all([
+    chrome.runtime.sendMessage({
+      type: "REQUEST_SESSION_STATE",
+    }),
+    chrome.runtime.sendMessage({
+      type: "REQUEST_MANUAL_EXTRACTION_HISTORY",
+    }),
+  ])) as [
+    { ok: boolean; payload?: SessionPublicState },
+    { ok: boolean; history?: ManualExtractionRecord[] },
+  ];
 
-  if (response.ok && response.payload) {
-    applyState(response.payload);
+  if (historyResponse.ok && historyResponse.history) {
+    manualExtractionHistory = historyResponse.history;
+  }
+
+  if (stateResponse.ok && stateResponse.payload) {
+    applyState(stateResponse.payload);
   } else {
     render();
   }

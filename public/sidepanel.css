@@ -107,6 +107,10 @@ body {
   gap: 8px;
 }
 
+.button-row-secondary button {
+  flex: 1;
+}
+
 .button-row button {
   flex: 1;
   min-height: 40px;
@@ -130,6 +134,12 @@ body {
 .button-danger {
   background: #f7d6d6;
   color: #8f2d2d;
+}
+
+.button-row button:disabled,
+.action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .status-grid {
@@ -320,6 +330,16 @@ body {
   color: #2d241d;
 }
 
+.document-summary {
+  align-items: center;
+}
+
+.document-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .source-body {
   padding: 0 10px 10px;
   font-size: 12px;
@@ -328,6 +348,29 @@ body {
 
 .source-body div + div {
   margin-top: 8px;
+}
+
+.result-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.action-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.action-button-small {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .result-table {
@@ -461,6 +504,26 @@ body {
   color: #8b2e2e;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.notice-box {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.notice-info {
+  background: #eef7f7;
+  border: 1px solid rgba(31, 111, 120, 0.16);
+  color: #174d54;
+}
+
+.notice-error {
+  background: #fff0f0;
+  border: 1px solid rgba(185, 68, 68, 0.18);
+  color: #8b2e2e;
 }
 
 .muted {

@@ -22,9 +22,9 @@ export const researchCandidateSchema = z.object({
 export const pageFactExtractionSchema = z.object({
   status: z.union([z.literal("success"), z.literal("partial")]),
   pageTitle: z.string(),
-  summary: z.string(),
-  keyPoints: z.array(z.string()),
+  bodyExcerpt: z.string(),
   textLength: z.number().int().nonnegative(),
+  extractionStrategy: z.union([z.literal("readability"), z.literal("fallback")]).optional(),
   reason: z.string().optional(),
 });
 
@@ -108,6 +108,11 @@ export const nextToolSelectionSchema = z.object({
     z.literal("finalizeResearchResult"),
   ]),
   reason: z.string().min(1),
+});
+
+export const researchCandidateReorderSchema = z.object({
+  orderedIndexes: z.array(z.number().int().nonnegative()),
+  reason: z.string().min(1).optional(),
 });
 
 export const finalResultSynthesisSchema = z.object({

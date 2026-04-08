@@ -1,6 +1,7 @@
 export type PageType = "home" | "search" | "google_search" | "content" | "pdf" | "unknown";
 
 export type TaskType = "commerce_search" | "public_research";
+export type OutputMode = "inline" | "artifact";
 
 export type PlanStepStatus = "pending" | "running" | "succeeded" | "failed" | "blocked";
 
@@ -195,6 +196,7 @@ export type FilterDiagnostics = CommerceFilterDiagnostics | ResearchFilterDiagno
 export interface CommerceTaskSpec {
   taskType: "commerce_search";
   originalGoal: string;
+  outputMode?: OutputMode;
   category?: string;
   budget?: number;
   budgetMin?: number;
@@ -212,6 +214,7 @@ export type SearchTaskSpec = CommerceTaskSpec;
 export interface PublicResearchTaskSpec {
   taskType: "public_research";
   originalGoal: string;
+  outputMode?: OutputMode;
   searchQuery: string;
   querySource: "rule" | "llm-lite";
   notes: string[];
@@ -242,7 +245,20 @@ export interface PlanStep {
   status: PlanStepStatus;
 }
 
+export interface MarkdownArtifact {
+  id: string;
+  kind: "markdown";
+  title: string;
+  fileName: string;
+  mimeType: "text/markdown";
+  content: string;
+  summary?: string;
+}
+
+export type ResultArtifact = MarkdownArtifact;
+
 export interface FinalResult {
+  outputMode: OutputMode;
   status: FinalStatus;
   summary: string;
   markdown: string;
@@ -250,25 +266,34 @@ export interface FinalResult {
   completedSteps: string[];
   remainingOrFailedSteps: string[];
   errorsOrBlockers: string[];
-  artifacts: string[];
+  artifacts: ResultArtifact[];
   suggestedNextAction: string;
 }
 
 export interface PageFactExtraction {
   status: "success" | "partial";
   pageTitle: string;
-  summary: string;
-  keyPoints: string[];
+  bodyExcerpt: string;
   textLength: number;
+  extractionStrategy?: "readability" | "fallback";
   reason?: string;
+}
+
+export interface ManualExtractionRecord {
+  id: string;
+  url: string;
+  pageTitle: string;
+  pageType: PageType;
+  extractedAt: number;
+  extraction: PageFactExtraction;
+  contentState?: PageContentState;
 }
 
 export interface ResearchSourceResult {
   candidate: ResearchCandidate;
   status: "success" | "partial" | "failed";
   pageTitle: string;
-  summary: string;
-  keyPoints: string[];
+  bodyExcerpt: string;
   sourceUrl: string;
   unresolvedIssues: string[];
   textLength: number;
@@ -305,7 +330,7 @@ export interface ToolResult {
   status: ToolExecutionStatus;
   summary: string;
   outputs: Record<string, unknown>;
-  artifacts: string[];
+  artifacts: ResultArtifact[];
   facts: Record<string, unknown>;
   stepStatus: PlanStepStatus;
   errorCode?: string;

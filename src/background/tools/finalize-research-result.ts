@@ -99,6 +99,7 @@ export const finalizeResearchResultTool: AgentToolDefinition = {
       outputs: {
         finalResult,
       },
+      artifacts: finalResult.artifacts,
       facts: {
         finalStatus,
       },

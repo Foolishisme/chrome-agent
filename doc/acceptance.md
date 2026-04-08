@@ -18,9 +18,10 @@
 | 编号 | 验收项 | 验证方式 | 当前状态 | 备注 |
 |---|---|---|---|---|
 | B1 | 项目可构建 | `npm.cmd run build` | PASS | 2026-04-07 已验证 |
-| B2 | 自动化测试通过 | `npm.cmd test` | PASS | 2026-04-07 已验证，60 tests |
+| B2 | 自动化测试通过 | `npm.cmd test` | PASS | 2026-04-07 已验证，71 tests |
 | B3 | `commerce_search` 单测基线通过 | `tests/runtime-tools.test.ts` | PASS | canonical tool 断言已更新 |
 | B4 | `public_research` 单测基线通过 | `tests/public-research.test.ts` | PASS | canonical tool 断言已更新 |
+| B5 | research 搜索候选重排与信息提取专项测试通过 | `tests/research-search-quality.test.ts` | PASS | 5 个专项测试通过 |
 
 ## 3. v1 架构收口验收
 
@@ -37,7 +38,9 @@
 | N9 | 连续 3 次无进展后停止 | `tests/runtime.test.ts` | PASS | 已覆盖 |
 | N10 | stop / error 路径仍补结构化 `FinalResult` | 检查 `src/background/runtime-core.ts` | PASS | 已统一走 fallback final result |
 | N11 | `currentPhase` 已退出主链 | 检查 `src/shared/types.ts` / `src/background/runtime-core.ts` / `src/sidepanel/index.ts` | PASS | 已移除主链依赖 |
-| N12 | Side Panel 已对齐新结果协议 | 检查 `src/sidepanel/index.ts` | PASS | 读取 `finalResult.markdown / status / errorsOrBlockers / suggestedNextAction` |
+| N12 | Side Panel 已对齐新结果协议 | 检查 `src/sidepanel/index.ts` | PASS | 结果区只展示最终交付物，运行细节回收到 runtime 区 |
+| N13 | 最终输出已收口为 `inline | artifact` | 检查 `src/shared/types.ts` / `src/background/tools/helpers.ts` | PASS | 默认 `inline`，仅显式文档请求才生成 markdown artifact |
+| N14 | research 候选重排序有严格回退 | `tests/llm-client.test.ts` | PASS | 非法重排会回退到过滤后原顺序 |
 
 ## 4. 模块主链验收
 
@@ -47,6 +50,7 @@
 | M2 | `public_research` 主链为 canonical 5 步 | 检查 `src/background/query-compiler.ts` | PASS | `compileTaskSpec -> openSearchResults -> collectResearchCandidates -> readResearchSourceFacts -> finalizeResearchResult` |
 | M3 | `readResearchSourceFacts` 可重复执行直到目标或耗尽 | `tests/public-research.test.ts` | PASS | 已覆盖 |
 | M4 | `collectCommerceCandidates` 内部处理 scroll recovery | `tests/runtime-tools.test.ts` | PASS | 已覆盖 |
+| M5 | `collectResearchCandidates` 内部处理第一页提取、过滤与重排序 | `tests/public-research.test.ts` / `tests/research-search-quality.test.ts` | PASS | 已覆盖 |
 
 ## 5. 真机与联调验收
 
@@ -55,24 +59,26 @@
 | L1 | 扩展可加载到 Chrome | 加载 `dist/` | PASS | user-reported |
 | L2 | Side Panel 可启动 session | Chrome 手动验证 | PASS | user-reported |
 | L3 | `public_research` 真机闭环可完成 | 手动输入调研目标并完成输出 | PASS | user-reported |
-| L4 | `commerce_search` 真机闭环可完成 | 手动输入购物目标并完成输出 | NOT_RUN | 本轮未记录 |
+| L4 | `commerce_search` 真机闭环可完成 | 手动输入购物目标并完成输出 | PASS | user-reported |
 | L5 | stop / error / budget 护栏在 UI 中可见 | 真机制造对应路径 | NOT_RUN | 代码已落地，未专门手测 |
 | L6 | Gemini live request 可用 | 配置 key 后验证 | NOT_RUN | 本轮未做 |
 | L7 | DeepSeek live request 可用 | 配置 key 后验证 | NOT_RUN | 本轮未做 |
+| L8 | 自动化方式可附着项目扩展并驱动真机会话 | 现有浏览器附着 / 新拉起 Chrome + 扩展 | NOT_RUN | 本轮尝试未稳定拿到项目扩展上下文，仍是 blocker |
 
 ## 6. 当前剩余风险
 
-1. `commerce_search` 缺真机闭环记录。
-2. stop / error / budget guardrails 缺真机可视化记录。
-3. `artifacts` 协议已固定，但真实文件 artifact 仍未进入主链。
+1. stop / error / budget guardrails 缺真机可视化记录。
+2. provider live request 仍缺真实环境验证。
+3. research 第一页重排序虽已落地，但缺少命中率量化记录。
+4. 自动化真机扩展会话验证仍未打通。
 
 ## 7. 推荐验收顺序
 
 1. `B1`
 2. `B2`
-3. `B3 / B4`
-4. `N1 - N12`
-5. `M1 - M4`
-6. `L1 - L7`
+3. `B3 / B4 / B5`
+4. `N1 - N14`
+5. `M1 - M5`
+6. `L1 - L8`
 
 Updated: 2026-04-07
