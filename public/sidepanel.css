@@ -357,6 +357,14 @@ body {
   margin-bottom: 10px;
 }
 
+.result-pending {
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #fbf8f2;
+  border: 1px solid rgba(120, 93, 66, 0.12);
+}
+
 .action-button {
   min-height: 34px;
   padding: 0 12px;

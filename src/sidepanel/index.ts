@@ -26,6 +26,22 @@ let uiNotice = "";
 let uiNoticeTone: "info" | "error" = "info";
 let uiNoticeTimer: number | undefined;
 
+function hasSessionActivity() {
+  return (
+    currentState.status !== "idle" ||
+    currentState.timeline.length > 0 ||
+    currentState.logs.length > 0 ||
+    Boolean(currentState.finalResult) ||
+    Boolean(currentState.error) ||
+    Boolean(currentState.sessionId) ||
+    Boolean(currentState.goal)
+  );
+}
+
+function getCurrentProgressText() {
+  return currentState.error ?? currentState.stepSummary ?? currentState.finalResult?.summary ?? messages.assistantWaiting;
+}
+
 function escapeHtml(value: unknown) {
   const text = value === undefined || value === null ? "" : String(value);
   return text
@@ -323,20 +339,72 @@ function renderTimelineStep(step: StepRecord) {
 }
 
 function renderConversationSection() {
+  const actionButton =
+    currentState.status === "running"
+      ? `<button id="stop-button" class="button-danger">${escapeHtml(messages.stop)}</button>`
+      : `<button id="start-button" class="button-primary">${escapeHtml(messages.start)}</button>`;
+
   return `
     <div class="controls">
       <textarea id="goal-input" class="goal-input" placeholder="${escapeHtml(messages.goalPlaceholder)}">${escapeHtml(lastGoal)}</textarea>
       <div class="button-row">
-        <button id="start-button" class="button-primary">${escapeHtml(messages.start)}</button>
-        <button id="retry-button" class="button-secondary">${escapeHtml(messages.retry)}</button>
-        <button id="stop-button" class="button-danger">${escapeHtml(messages.stop)}</button>
+        ${actionButton}
       </div>
     </div>
   `;
 }
 
+function buildTimelineMarkup() {
+  const stepRecordsByPlanStep = new Map<string, StepRecord[]>();
+  const orphanRecords: StepRecord[] = [];
+
+  for (const record of currentState.timeline) {
+    if (!record.planStepId) {
+      orphanRecords.push(record);
+      continue;
+    }
+
+    const matchedPlanStep = currentState.plan.find((step) => step.stepId === record.planStepId);
+    if (!matchedPlanStep) {
+      orphanRecords.push(record);
+      continue;
+    }
+
+    const existing = stepRecordsByPlanStep.get(record.planStepId) ?? [];
+    existing.push(record);
+    stepRecordsByPlanStep.set(record.planStepId, existing);
+  }
+
+  const planTimelineMarkup =
+    currentState.plan.length > 0
+      ? currentState.plan.map((step) => renderPlanStep(step, stepRecordsByPlanStep.get(step.stepId) ?? [])).join("")
+      : currentState.timeline.length > 0
+        ? currentState.timeline.map((step) => renderTimelineStep(step)).join("")
+        : `<div class="muted">${escapeHtml(messages.timelineWaiting)}</div>`;
+
+  const orphanMarkup =
+    orphanRecords.length > 0
+      ? `<div class="timeline-sublist">${orphanRecords.map((record) => renderTimelineStep(record)).join("")}</div>`
+      : "";
+
+  return `
+    <div class="timeline">
+      ${planTimelineMarkup}
+      ${orphanMarkup}
+    </div>
+  `;
+}
+
+function renderExecutionTrace(open: boolean) {
+  if (currentState.plan.length === 0 && currentState.timeline.length === 0) {
+    return "";
+  }
+
+  return renderNestedDetails(messages.timelineTitle, buildTimelineMarkup(), open);
+}
+
 function renderRuntimeSection() {
-  const currentProgress = currentState.error ?? currentState.stepSummary ?? currentState.finalResult?.summary ?? messages.assistantWaiting;
+  const currentProgress = getCurrentProgressText();
   const runtimeHeadline = `
     <div class="debug-grid" style="margin-bottom: 12px;">
       <div class="debug-card" style="grid-column: 1 / -1;">
@@ -395,38 +463,6 @@ function renderRuntimeSection() {
     </div>
   `;
 
-  const stepRecordsByPlanStep = new Map<string, StepRecord[]>();
-  const orphanRecords: StepRecord[] = [];
-
-  for (const record of currentState.timeline) {
-    if (!record.planStepId) {
-      orphanRecords.push(record);
-      continue;
-    }
-
-    const matchedPlanStep = currentState.plan.find((step) => step.stepId === record.planStepId);
-    if (!matchedPlanStep) {
-      orphanRecords.push(record);
-      continue;
-    }
-
-    const existing = stepRecordsByPlanStep.get(record.planStepId) ?? [];
-    existing.push(record);
-    stepRecordsByPlanStep.set(record.planStepId, existing);
-  }
-
-  const planTimelineMarkup =
-    currentState.plan.length > 0
-      ? currentState.plan.map((step) => renderPlanStep(step, stepRecordsByPlanStep.get(step.stepId) ?? [])).join("")
-      : currentState.timeline.length > 0
-        ? currentState.timeline.map((step) => renderTimelineStep(step)).join("")
-        : `<div class="muted">${escapeHtml(messages.timelineWaiting)}</div>`;
-
-  const orphanMarkup =
-    orphanRecords.length > 0
-      ? `<div class="timeline-sublist">${orphanRecords.map((record) => renderTimelineStep(record)).join("")}</div>`
-      : "";
-
   const logsMarkup =
     currentState.logs.length > 0
       ? `<div class="logs">${currentState.logs.map((log) => renderLogItem(log)).join("")}</div>`
@@ -435,16 +471,6 @@ function renderRuntimeSection() {
   return `
     ${runtimeHeadline}
     ${runtimeSummary}
-    ${renderNestedDetails(
-      messages.timelineTitle,
-      `
-        <div class="timeline">
-          ${planTimelineMarkup}
-          ${orphanMarkup}
-        </div>
-      `,
-      true,
-    )}
     ${renderNestedDetails(messages.logsTitle, logsMarkup)}
     ${renderRuntimeDetailsSection()}
   `;
@@ -602,11 +628,13 @@ function renderRuntimeDetailsSection() {
 }
 
 function renderResultsSection() {
+  const currentProgress = getCurrentProgressText();
   const resultCopyText = getDefaultResultCopyText();
   const documentArtifacts = getDocumentArtifacts();
   const outputMode = currentState.finalResult?.outputMode ?? (documentArtifacts.length > 0 ? "artifact" : "inline");
   const errorMarkup = currentState.error ? `<div class="error-box">${escapeHtml(currentState.error)}</div>` : "";
   const noticeMarkup = uiNotice ? `<div class="notice-box notice-${uiNoticeTone}">${escapeHtml(uiNotice)}</div>` : "";
+  const processMarkup = renderExecutionTrace(!currentState.finalResult);
 
   const documentsMarkup =
     documentArtifacts.length > 0
@@ -625,7 +653,11 @@ function renderResultsSection() {
     return `
       ${errorMarkup}
       ${noticeMarkup}
-      <p class="muted">${escapeHtml(messages.resultsHint)}</p>
+      <div class="result-pending">
+        <span class="status-label">${escapeHtml(messages.assistantSummary)}</span>
+        <div class="debug-value">${escapeHtml(currentProgress)}</div>
+      </div>
+      ${processMarkup || `<p class="muted">${escapeHtml(messages.resultsHint)}</p>`}
     `;
   }
 
@@ -635,6 +667,7 @@ function renderResultsSection() {
       ${noticeMarkup}
       <p class="muted"><strong>${escapeHtml(messages.resultSummaryTitle)}:</strong> ${escapeHtml(currentState.finalResult.summary)}</p>
       ${documentsMarkup || `<div class="muted">${escapeHtml(messages.documentEmpty)}</div>`}
+      ${processMarkup}
     `;
   }
 
@@ -652,11 +685,13 @@ function renderResultsSection() {
     </div>
     ${noticeMarkup}
     ${renderMarkdownBlock(currentState.finalResult.markdown)}
+    ${processMarkup}
   `;
 }
 
 function render() {
-  const shouldOpenRuntime = currentState.status !== "idle" || currentState.timeline.length > 0 || currentState.logs.length > 0;
+  const showSessionSections = hasSessionActivity();
+  const shouldOpenRuntime = currentState.status === "running" && !currentState.finalResult;
 
   app.innerHTML = `
     <div class="panel-shell">
@@ -666,17 +701,22 @@ function render() {
       </section>
 
       ${renderTopLevelSection(messages.conversationTitle, renderConversationSection(), true)}
-      ${renderTopLevelSection(messages.runtimeStatusTitle, renderRuntimeSection(), shouldOpenRuntime)}
-      <section class="section">
-        <h2>${escapeHtml(messages.resultsTitle)}</h2>
-        ${renderResultsSection()}
-      </section>
+      ${
+        showSessionSections
+          ? `
+            <section class="section">
+              <h2>${escapeHtml(messages.resultsTitle)}</h2>
+              ${renderResultsSection()}
+            </section>
+            ${renderTopLevelSection(messages.runtimeStatusTitle, renderRuntimeSection(), shouldOpenRuntime)}
+          `
+          : ""
+      }
     </div>
   `;
 
   const goalInput = document.getElementById("goal-input") as HTMLTextAreaElement | null;
   const startButton = document.getElementById("start-button");
-  const retryButton = document.getElementById("retry-button");
   const stopButton = document.getElementById("stop-button");
 
   startButton?.addEventListener("click", async () => {
@@ -685,13 +725,6 @@ function render() {
     await chrome.runtime.sendMessage({
       type: "START_SESSION",
       goal,
-    });
-  });
-
-  retryButton?.addEventListener("click", async () => {
-    await chrome.runtime.sendMessage({
-      type: "START_SESSION",
-      goal: lastGoal,
     });
   });
 

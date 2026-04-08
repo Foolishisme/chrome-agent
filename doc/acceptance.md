@@ -41,6 +41,10 @@
 | N12 | Side Panel 已对齐新结果协议 | 检查 `src/sidepanel/index.ts` | PASS | 结果区只展示最终交付物，运行细节回收到 runtime 区 |
 | N13 | 最终输出已收口为 `inline | artifact` | 检查 `src/shared/types.ts` / `src/background/tools/helpers.ts` | PASS | 默认 `inline`，仅显式文档请求才生成 markdown artifact |
 | N14 | research 候选重排序有严格回退 | `tests/llm-client.test.ts` | PASS | 非法重排会回退到过滤后原顺序 |
+| N15 | Side Panel 初始态不展示空的运行区与结果区 | `tests/sidepanel.test.ts` | NOT_RUN | 本轮拍板，待实现 |
+| N16 | Side Panel 主按钮按状态收口为 `开始 / 停止 / 再次运行` | `tests/sidepanel.test.ts` | NOT_RUN | 初始态不再直接展示 `重试` |
+| N17 | 时间线运行中默认展开，结果完成后自动折叠 | `tests/sidepanel.test.ts` | NOT_RUN | 作为“执行过程”轻量呈现，不改最终结果协议 |
+| N18 | 最终结果仍保持一次性交付，不引入 token 级流式协议 | 检查 `src/sidepanel/index.ts` / `src/shared/types.ts` | NOT_RUN | 当前决策是先不做真正流式输出 |
 
 ## 4. 模块主链验收
 
@@ -71,6 +75,7 @@
 2. provider live request 仍缺真实环境验证。
 3. research 第一页重排序虽已落地，但缺少命中率量化记录。
 4. 自动化真机扩展会话验证仍未打通。
+5. Side Panel 交互收口 v1 尚未实现，当前首屏与按钮语义仍偏 MVP。
 
 ## 7. 推荐验收顺序
 

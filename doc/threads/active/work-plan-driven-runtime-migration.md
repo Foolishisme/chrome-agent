@@ -23,6 +23,16 @@
 - 最终交付收口为 `inline | artifact`，且文档仅在显式请求时生成
 - `public_research` 第一页候选在过滤后增加轻量重排序
 
+当前新增拍板：
+- Side Panel 下一步优先做交互收口 v1，而不是先上真正流式结果或长对话 UI
+- 当前先做：
+  - 初始态隐藏空的运行区与结果区
+  - 主按钮按状态收口为 `开始 / 停止 / 再次运行`
+  - 时间线运行中展开、结果完成后自动折叠
+- 当前不先做：
+  - token 级流式结果输出
+  - 长记忆 / 长对话 UI
+
 ## 3. 已完成事项
 
 - 新增 ADR：
@@ -78,6 +88,7 @@
 
 ## 5. 剩余事项
 
+- Side Panel 交互收口 v1
 - stop / error / budget guardrails 真机可视化记录
 - provider live validation
 - research 第一页重排前后命中率记录
@@ -89,6 +100,7 @@
 - `public_research` 真机闭环当前已补记录为 `user-reported`
 - 当前不优先做长记忆泛化
 - 当前不优先做完整 `LLM` 可选工具通用化
+- 当前不优先做真正的流式结果生成协议
 - “下载”不作为独立 runtime-visible tool，而作为已有结果产物的前端导出能力
 - 不默认生成文档；只有用户明确要求“文档 / 报告 / markdown / 文件”时才走 artifact 交付
 

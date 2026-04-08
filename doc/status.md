@@ -6,7 +6,7 @@
 
 ## 2. Current Focus
 
-当前主线已经从“过渡层迁移”切到“canonical v1 收口完成后的稳定化”，当前重点转为结果交付收口与 research 第一页来源质量提升：
+当前主线已经从“过渡层迁移”切到“canonical v1 收口完成后的稳定化”，当前重点先转为 Side Panel 交互收口，再继续做结果质量验证：
 
 - Runtime 已是 canonical plan loop
 - Tools 已按 `src/background/tools/` 拆分
@@ -15,7 +15,7 @@
 - `commerce_search / public_research` 真机闭环已通过，当前记录为 `user-reported`
 - 结果输出已收口为 `inline | artifact`
 - `public_research` 已在第一页过滤后增加轻量 research 候选重排序
-- 下一步优先验证第一页候选质量提升是否真实改善读源命中率
+- 下一步优先做初始态隐藏、按钮收口和时间线折叠
 
 ## 3. Done
 
@@ -90,6 +90,9 @@
 
 当前主要剩余风险：
 
+- Side Panel 初始态仍展示空的运行区与结果区，首屏噪音偏高
+- `retry` 仍在初始态暴露，按钮语义不够收敛
+- 结果仍为一次性最终显示，运行中缺少更自然的过程感呈现
 - stop / error / budget guardrails 仍缺真机可视化验证记录
 - provider live request 仍缺真实环境验证
 - 目前仍不支持执行中动态改 plan
@@ -107,11 +110,13 @@
 
 ## 7. Next Actions
 
-1. 记录 stop / error / budget guardrails 真机表现
-2. 记录 research 第一页重排前后的成功来源命中率
-3. 提升第一页候选的基础质量，而不是先把有效来源目标提到 5
-4. 打通自动化真机扩展验证链路
-5. 根据新增真实失败模式决定是否继续细拆 tool 或扩展 PDF artifact
+1. 落地 Side Panel 初始态隐藏空的运行区与结果区
+2. 将主按钮改为状态驱动的 `开始 / 停止 / 再次运行`
+3. 将时间线改为运行中展开、完成后自动折叠
+4. 记录 stop / error / budget guardrails 真机表现
+5. 记录 research 第一页重排前后的成功来源命中率
+6. 打通自动化真机扩展验证链路
+7. 根据新增真实失败模式决定是否继续细拆 tool 或扩展 PDF artifact
 
 ## 8. 2026-04-08 补充
 
@@ -138,5 +143,28 @@
 ### 8.3 当前新增风险
 
 - research 页面正文虽然已切到 `bodyExcerpt`，但“前部截断是否总是最佳证据段”仍需人工样本继续验证
+- Side Panel 若后续引入半流式感知，需要避免把最终结果协议重新拉回流式耦合
+
+### 8.4 Side Panel v1 收口现状
+
+- `src/sidepanel/index.ts`
+  - 初始态已隐藏空的运行区与结果区
+  - 按钮已收口为 `开始 / 停止`
+  - 结果区在最终结果出现前先展示当前进展与执行时间线，作为半流式过程感知
+  - 最终结果出现后，执行时间线改为折叠显示，运行状态区默认收起
+- `tests/sidepanel.test.ts`
+  - 已补初始态隐藏、运行中过程展示、完成后折叠、结果复制/文档下载验证
+
+### 8.5 本轮最小验证
+
+- `npx.cmd vitest run tests/sidepanel.test.ts`
+  - 1 个测试文件，4 个测试通过
+- `npm.cmd run build`
+  - 通过
+
+### 8.6 当前剩余边界
+
+- 当前“半流式”只是在前端重用 runtime 过程数据，不是 provider 级流式输出
+- 如果后续引入 memory 长对话，还需要单独设计输出区之后的对话历史承载方式
 
 Updated: 2026-04-08

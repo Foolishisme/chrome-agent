@@ -8,7 +8,40 @@ type RuntimeMessage = {
 
 let onRuntimeMessage: ((message: RuntimeMessage) => void) | undefined;
 
-function createState(): SessionPublicState {
+function createRunningState(): SessionPublicState {
+  return {
+    sessionId: "session-running",
+    goal: "Test research goal",
+    status: "running",
+    currentStep: 1,
+    currentStepId: "collectResearchCandidates",
+    currentTool: "collectResearchCandidates",
+    stepSummary: "Collecting source candidates.",
+    plan: [],
+    items: [],
+    logs: [],
+    timeline: [
+      {
+        step: 1,
+        status: "running",
+        stepSummary: "Collecting source candidates.",
+        action: {
+          type: "NAVIGATE",
+          url: "https://www.google.com/search?q=test",
+        },
+        actionResult: {
+          success: true,
+          actionType: "NAVIGATE",
+          message: "Opened Google search.",
+        },
+        timestamp: Date.now(),
+      },
+    ],
+    updatedAt: Date.now(),
+  };
+}
+
+function createArtifactState(): SessionPublicState {
   return {
     status: "done",
     currentStep: 4,
@@ -49,7 +82,14 @@ function createInlineState(): SessionPublicState {
     plan: [],
     items: [],
     logs: [],
-    timeline: [],
+    timeline: [
+      {
+        step: 4,
+        status: "done",
+        stepSummary: "Final result is ready.",
+        timestamp: Date.now(),
+      },
+    ],
     updatedAt: Date.now(),
     finalResult: {
       outputMode: "inline",
@@ -125,6 +165,33 @@ describe("sidepanel result actions", () => {
     vi.unstubAllGlobals();
   });
 
+  it("hides runtime and results before the first session starts", async () => {
+    await loadSidepanel();
+
+    expect(document.getElementById("start-button")).not.toBeNull();
+    expect(document.getElementById("stop-button")).toBeNull();
+    expect(document.getElementById("retry-button")).toBeNull();
+    expect(document.getElementById("copy-result-button")).toBeNull();
+    expect(document.querySelectorAll("details.section-details")).toHaveLength(1);
+  });
+
+  it("shows live execution trace before a final result exists", async () => {
+    await loadSidepanel();
+    onRuntimeMessage?.({
+      type: "SESSION_UPDATE",
+      payload: createRunningState(),
+    });
+
+    expect(document.getElementById("start-button")).toBeNull();
+    expect(document.getElementById("stop-button")).not.toBeNull();
+    expect(document.getElementById("retry-button")).toBeNull();
+    expect(document.getElementById("copy-result-button")).toBeNull();
+    expect(document.body.textContent).toContain("Collecting source candidates.");
+
+    const openDetails = Array.from(document.querySelectorAll("details.debug-detail[open]"));
+    expect(openDetails.length).toBeGreaterThan(0);
+  });
+
   it("renders a default copy action and copies the final markdown", async () => {
     await loadSidepanel();
     onRuntimeMessage?.({
@@ -134,6 +201,12 @@ describe("sidepanel result actions", () => {
 
     const button = document.getElementById("copy-result-button");
     expect(button).not.toBeNull();
+    expect(document.getElementById("retry-button")).toBeNull();
+    expect(document.getElementById("stop-button")).toBeNull();
+    expect(document.getElementById("start-button")).not.toBeNull();
+
+    const runtimeSection = document.querySelectorAll("details.section-details")[1] as HTMLDetailsElement | undefined;
+    expect(runtimeSection?.open).toBe(false);
 
     (button as HTMLButtonElement).click();
 
@@ -146,12 +219,11 @@ describe("sidepanel result actions", () => {
     await loadSidepanel();
     onRuntimeMessage?.({
       type: "SESSION_UPDATE",
-      payload: createState(),
+      payload: createArtifactState(),
     });
 
+    expect(document.getElementById("retry-button")).toBeNull();
     expect(document.getElementById("copy-result-button")).toBeNull();
-    expect(document.body.textContent).not.toContain("文件名");
-    expect(document.body.textContent).not.toContain("文档摘要");
 
     const details = document.querySelector("details.source-card");
     expect(details).not.toBeNull();
