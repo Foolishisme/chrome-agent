@@ -205,6 +205,18 @@ describe("research search quality pipeline", () => {
         <p>${"AI agents combine planning, tool use, and execution loops to solve multi-step tasks. ".repeat(5)}</p>
         <p>${"Teams use them for research, customer support automation, and developer workflows. ".repeat(4)}</p>
         <p>${"The main tradeoffs involve controllability, latency, and reliability under weak evidence. ".repeat(4)}</p>
+        <section class="comments">
+          <p>Comments</p>
+          <p>This article is wrong.</p>
+        </section>
+        <div class="related-posts">
+          <p>Related stories</p>
+          <p>Read more about hype cycles.</p>
+        </div>
+        <div class="advertisement">
+          <p>Sponsored</p>
+          <p>Buy our premium AI course today.</p>
+        </div>
       </article>
     `;
 
@@ -215,6 +227,9 @@ describe("research search quality pipeline", () => {
     expect(result.bodyExcerpt.length).toBeGreaterThan(200);
     expect(result.textLength).toBeGreaterThan(250);
     expect(result.extractionStrategy).toBe("readability");
+    expect(result.bodyExcerpt).not.toContain("Comments");
+    expect(result.bodyExcerpt).not.toContain("Related stories");
+    expect(result.bodyExcerpt).not.toContain("Sponsored");
   });
 
   it("marks low-readability pages as partial extraction", () => {

@@ -113,4 +113,30 @@
 4. 打通自动化真机扩展验证链路
 5. 根据新增真实失败模式决定是否继续细拆 tool 或扩展 PDF artifact
 
-Updated: 2026-04-07
+## 8. 2026-04-08 补充
+
+### 8.1 research 页面输入现状
+
+- `src/content/research.ts`
+  - research 来源页提取已改为 `Readability 优先 + fallback`
+  - 页面输入不再以 `summary + keyPoints` 为主
+  - 当前主输入已收口为 `pageTitle + bodyExcerpt + textLength + extractionStrategy`
+- `src/background/tools/read-research-source-facts.ts`
+  - research source 记录已改为保存 `bodyExcerpt`
+- `src/background/prompting.ts`
+  - 最终汇总 prompt 已明确将 `bodyExcerpt` 视为主证据正文
+- `src/sidepanel/index.ts`
+  - 运行详情与本地提取样本区已改为展示正文片段，而不是摘要/要点
+
+### 8.2 本轮最小验证
+
+- `npx.cmd vitest run tests/public-research.test.ts tests/research-search-quality.test.ts tests/sidepanel.test.ts tests/schema.test.ts`
+  - 4 个测试文件，22 个测试通过
+- `npm.cmd run build`
+  - 通过
+
+### 8.3 当前新增风险
+
+- research 页面正文虽然已切到 `bodyExcerpt`，但“前部截断是否总是最佳证据段”仍需人工样本继续验证
+
+Updated: 2026-04-08

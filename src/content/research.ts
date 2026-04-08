@@ -3,6 +3,27 @@ import { LIMITS } from "../shared/constants";
 import type { PageContentState, PageFactExtraction, ResearchCandidate, SearchResultsState } from "../shared/types";
 
 const MAX_EXCERPT_CHARS = 2_000;
+const NOISE_ATTRIBUTE_PATTERNS = [
+  /\bcomment(s|ing)?\b/i,
+  /\breply\b/i,
+  /\bdiscussion\b/i,
+  /\brelated\b/i,
+  /\brecommend(ed|ation)?\b/i,
+  /\bsuggest(ed|ion)?\b/i,
+  /\bpopular\b/i,
+  /\bpromo\b/i,
+  /\bsponsored\b/i,
+  /\badvert(isement|orial)?\b/i,
+  /\bnewsletter\b/i,
+  /\bsubscribe\b/i,
+  /\bshare\b/i,
+  /评论|回复|相关阅读|相关推荐|推荐阅读|广告|赞助|订阅|分享/,
+];
+const NOISE_SEGMENT_PATTERNS = [
+  /^(comments?|replies|discussion|related|recommended|popular|sponsored|advertisement)\b/i,
+  /^(subscribe|sign up|share|read more|continue reading)\b/i,
+  /^(评论|回复|相关阅读|相关推荐|推荐阅读|广告|赞助|订阅|分享)/,
+];
 
 function textOf(node: Element | null | undefined) {
   return node?.textContent?.replace(/\s+/g, " ").trim() ?? "";
@@ -115,14 +136,16 @@ export function collectGoogleSearchResultsState(root: Document | HTMLElement = d
 function buildTextSegments(root: ParentNode) {
   return Array.from(root.querySelectorAll<HTMLElement>("h1, h2, h3, p, li"))
     .map((node) => textOf(node))
-    .filter((text) => text.length >= 24);
+    .filter((text) => text.length >= 24)
+    .filter((text) => !NOISE_SEGMENT_PATTERNS.some((pattern) => pattern.test(text)));
 }
 
 function buildSegmentsFromText(text: string) {
   return text
     .split(/\n+/)
     .map((segment) => segment.replace(/\s+/g, " ").trim())
-    .filter((segment) => segment.length >= 24);
+    .filter((segment) => segment.length >= 24)
+    .filter((segment) => !NOISE_SEGMENT_PATTERNS.some((pattern) => pattern.test(segment)));
 }
 
 function buildExcerptFromSegments(segments: string[], maxChars = MAX_EXCERPT_CHARS) {
@@ -152,7 +175,42 @@ function cloneReadableRoot(root: HTMLElement) {
   clone.querySelectorAll("script, style, noscript, nav, footer, header, aside, form, button, input, svg, canvas").forEach((node) => {
     node.remove();
   });
+  removeNoiseContainers(clone);
   return clone;
+}
+
+function isLikelyNoiseContainer(node: Element) {
+  const values = [
+    node.getAttribute("id"),
+    node.getAttribute("class"),
+    node.getAttribute("role"),
+    node.getAttribute("aria-label"),
+    node.getAttribute("data-testid"),
+    node.getAttribute("data-component"),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (!values) {
+    return false;
+  }
+
+  return NOISE_ATTRIBUTE_PATTERNS.some((pattern) => pattern.test(values));
+}
+
+function removeNoiseContainers(root: ParentNode) {
+  const elements = Array.from(root.querySelectorAll<HTMLElement>("section, div, aside, ul, ol"));
+  for (const element of elements) {
+    if (!element.parentElement) {
+      continue;
+    }
+
+    if (!isLikelyNoiseContainer(element)) {
+      continue;
+    }
+
+    element.remove();
+  }
 }
 
 function resolveReadableRoot() {
@@ -192,6 +250,7 @@ function detectBlockingReason(text: string, hasPasswordInput: boolean, textLengt
 function extractWithReadability() {
   try {
     const clonedDocument = document.cloneNode(true) as Document;
+    removeNoiseContainers(clonedDocument);
     const parsed = new Readability(clonedDocument).parse();
     if (!parsed?.textContent) {
       return undefined;
