@@ -167,4 +167,65 @@
 - 当前“半流式”只是在前端重用 runtime 过程数据，不是 provider 级流式输出
 - 如果后续引入 memory 长对话，还需要单独设计输出区之后的对话历史承载方式
 
+### 8.7 Demo Session Archive 现状
+
+- `src/background/session-archive.ts`
+  - 已新增本地 session archive 存储
+  - 当前采用 `chrome.storage.local`，按“一轮会话一个对象”保存
+  - 当前只保存 `finalResult.status = success` 的成功会话
+- `src/background/runtime-core.ts`
+  - 成功完成后会自动写入本地 archive
+  - stop / error / blocked / failed 不会保留本地会话记录
+- `src/background/index.ts`
+  - `REQUEST_SESSION_STATE` 在无活跃状态时会回填最近一次成功保存的会话
+  - 已支持删除指定 `sessionId` 的本地会话归档
+- `src/sidepanel/index.ts`
+  - 结果区已新增“删除本轮”入口
+  - 删除后会清空当前展示，回到初始态
+
+### 8.8 本轮最小验证
+
+- `npx.cmd vitest run tests/sidepanel.test.ts tests/session-archive.test.ts`
+  - 2 个测试文件，6 个测试通过
+- `npm.cmd run build`
+  - 通过
+
+### 8.9 当前剩余边界
+
+- 当前只回填最近一条成功归档，不提供历史会话列表或多条切换
+- 当前删除的是整轮会话对象，不支持只删部分步骤
+- 当前本地 archive 是 demo 设施，后续如接入登录/云端存储，应抽象统一的 memory store 接口
+
+### 8.10 Conversation Archive 现状
+
+- `src/background/session-archive.ts`
+  - 已从单条成功 session 归档升级为 `conversation + turns`
+  - 每个 turn 保存 `goal / final summary / final markdown / final state`
+  - 已支持新建、切换、删除 conversation，以及回退到指定 turn
+- `src/background/runtime-core.ts`
+  - 启动新 turn 时可带入当前 conversation 的历史摘要背景
+  - 成功完成后会把当前 turn 追加到所选 conversation
+- `src/background/tools/compile-task-spec.ts`
+  - query refinement 已可读取最近几轮的 `提问 + 最终结果摘要` 作为背景
+- `src/background/tools/finalize-commerce-result.ts`
+  - 最终结果汇总已可读取最近几轮背景
+- `src/background/tools/finalize-research-result.ts`
+  - 最终结果汇总已可读取最近几轮背景
+- `src/sidepanel/index.ts`
+  - 对话区已新增会话入口与历史会话抽屉
+  - 当前会话内可查看 turn 流，并支持“回退到此轮”
+
+### 8.11 本轮最小验证
+
+- `npx.cmd vitest run tests/sidepanel.test.ts tests/session-archive.test.ts`
+  - 2 个测试文件，6 个测试通过
+- `npm.cmd run build`
+  - 通过
+
+### 8.12 当前剩余边界
+
+- 当前连续对话只注入前几轮的 `提问 + 最终结果摘要`，不注入中间步骤、日志和网页正文
+- 当前历史会话列表仍是本地 demo 设施，没有登录、多端同步或数据库抽象
+- 当前回退后 `turnId` 继续递增、不补位，但前端不显示内部 turn 编号
+
 Updated: 2026-04-08

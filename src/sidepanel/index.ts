@@ -1,4 +1,5 @@
 import { DEFAULT_GOAL } from "../shared/constants";
+import type { SessionStateResponse } from "../shared/protocol";
 import type {
   DebugLogEntry,
   PlanStep,
@@ -10,6 +11,43 @@ import { getMessages } from "./i18n";
 
 const app = document.getElementById("app")!;
 const messages = getMessages();
+const archiveUiText = navigator.language.startsWith("zh")
+  ? {
+      currentConversation: "当前会话",
+      newConversation: "新建会话",
+      conversationHistoryEmpty: "还没有历史会话。",
+      conversationTurnsEmpty: "当前会话还没有历史轮次。",
+      userTurn: "提问",
+      assistantTurn: "回答",
+      rollbackTurn: "回退到此轮",
+      deleteConversation: "删除会话",
+      createConversationReady: "已创建新会话。",
+      createConversationFailed: "创建新会话失败。",
+      deleteConversationReady: "已删除当前会话。",
+      deleteConversationFailed: "删除当前会话失败。",
+      selectConversationFailed: "切换历史会话失败。",
+      rollbackConversationReady: "已回退到选中轮次。",
+      rollbackConversationFailed: "回退会话失败。",
+      untitledConversation: "未命名会话",
+    }
+  : {
+      currentConversation: "Current Conversation",
+      newConversation: "New Conversation",
+      conversationHistoryEmpty: "No archived conversations yet.",
+      conversationTurnsEmpty: "This conversation has no turns yet.",
+      userTurn: "User",
+      assistantTurn: "Assistant",
+      rollbackTurn: "Rollback Here",
+      deleteConversation: "Delete Conversation",
+      createConversationReady: "Created a new conversation.",
+      createConversationFailed: "Failed to create a new conversation.",
+      deleteConversationReady: "Deleted the current conversation.",
+      deleteConversationFailed: "Failed to delete the current conversation.",
+      selectConversationFailed: "Failed to switch conversations.",
+      rollbackConversationReady: "Rolled back to the selected turn.",
+      rollbackConversationFailed: "Failed to roll back the conversation.",
+      untitledConversation: "Untitled Conversation",
+    };
 
 let currentState: SessionPublicState = {
   status: "idle",
@@ -25,6 +63,7 @@ let lastGoal = DEFAULT_GOAL;
 let uiNotice = "";
 let uiNoticeTone: "info" | "error" = "info";
 let uiNoticeTimer: number | undefined;
+let showConversationDrawer = false;
 
 function hasSessionActivity() {
   return (
@@ -32,9 +71,7 @@ function hasSessionActivity() {
     currentState.timeline.length > 0 ||
     currentState.logs.length > 0 ||
     Boolean(currentState.finalResult) ||
-    Boolean(currentState.error) ||
-    Boolean(currentState.sessionId) ||
-    Boolean(currentState.goal)
+    Boolean(currentState.error)
   );
 }
 
@@ -92,6 +129,22 @@ function setUiNotice(message: string, tone: "info" | "error" = "info") {
   }, 2500);
 
   render();
+}
+
+async function requestSessionState() {
+  const response = (await chrome.runtime.sendMessage({
+    type: "REQUEST_SESSION_STATE",
+  })) as SessionStateResponse;
+
+  if (!response.ok) {
+    throw new Error(response.error || "Failed to load the current session state.");
+  }
+
+  if (response.payload) {
+    applyState(response.payload);
+  }
+
+  return response;
 }
 
 async function copyTextToClipboard(text: string) {
@@ -343,9 +396,98 @@ function renderConversationSection() {
     currentState.status === "running"
       ? `<button id="stop-button" class="button-danger">${escapeHtml(messages.stop)}</button>`
       : `<button id="start-button" class="button-primary">${escapeHtml(messages.start)}</button>`;
+  const currentConversationTitle = currentState.conversationTitle ?? archiveUiText.untitledConversation;
+  const conversationHistory =
+    (currentState.availableConversations ?? []).length > 0
+      ? (currentState.availableConversations ?? [])
+          .map(
+            (conversation) => `
+              <button
+                type="button"
+                class="conversation-list-item${conversation.conversationId === currentState.conversationId ? " conversation-list-item-active" : ""}"
+                data-select-conversation-id="${escapeHtml(conversation.conversationId)}"
+              >
+                <span>${escapeHtml(conversation.title)}</span>
+                <span class="conversation-meta">${escapeHtml(conversation.turnCount)}</span>
+              </button>
+            `,
+          )
+          .join("")
+      : `<div class="muted">${escapeHtml(archiveUiText.conversationHistoryEmpty)}</div>`;
+  const conversationTurns =
+    (currentState.conversationTurns?.length ?? 0) > 0
+      ? currentState.conversationTurns
+          ?.map(
+            (turn) => `
+              <div class="conversation-turn-pair">
+                <div class="conversation-turn conversation-turn-user">
+                  <div class="conversation-turn-head">
+                    <span>${escapeHtml(archiveUiText.userTurn)}</span>
+                    ${
+                      currentState.conversationId
+                        ? `
+                          <button
+                            type="button"
+                            class="button-secondary action-button action-button-small"
+                            data-rollback-turn-id="${turn.turnId}"
+                          >
+                            ${escapeHtml(archiveUiText.rollbackTurn)}
+                          </button>
+                        `
+                        : ""
+                    }
+                  </div>
+                  <div class="conversation-turn-body">${escapeHtml(turn.goal)}</div>
+                </div>
+                <div class="conversation-turn conversation-turn-assistant">
+                  <div class="conversation-turn-head">
+                    <span>${escapeHtml(archiveUiText.assistantTurn)}</span>
+                  </div>
+                  <div class="conversation-turn-body">${renderMarkdownBlock(turn.answerMarkdown)}</div>
+                </div>
+              </div>
+            `,
+          )
+          .join("") ?? ""
+      : `<div class="muted">${escapeHtml(archiveUiText.conversationTurnsEmpty)}</div>`;
 
   return `
     <div class="controls">
+      <div class="conversation-toolbar">
+        <button id="toggle-conversations-button" type="button" class="button-secondary action-button">
+          ${escapeHtml(archiveUiText.currentConversation)}: ${escapeHtml(currentConversationTitle)}
+        </button>
+        <button id="create-conversation-button" type="button" class="button-secondary action-button">
+          ${escapeHtml(archiveUiText.newConversation)}
+        </button>
+      </div>
+      ${
+        showConversationDrawer
+          ? `
+            <div class="conversation-drawer">
+              <div class="conversation-drawer-list">${conversationHistory}</div>
+              <div class="conversation-drawer-thread">
+                ${
+                  currentState.conversationId
+                    ? `
+                      <div class="result-toolbar">
+                        <button
+                          id="delete-conversation-button"
+                          type="button"
+                          class="button-secondary action-button"
+                        >
+                          ${escapeHtml(archiveUiText.deleteConversation)}
+                        </button>
+                      </div>
+                    `
+                    : ""
+                }
+                ${conversationTurns}
+              </div>
+            </div>
+          `
+          : ""
+      }
       <textarea id="goal-input" class="goal-input" placeholder="${escapeHtml(messages.goalPlaceholder)}">${escapeHtml(lastGoal)}</textarea>
       <div class="button-row">
         ${actionButton}
@@ -679,9 +821,9 @@ function renderResultsSection() {
         type="button"
         class="button-secondary action-button"
         ${resultCopyText ? "" : "disabled"}
-      >
-        ${escapeHtml(messages.resultCopyButton)}
-      </button>
+        >
+          ${escapeHtml(messages.resultCopyButton)}
+        </button>
     </div>
     ${noticeMarkup}
     ${renderMarkdownBlock(currentState.finalResult.markdown)}
@@ -718,6 +860,9 @@ function render() {
   const goalInput = document.getElementById("goal-input") as HTMLTextAreaElement | null;
   const startButton = document.getElementById("start-button");
   const stopButton = document.getElementById("stop-button");
+  const toggleConversationsButton = document.getElementById("toggle-conversations-button");
+  const createConversationButton = document.getElementById("create-conversation-button");
+  const deleteConversationButton = document.getElementById("delete-conversation-button");
 
   startButton?.addEventListener("click", async () => {
     const goal = goalInput?.value.trim() || DEFAULT_GOAL;
@@ -731,6 +876,125 @@ function render() {
   stopButton?.addEventListener("click", async () => {
     await chrome.runtime.sendMessage({
       type: "STOP_SESSION",
+    });
+  });
+
+  toggleConversationsButton?.addEventListener("click", async () => {
+    showConversationDrawer = !showConversationDrawer;
+    if (showConversationDrawer) {
+      try {
+        await requestSessionState();
+      } catch {
+        setUiNotice(archiveUiText.selectConversationFailed, "error");
+      }
+    } else {
+      render();
+    }
+  });
+
+  createConversationButton?.addEventListener("click", async () => {
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        type: "CREATE_CONVERSATION",
+      })) as SessionStateResponse;
+
+      if (!response.ok) {
+        throw new Error(response.error || archiveUiText.createConversationFailed);
+      }
+
+      showConversationDrawer = true;
+      if (response.payload) {
+        applyState(response.payload);
+      }
+      lastGoal = DEFAULT_GOAL;
+      setUiNotice(archiveUiText.createConversationReady);
+    } catch {
+      setUiNotice(archiveUiText.createConversationFailed, "error");
+    }
+  });
+
+  deleteConversationButton?.addEventListener("click", async () => {
+    if (!currentState.conversationId) {
+      setUiNotice(archiveUiText.deleteConversationFailed, "error");
+      return;
+    }
+
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        type: "DELETE_CONVERSATION",
+        conversationId: currentState.conversationId,
+      })) as SessionStateResponse;
+
+      if (!response.ok) {
+        throw new Error(response.error || archiveUiText.deleteConversationFailed);
+      }
+
+      if (response.payload) {
+        applyState(response.payload);
+      }
+      setUiNotice(archiveUiText.deleteConversationReady);
+    } catch {
+      setUiNotice(archiveUiText.deleteConversationFailed, "error");
+    }
+  });
+
+  document.querySelectorAll<HTMLElement>("[data-select-conversation-id]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const conversationId = button.dataset.selectConversationId;
+      if (!conversationId) {
+        return;
+      }
+
+      try {
+        const response = (await chrome.runtime.sendMessage({
+          type: "SELECT_CONVERSATION",
+          conversationId,
+        })) as SessionStateResponse;
+
+        if (!response.ok) {
+          throw new Error(response.error || archiveUiText.selectConversationFailed);
+        }
+
+        if (response.payload) {
+          applyState(response.payload);
+        }
+      } catch {
+        setUiNotice(archiveUiText.selectConversationFailed, "error");
+      }
+    });
+  });
+
+  document.querySelectorAll<HTMLElement>("[data-rollback-turn-id]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (!currentState.conversationId) {
+        setUiNotice(archiveUiText.rollbackConversationFailed, "error");
+        return;
+      }
+
+      const turnId = Number.parseInt(button.dataset.rollbackTurnId ?? "", 10);
+      if (!Number.isFinite(turnId)) {
+        setUiNotice(archiveUiText.rollbackConversationFailed, "error");
+        return;
+      }
+
+      try {
+        const response = (await chrome.runtime.sendMessage({
+          type: "ROLLBACK_CONVERSATION_TURN",
+          conversationId: currentState.conversationId,
+          turnId,
+        })) as SessionStateResponse;
+
+        if (!response.ok) {
+          throw new Error(response.error || archiveUiText.rollbackConversationFailed);
+        }
+
+        if (response.payload) {
+          applyState(response.payload);
+        }
+        setUiNotice(archiveUiText.rollbackConversationReady);
+      } catch {
+        setUiNotice(archiveUiText.rollbackConversationFailed, "error");
+      }
     });
   });
 
@@ -798,7 +1062,25 @@ function applyState(next: SessionPublicState | undefined) {
     return;
   }
 
-  currentState = next;
+  const hasConversationId = Object.prototype.hasOwnProperty.call(next, "conversationId");
+  const hasConversationTitle = Object.prototype.hasOwnProperty.call(next, "conversationTitle");
+  const hasConversationTurns = Object.prototype.hasOwnProperty.call(next, "conversationTurns");
+  const hasAvailableConversations = Object.prototype.hasOwnProperty.call(next, "availableConversations");
+
+  currentState = {
+    status: "idle",
+    currentStep: 0,
+    plan: [],
+    items: [],
+    logs: [],
+    timeline: [],
+    updatedAt: Date.now(),
+    ...next,
+    availableConversations: hasAvailableConversations ? next.availableConversations : currentState.availableConversations,
+    conversationTurns: hasConversationTurns ? next.conversationTurns : currentState.conversationTurns,
+    conversationId: hasConversationId ? next.conversationId : currentState.conversationId,
+    conversationTitle: hasConversationTitle ? next.conversationTitle : currentState.conversationTitle,
+  };
   if (next.goal) {
     lastGoal = next.goal;
   }
@@ -812,13 +1094,9 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 
 async function bootstrap() {
-  const stateResponse = (await chrome.runtime.sendMessage({
-    type: "REQUEST_SESSION_STATE",
-  })) as { ok: boolean; payload?: SessionPublicState };
-
-  if (stateResponse.ok && stateResponse.payload) {
-    applyState(stateResponse.payload);
-  } else {
+  try {
+    await requestSessionState();
+  } catch {
     render();
   }
 }

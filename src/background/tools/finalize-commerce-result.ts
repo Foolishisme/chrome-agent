@@ -15,6 +15,13 @@ export const finalizeCommerceResultTool: AgentToolDefinition = {
     let summary = "";
     let markdown = "";
     let keyResults: string[] = [];
+    const conversationContext = context.memory.conversationTurns
+      .slice(-3)
+      .map(
+        (turn) =>
+          `Turn ${turn.turnId}\nUser: ${turn.goal}\nAssistant final result: ${turn.answerSummary}`,
+      )
+      .join("\n\n");
     const finalStatus =
       context.memory.extractedItems.length === 0 ? "failed" : context.memory.extractedItems.length < context.memory.taskSpec.topK ? "partial" : "success";
 
@@ -29,6 +36,7 @@ export const finalizeCommerceResultTool: AgentToolDefinition = {
             taskType: context.memory.taskType,
             taskSpec: context.memory.taskSpec,
             items: context.memory.extractedItems,
+            conversationContext,
           },
           { signal: context.signal },
         );

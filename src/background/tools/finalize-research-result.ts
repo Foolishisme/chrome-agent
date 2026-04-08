@@ -23,6 +23,13 @@ export const finalizeResearchResultTool: AgentToolDefinition = {
       ...context.memory.unresolvedIssues,
       ...context.memory.researchSources.flatMap((source) => source.unresolvedIssues),
     ]);
+    const conversationContext = context.memory.conversationTurns
+      .slice(-3)
+      .map(
+        (turn) =>
+          `Turn ${turn.turnId}\nUser: ${turn.goal}\nAssistant final result: ${turn.answerSummary}`,
+      )
+      .join("\n\n");
 
     let summary = "";
     let markdown = "";
@@ -37,6 +44,7 @@ export const finalizeResearchResultTool: AgentToolDefinition = {
             taskSpec: context.memory.taskSpec,
             sources: context.memory.researchSources,
             unresolvedIssues,
+            conversationContext,
           },
           { signal: context.signal },
         );

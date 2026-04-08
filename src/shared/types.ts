@@ -270,6 +270,22 @@ export interface FinalResult {
   suggestedNextAction: string;
 }
 
+export interface ConversationTurn {
+  turnId: number;
+  sessionId: string;
+  goal: string;
+  answerSummary: string;
+  answerMarkdown: string;
+  savedAt: number;
+}
+
+export interface ConversationSummary {
+  conversationId: string;
+  title: string;
+  turnCount: number;
+  updatedAt: number;
+}
+
 export interface PageFactExtraction {
   status: "success" | "partial";
   pageTitle: string;
@@ -379,6 +395,10 @@ export interface FailureRecord {
 export interface SessionMemory {
   goal: string;
   taskType: TaskType;
+  conversationId?: string;
+  conversationTitle?: string;
+  currentTurnId?: number;
+  conversationTurns: ConversationTurn[];
   plan: PlanStep[];
   taskSpec?: TaskSpec;
   toolHistory: ToolCallRecord[];
@@ -425,6 +445,10 @@ export interface SessionMemory {
 export interface SessionPublicState {
   sessionId?: string;
   goal?: string;
+  conversationId?: string;
+  conversationTitle?: string;
+  conversationTurns?: ConversationTurn[];
+  availableConversations?: ConversationSummary[];
   taskType?: TaskType;
   taskSpec?: TaskSpec;
   status: RuntimeStatus;

@@ -5,6 +5,7 @@ import { actionResultSchema } from "../shared/schema";
 import type {
   ActionResult,
   AgentAction,
+  ConversationTurn,
   DebugLogEntry,
   DebugLogLevel,
   PlanStep,
@@ -19,6 +20,7 @@ import type {
 } from "../shared/types";
 import { summarizeSnapshot } from "./guards";
 import { chooseNextTool, classifyTaskType } from "./llm-client";
+import { saveSuccessfulSessionArchive } from "./session-archive";
 import { buildPlanSteps, detectTaskTypeWithLiteModel } from "./query-compiler";
 import { buildFallbackFinalResult, getToolDefinition } from "./tools";
 
@@ -143,6 +145,39 @@ function defaultPublicState(): SessionPublicState {
   };
 }
 
+function buildCurrentConversationTurn(memory: SessionMemory): ConversationTurn | undefined {
+  if (!memory.finalResult || !memory.runtimeMeta.sessionId || memory.currentTurnId === undefined) {
+    return undefined;
+  }
+
+  const answerMarkdown =
+    memory.finalResult.markdown ||
+    memory.finalResult.artifacts.find((artifact) => artifact.kind === "markdown")?.content ||
+    memory.finalResult.summary;
+
+  return {
+    turnId: memory.currentTurnId,
+    sessionId: memory.runtimeMeta.sessionId,
+    goal: memory.goal,
+    answerSummary: memory.finalResult.summary,
+    answerMarkdown,
+    savedAt: Date.now(),
+  };
+}
+
+function buildConversationTurns(memory: SessionMemory) {
+  const currentTurn = buildCurrentConversationTurn(memory);
+  if (!currentTurn) {
+    return memory.conversationTurns;
+  }
+
+  if (memory.conversationTurns.some((turn) => turn.turnId === currentTurn.turnId)) {
+    return memory.conversationTurns;
+  }
+
+  return [...memory.conversationTurns, currentTurn];
+}
+
 function ensureTerminalResult(memory: SessionMemory, reason: string, status?: "partial" | "failed" | "blocked") {
   if (memory.finalResult) {
     return;
@@ -156,6 +191,9 @@ function toPublicState(memory: SessionMemory): SessionPublicState {
   return {
     sessionId: memory.runtimeMeta.sessionId,
     goal: memory.goal,
+    conversationId: memory.conversationId,
+    conversationTitle: memory.conversationTitle,
+    conversationTurns: buildConversationTurns(memory),
     taskType: memory.taskType,
     taskSpec: memory.taskSpec,
     status: memory.runtimeMeta.status,
@@ -464,14 +502,27 @@ export class BrowserAgentRuntime {
     return this.activeSession?.lastPublicState ?? this.lastPublicState ?? defaultPublicState();
   }
 
-  async start(goal: string): Promise<StartSessionResponse> {
+  async start(
+    goal: string,
+    options: {
+      conversationId?: string;
+      conversationTitle?: string;
+      conversationTurns?: ConversationTurn[];
+      currentTurnId?: number;
+    } = {},
+  ): Promise<StartSessionResponse> {
     if (this.activeSession) {
       this.stop();
     }
 
+    const conversationContext = (options.conversationTurns ?? [])
+      .slice(-3)
+      .map((turn) => `Turn ${turn.turnId}\nUser: ${turn.goal}\nAssistant final result: ${turn.answerSummary}`)
+      .join("\n\n");
+
     const route = await detectTaskTypeWithLiteModel(goal, {
       classifyWithLiteModel: async (routeGoal) => {
-        const classified = await classifyTaskType(routeGoal);
+        const classified = await classifyTaskType(routeGoal, { conversationContext });
         return {
           taskType: classified.taskType,
           reason: classified.reason,
@@ -485,6 +536,10 @@ export class BrowserAgentRuntime {
     const memory: SessionMemory = {
       goal,
       taskType,
+      conversationId: options.conversationId,
+      conversationTitle: options.conversationTitle,
+      currentTurnId: options.currentTurnId,
+      conversationTurns: options.conversationTurns ?? [],
       plan: buildPlanSteps(taskType),
       toolHistory: [],
       currentFacts: {},
@@ -581,9 +636,26 @@ export class BrowserAgentRuntime {
     this.activeSession = undefined;
   }
 
+  clearCompletedState(sessionId?: string): SessionPublicState {
+    if (this.activeSession?.memory.runtimeMeta.status === "running") {
+      throw new RuntimeError("Cannot clear a session while it is running.", "SESSION_RUNNING");
+    }
+
+    if (sessionId && this.lastPublicState?.sessionId && this.lastPublicState.sessionId !== sessionId) {
+      return this.getState();
+    }
+
+    this.lastPublicState = defaultPublicState();
+    return this.lastPublicState;
+  }
+
   private async runSession(session: ActiveSession) {
     try {
       await this.runLoop(session);
+      await saveSuccessfulSessionArchive(session.lastPublicState, {
+        conversationId: session.memory.conversationId,
+        conversationTitle: session.memory.conversationTitle,
+      });
       this.lastPublicState = session.lastPublicState;
       if (this.activeSession === session) {
         this.activeSession = undefined;

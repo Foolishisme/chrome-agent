@@ -1,17 +1,37 @@
 import { compileTaskSpec as compileInitialTaskSpec, buildPlanSteps } from "../query-compiler";
-import { refineCommerceSearchQuery, refineResearchQuery } from "../llm-client";
+import { classifyTaskType, refineCommerceSearchQuery, refineResearchQuery } from "../llm-client";
 import { createToolResult, type AgentToolDefinition } from "./shared";
 
 export const compileTaskSpecTool: AgentToolDefinition = {
   name: "compileTaskSpec",
   async run(context) {
     await context.pushState("Compile the current goal into a structured task.");
+    const conversationContext = context.memory.conversationTurns
+      .slice(-3)
+      .map(
+        (turn) =>
+          `Turn ${turn.turnId}\nUser: ${turn.goal}\nAssistant final result: ${turn.answerSummary}`,
+      )
+      .join("\n\n");
 
     const compiled = await compileInitialTaskSpec(context.memory.goal, {
       taskType: context.memory.taskType,
+      classifyTaskTypeWithLiteModel: async (goal) => {
+        const refined = await classifyTaskType(goal, { signal: context.signal, conversationContext });
+        context.appendLog("llm", "info", "Classified the task type with the lite model.", {
+          model: refined.model,
+          provider: refined.provider,
+          taskType: refined.taskType,
+          reason: refined.reason,
+        });
+        return {
+          taskType: refined.taskType,
+          reason: refined.reason,
+        };
+      },
       refineCommerceWithLiteModel: async (goal) => {
         context.memory.runtimeMeta.queryRefineTried = true;
-        const refined = await refineCommerceSearchQuery(goal, { signal: context.signal });
+        const refined = await refineCommerceSearchQuery(goal, { signal: context.signal, conversationContext });
         context.appendLog("llm", "info", "Refined the commerce query with the lite model.", {
           model: refined.model,
           provider: refined.provider,
@@ -25,7 +45,7 @@ export const compileTaskSpecTool: AgentToolDefinition = {
       },
       refineResearchWithLiteModel: async (goal) => {
         context.memory.runtimeMeta.queryRefineTried = true;
-        const refined = await refineResearchQuery(goal, { signal: context.signal });
+        const refined = await refineResearchQuery(goal, { signal: context.signal, conversationContext });
         context.appendLog("llm", "info", "Refined the research query with the lite model.", {
           model: refined.model,
           provider: refined.provider,

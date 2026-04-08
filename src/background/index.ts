@@ -1,16 +1,32 @@
 import { DEFAULT_GOAL } from "../shared/constants";
 import type {
   ClearManualExtractionHistoryMessage,
+  CreateConversationMessage,
+  DeleteConversationMessage,
+  DeleteSessionArchiveMessage,
   ExtractCurrentPageMessage,
   ManualExtractionResponse,
+  RollbackConversationTurnMessage,
   RequestSessionStateMessage,
   RequestManualExtractionHistoryMessage,
+  SelectConversationMessage,
+  SessionStateResponse,
   StartSessionMessage,
   StartSessionResponse,
   StopSessionMessage,
 } from "../shared/protocol";
 import { clearManualExtractionHistory, extractCurrentPageForReview, getManualExtractionHistory } from "./manual-extraction";
 import { BrowserAgentRuntime } from "./runtime";
+import {
+  createConversation,
+  createConversationState,
+  deleteConversationState,
+  getPreferredConversation,
+  loadConversationBackfillState,
+  loadConversationState,
+  rollbackConversationState,
+  toConversationTurns,
+} from "./session-archive";
 
 const runtime = new BrowserAgentRuntime();
 
@@ -40,6 +56,38 @@ async function getActiveScriptableTab() {
   return tab;
 }
 
+function hasMeaningfulSessionState() {
+  const state = runtime.getState();
+  return (
+    state.status !== "idle" ||
+    state.currentStep > 0 ||
+    state.timeline.length > 0 ||
+    state.logs.length > 0 ||
+    !!state.finalResult ||
+    !!state.error ||
+    !!state.sessionId ||
+    !!state.goal
+  );
+}
+
+async function buildSessionStateResponse() {
+  const liveState = runtime.getState();
+  const archivedState = await loadConversationBackfillState(liveState);
+
+  if (!hasMeaningfulSessionState()) {
+    return archivedState;
+  }
+
+  return {
+    ...archivedState,
+    ...liveState,
+    conversationId: liveState.conversationId ?? archivedState.conversationId,
+    conversationTitle: liveState.conversationTitle ?? archivedState.conversationTitle,
+    conversationTurns: liveState.conversationTurns ?? archivedState.conversationTurns,
+    availableConversations: archivedState.availableConversations,
+  };
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   if (chrome.sidePanel?.setPanelBehavior) {
     void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
@@ -52,6 +100,11 @@ chrome.runtime.onMessage.addListener(
       | StartSessionMessage
       | StopSessionMessage
       | RequestSessionStateMessage
+      | CreateConversationMessage
+      | SelectConversationMessage
+      | DeleteConversationMessage
+      | RollbackConversationTurnMessage
+      | DeleteSessionArchiveMessage
       | ExtractCurrentPageMessage
       | RequestManualExtractionHistoryMessage
       | ClearManualExtractionHistoryMessage,
@@ -59,9 +112,20 @@ chrome.runtime.onMessage.addListener(
     sendResponse,
   ) => {
     if (message.type === "START_SESSION") {
-      void runtime
-        .start(message.goal || DEFAULT_GOAL)
-        .then((response) => sendResponse(response satisfies StartSessionResponse))
+      void (async () => {
+        const preferredConversation = (await getPreferredConversation()) ?? (await createConversation(message.goal || DEFAULT_GOAL));
+        const response = await runtime.start(message.goal || DEFAULT_GOAL, {
+          conversationId: preferredConversation.conversationId,
+          conversationTitle: preferredConversation.title,
+          conversationTurns: toConversationTurns(preferredConversation),
+          currentTurnId: preferredConversation.nextTurnId,
+        });
+        const payload = await buildSessionStateResponse();
+        sendResponse({
+          ...response,
+          payload,
+        } satisfies StartSessionResponse);
+      })()
         .catch((error) =>
           sendResponse({
             ok: false,
@@ -82,11 +146,135 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (message.type === "REQUEST_SESSION_STATE") {
-      sendResponse({
-        ok: true,
-        payload: runtime.getState(),
-      });
-      return false;
+      void buildSessionStateResponse()
+        .then((payload) =>
+          sendResponse({
+            ok: true,
+            payload,
+          } satisfies SessionStateResponse),
+        )
+        .catch((error) =>
+          sendResponse({
+            ok: false,
+            error: error instanceof Error ? error.message : "Failed to load the current session state.",
+            payload: runtime.getState(),
+          } satisfies SessionStateResponse),
+        );
+      return true;
+    }
+
+    if (message.type === "CREATE_CONVERSATION") {
+      void (async () => {
+        if (runtime.getState().status === "running") {
+          throw new Error("Stop the current session before creating a new conversation.");
+        }
+
+        runtime.clearCompletedState();
+        const payload = await createConversationState(runtime.getState());
+        sendResponse({
+          ok: true,
+          payload,
+        } satisfies SessionStateResponse);
+      })().catch((error) =>
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Failed to create a new conversation.",
+          payload: runtime.getState(),
+        } satisfies SessionStateResponse),
+      );
+      return true;
+    }
+
+    if (message.type === "SELECT_CONVERSATION") {
+      void (async () => {
+        if (runtime.getState().status === "running") {
+          throw new Error("Stop the current session before switching conversations.");
+        }
+
+        runtime.clearCompletedState();
+        const payload = await loadConversationState(message.conversationId, runtime.getState());
+        sendResponse({
+          ok: true,
+          payload,
+        } satisfies SessionStateResponse);
+      })().catch((error) =>
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Failed to load the selected conversation.",
+          payload: runtime.getState(),
+        } satisfies SessionStateResponse),
+      );
+      return true;
+    }
+
+    if (message.type === "DELETE_CONVERSATION") {
+      void (async () => {
+        if (runtime.getState().status === "running") {
+          throw new Error("Stop the current session before deleting a conversation.");
+        }
+
+        runtime.clearCompletedState();
+        const payload = await deleteConversationState(message.conversationId, runtime.getState());
+        sendResponse({
+          ok: true,
+          payload,
+        } satisfies SessionStateResponse);
+      })().catch((error) =>
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Failed to delete the conversation.",
+          payload: runtime.getState(),
+        } satisfies SessionStateResponse),
+      );
+      return true;
+    }
+
+    if (message.type === "ROLLBACK_CONVERSATION_TURN") {
+      void (async () => {
+        if (runtime.getState().status === "running") {
+          throw new Error("Stop the current session before rolling back a conversation.");
+        }
+
+        runtime.clearCompletedState();
+        const payload = await rollbackConversationState(message.conversationId, message.turnId, runtime.getState());
+        sendResponse({
+          ok: true,
+          payload,
+        } satisfies SessionStateResponse);
+      })().catch((error) =>
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Failed to roll back the conversation.",
+          payload: runtime.getState(),
+        } satisfies SessionStateResponse),
+      );
+      return true;
+    }
+
+    if (message.type === "DELETE_SESSION_ARCHIVE") {
+      void (async () => {
+        if (runtime.getState().status === "running") {
+          throw new Error("Stop the current session before deleting it.");
+        }
+        const conversationId = runtime.getState().conversationId;
+        if (!conversationId) {
+          throw new Error("No active conversation is selected.");
+        }
+
+        runtime.clearCompletedState(message.sessionId);
+        const payload = await deleteConversationState(conversationId, runtime.getState());
+        sendResponse({
+          ok: true,
+          payload,
+        } satisfies SessionStateResponse);
+      })().catch((error) =>
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Failed to delete the current session.",
+          payload: runtime.getState(),
+        } satisfies SessionStateResponse),
+      );
+      return true;
     }
 
     if (message.type === "REQUEST_MANUAL_EXTRACTION_HISTORY") {

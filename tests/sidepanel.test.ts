@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SessionPublicState } from "../src/shared/types";
+import type { ConversationSummary, ConversationTurn, SessionPublicState } from "../src/shared/types";
 
 type RuntimeMessage = {
   type: string;
@@ -8,10 +8,44 @@ type RuntimeMessage = {
 
 let onRuntimeMessage: ((message: RuntimeMessage) => void) | undefined;
 
+const conversationSummaries: ConversationSummary[] = [
+  {
+    conversationId: "conversation-1",
+    title: "近期黄金",
+    turnCount: 2,
+    updatedAt: Date.now(),
+  },
+];
+
+function createConversationTurns(): ConversationTurn[] {
+  return [
+    {
+      turnId: 1,
+      sessionId: "session-1",
+      goal: "近期黄金",
+      answerSummary: "黄金近期波动上行。",
+      answerMarkdown: "## 结论\n黄金近期波动上行。",
+      savedAt: Date.now() - 5000,
+    },
+    {
+      turnId: 2,
+      sessionId: "session-2",
+      goal: "黄金是否与近期战争有关",
+      answerSummary: "战争是避险情绪因素之一。",
+      answerMarkdown: "## 结论\n战争是避险情绪因素之一。",
+      savedAt: Date.now(),
+    },
+  ];
+}
+
 function createRunningState(): SessionPublicState {
   return {
+    conversationId: "conversation-1",
+    conversationTitle: "近期黄金",
+    conversationTurns: createConversationTurns(),
+    availableConversations: conversationSummaries,
     sessionId: "session-running",
-    goal: "Test research goal",
+    goal: "黄金是否与近期战争有关",
     status: "running",
     currentStep: 1,
     currentStepId: "collectResearchCandidates",
@@ -43,6 +77,12 @@ function createRunningState(): SessionPublicState {
 
 function createArtifactState(): SessionPublicState {
   return {
+    conversationId: "conversation-1",
+    conversationTitle: "近期黄金",
+    conversationTurns: createConversationTurns(),
+    availableConversations: conversationSummaries,
+    sessionId: "session-artifact",
+    goal: "黄金是否与近期战争有关",
     status: "done",
     currentStep: 4,
     plan: [],
@@ -77,6 +117,12 @@ function createArtifactState(): SessionPublicState {
 
 function createInlineState(): SessionPublicState {
   return {
+    conversationId: "conversation-1",
+    conversationTitle: "近期黄金",
+    conversationTurns: createConversationTurns(),
+    availableConversations: conversationSummaries,
+    sessionId: "session-inline",
+    goal: "黄金是否与近期战争有关",
     status: "done",
     currentStep: 4,
     plan: [],
@@ -112,10 +158,72 @@ async function loadSidepanel() {
 }
 
 describe("sidepanel result actions", () => {
+  const idleState: SessionPublicState = {
+    status: "idle",
+    currentStep: 0,
+    plan: [],
+    items: [],
+    logs: [],
+    timeline: [],
+    updatedAt: Date.now(),
+  };
+  const rolledBackState: SessionPublicState = {
+    ...createInlineState(),
+    finalResult: {
+      ...createInlineState().finalResult!,
+      summary: "黄金近期波动上行。",
+      markdown: "## 结论\n黄金近期波动上行。",
+    },
+    conversationTurns: createConversationTurns().slice(0, 1),
+  };
+
+  let requestStatePayload: SessionPublicState | undefined;
   const clipboardWriteText = vi.fn<(...args: [string]) => Promise<void>>();
-  const sendMessage = vi.fn(async (message: { type: string }) => {
+  const sendMessage = vi.fn(async (message: { type: string; conversationId?: string; turnId?: number }) => {
     if (message.type === "REQUEST_SESSION_STATE") {
-      return { ok: false };
+      return requestStatePayload ? { ok: true, payload: requestStatePayload } : { ok: false };
+    }
+
+    if (message.type === "CREATE_CONVERSATION") {
+      return {
+        ok: true,
+        payload: {
+          ...idleState,
+          conversationId: "conversation-new",
+          conversationTitle: "新会话",
+          conversationTurns: [],
+          availableConversations: [
+            {
+              conversationId: "conversation-new",
+              title: "新会话",
+              turnCount: 0,
+              updatedAt: Date.now(),
+            },
+            ...conversationSummaries,
+          ],
+        },
+      };
+    }
+
+    if (message.type === "SELECT_CONVERSATION") {
+      return {
+        ok: true,
+        payload: createInlineState(),
+      };
+    }
+
+    if (message.type === "ROLLBACK_CONVERSATION_TURN") {
+      return {
+        ok: true,
+        payload: rolledBackState,
+      };
+    }
+
+    if (message.type === "DELETE_CONVERSATION") {
+      return {
+        ok: true,
+        payload: idleState,
+      };
     }
 
     return { ok: true };
@@ -130,6 +238,7 @@ describe("sidepanel result actions", () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="app"></div>';
     onRuntimeMessage = undefined;
+    requestStatePayload = undefined;
     clipboardWriteText.mockReset();
     sendMessage.mockClear();
     addListener.mockClear();
@@ -212,6 +321,36 @@ describe("sidepanel result actions", () => {
 
     await vi.waitFor(() => {
       expect(clipboardWriteText).toHaveBeenCalledWith("## Summary\nCollected a usable result.");
+    });
+  });
+
+  it("opens the conversation drawer and rolls back to a selected turn", async () => {
+    requestStatePayload = createInlineState();
+    await loadSidepanel();
+
+    const toggleButton = document.getElementById("toggle-conversations-button");
+    expect(toggleButton).not.toBeNull();
+
+    (toggleButton as HTMLButtonElement).click();
+
+    await vi.waitFor(() => {
+      expect(document.body.textContent).toContain("黄金是否与近期战争有关");
+      expect(document.querySelector("[data-rollback-turn-id='1']")).not.toBeNull();
+    });
+
+    const rollbackButton = document.querySelector("[data-rollback-turn-id='1']");
+    expect(rollbackButton).not.toBeNull();
+
+    (rollbackButton as HTMLButtonElement).click();
+
+    await vi.waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith({
+        type: "ROLLBACK_CONVERSATION_TURN",
+        conversationId: "conversation-1",
+        turnId: 1,
+      });
+      expect(document.body.textContent).not.toContain("战争是避险情绪因素之一。");
+      expect(document.body.textContent).toContain("黄金近期波动上行。");
     });
   });
 

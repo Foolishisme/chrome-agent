@@ -189,4 +189,23 @@
 - 仍不做真正的 token 级流式输出；当前只做符合现有 runtime 的半流式前端呈现
 - 若后续引入 memory 长对话，布局顺序保持“最终输出在前，对话历史在后”
 
+## 7.3 2026-04-08 Demo Session Archive
+
+- demo 阶段不引入 thread memory 或数据库设施
+- 本地持久化只做 session archive，不做长期知识库抽象
+- 成功会话按“一轮一个对象”写入 `chrome.storage.local`
+- 失败、异常、停止会话不落盘，等价于删除该轮全部步骤
+- 前端只提供“删除当前这轮”的入口，不在本轮实现完整历史列表
+- 若当前没有活跃会话，Side Panel 启动时可回填最近一次成功保存的会话
+
+## 7.4 2026-04-08 Conversation Archive
+
+- demo 阶段的连续对话不做 thread memory 系统，改做 `conversationId + turnId` 的本地会话归档
+- 每个 turn 只沉淀 `用户提问 + 最终结果摘要 + 最终结果正文`
+- 新 turn 开始时，仅把当前 conversation 里前几轮的 `提问 + 最终结果摘要` 作为背景注入规划与总结 prompt
+- `turnId` 只做内部递增标识，不补位，也不在前端展示
+- 前端对话区右上角承载会话管理：查看历史会话、切换会话、新建会话
+- 回退语义固定为“回退到此轮并删除后续 turn”，不做任意单轮删除
+- 删除语义固定为删除整条 conversation，不再保留其中任意 turn
+
 Updated: 2026-04-08

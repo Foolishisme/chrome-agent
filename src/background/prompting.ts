@@ -8,6 +8,10 @@ import type {
 } from "../shared/types";
 
 export function buildTaskRoutePrompt(goal: string) {
+  return buildTaskRoutePromptWithContext(goal);
+}
+
+export function buildTaskRoutePromptWithContext(goal: string, conversationContext?: string) {
   return [
     "You classify browser-agent tasks.",
     "Return JSON only.",
@@ -18,11 +22,12 @@ export function buildTaskRoutePrompt(goal: string) {
     "- If the user asks for products to buy, recommend, compare by budget, or shortlist items, choose commerce_search.",
     "- If the user asks to research a topic, summarize sources, explain differences, or gather public information, choose public_research.",
     "- Choose exactly one taskType.",
+    ...(conversationContext ? [`Recent conversation context:\n${conversationContext}`] : []),
     `User goal: ${goal}`,
   ].join("\n");
 }
 
-export function buildCommerceQueryRefinementPrompt(goal: string) {
+export function buildCommerceQueryRefinementPrompt(goal: string, conversationContext?: string) {
   return [
     "You rewrite JD.com on-site shopping queries.",
     "Return JSON only.",
@@ -42,11 +47,12 @@ export function buildCommerceQueryRefinementPrompt(goal: string) {
     "- Prefer scene, form factor, target user, or brand only when they are clearly implied by the goal.",
     "- Do not add recommendation reasons, sorting criteria, or marketing wording.",
     "- Keep the query short enough for an on-site search box.",
+    ...(conversationContext ? [`Recent conversation context:\n${conversationContext}`] : []),
     `User goal: ${goal}`,
   ].join("\n");
 }
 
-export function buildResearchQueryRefinementPrompt(goal: string) {
+export function buildResearchQueryRefinementPrompt(goal: string, conversationContext?: string) {
   return [
     "You rewrite public web research queries for Google.",
     "Return JSON only.",
@@ -58,6 +64,7 @@ export function buildResearchQueryRefinementPrompt(goal: string) {
     "- Do not add site filters unless the user explicitly asks for them.",
     "- Do not add words like recommendation, best, buy, price unless the goal clearly needs them.",
     "- Keep the query short enough for a normal Google search box.",
+    ...(conversationContext ? [`Recent conversation context:\n${conversationContext}`] : []),
     `User goal: ${goal}`,
   ].join("\n");
 }
@@ -124,6 +131,7 @@ export function buildFinalResultPrompt(options: {
   items?: ExtractedItem[];
   sources?: ResearchSourceResult[];
   unresolvedIssues?: string[];
+  conversationContext?: string;
 }) {
   return [
     "## Role",
@@ -149,6 +157,7 @@ export function buildFinalResultPrompt(options: {
     "- Mention critical unresolved issues only when they affect the user's decision.",
     "- Treat research source bodyExcerpt as the primary evidence body, and do not assume source summaries already exist.",
     "",
+    ...(options.conversationContext ? [`Recent conversation context:\n${options.conversationContext}`, ""] : []),
     `Input: ${JSON.stringify(
       {
         goal: options.goal,

@@ -13,6 +13,31 @@ export type RequestSessionStateMessage = {
   type: "REQUEST_SESSION_STATE";
 };
 
+export type DeleteSessionArchiveMessage = {
+  type: "DELETE_SESSION_ARCHIVE";
+  sessionId: string;
+};
+
+export type CreateConversationMessage = {
+  type: "CREATE_CONVERSATION";
+};
+
+export type SelectConversationMessage = {
+  type: "SELECT_CONVERSATION";
+  conversationId: string;
+};
+
+export type DeleteConversationMessage = {
+  type: "DELETE_CONVERSATION";
+  conversationId: string;
+};
+
+export type RollbackConversationTurnMessage = {
+  type: "ROLLBACK_CONVERSATION_TURN";
+  conversationId: string;
+  turnId: number;
+};
+
 export type ExtractCurrentPageMessage = {
   type: "EXTRACT_CURRENT_PAGE";
 };
@@ -48,6 +73,11 @@ export type RuntimeMessage =
   | StartSessionMessage
   | StopSessionMessage
   | RequestSessionStateMessage
+  | DeleteSessionArchiveMessage
+  | CreateConversationMessage
+  | SelectConversationMessage
+  | DeleteConversationMessage
+  | RollbackConversationTurnMessage
   | ExtractCurrentPageMessage
   | RequestManualExtractionHistoryMessage
   | ClearManualExtractionHistoryMessage
@@ -57,6 +87,12 @@ export type RuntimeMessage =
   | SessionErrorMessage;
 
 export interface StartSessionResponse {
+  ok: boolean;
+  error?: string;
+  payload?: SessionPublicState;
+}
+
+export interface SessionStateResponse {
   ok: boolean;
   error?: string;
   payload?: SessionPublicState;

@@ -18,7 +18,7 @@ import {
   buildNextToolPrompt,
   buildResearchCandidateReorderPrompt,
   buildResearchQueryRefinementPrompt,
-  buildTaskRoutePrompt,
+  buildTaskRoutePromptWithContext,
 } from "./prompting";
 
 type ProviderName = "gemini" | "deepseek";
@@ -362,9 +362,14 @@ async function requestProviderJson<T>(
   };
 }
 
-export async function refineCommerceSearchQuery(goal: string, options: RequestOptions = {}) {
+export async function refineCommerceSearchQuery(
+  goal: string,
+  options: RequestOptions & {
+    conversationContext?: string;
+  } = {},
+) {
   const response = await requestProviderJson(
-    buildCommerceQueryRefinementPrompt(goal),
+    buildCommerceQueryRefinementPrompt(goal, options.conversationContext),
     queryRefinementSchema,
     "simple",
     options,
@@ -377,14 +382,19 @@ export async function refineCommerceSearchQuery(goal: string, options: RequestOp
   };
 }
 
-export async function classifyTaskType(goal: string, options: RequestOptions = {}): Promise<{
+export async function classifyTaskType(
+  goal: string,
+  options: RequestOptions & {
+    conversationContext?: string;
+  } = {},
+): Promise<{
   taskType: TaskType;
   reason: string;
   model: string;
   provider: ProviderName;
 }> {
   const response = await requestProviderJson(
-    buildTaskRoutePrompt(goal),
+    buildTaskRoutePromptWithContext(goal, options.conversationContext),
     taskRouteSchema,
     "simple",
     options,
@@ -397,9 +407,14 @@ export async function classifyTaskType(goal: string, options: RequestOptions = {
   };
 }
 
-export async function refineResearchQuery(goal: string, options: RequestOptions = {}) {
+export async function refineResearchQuery(
+  goal: string,
+  options: RequestOptions & {
+    conversationContext?: string;
+  } = {},
+) {
   const response = await requestProviderJson(
-    buildResearchQueryRefinementPrompt(goal),
+    buildResearchQueryRefinementPrompt(goal, options.conversationContext),
     queryRefinementSchema,
     "simple",
     options,
@@ -420,6 +435,7 @@ export async function generateFinalResult(
     items?: ExtractedItem[];
     sources?: ResearchSourceResult[];
     unresolvedIssues?: string[];
+    conversationContext?: string;
   },
   options: RequestOptions = {},
 ) {

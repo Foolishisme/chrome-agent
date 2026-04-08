@@ -194,6 +194,7 @@ export async function compileCommerceTask(
   goal: string,
   options: {
     refineWithLiteModel?: RefineSearchQuery;
+    conversationContext?: string;
   } = {},
 ): Promise<CommerceTaskSpec> {
   const topK = extractTopK(goal);
@@ -228,6 +229,7 @@ export async function compilePublicResearchTask(
   goal: string,
   options: {
     refineWithLiteModel?: RefineSearchQuery;
+    conversationContext?: string;
   } = {},
 ): Promise<PublicResearchTaskSpec> {
   if (!options.refineWithLiteModel) {
@@ -285,6 +287,7 @@ export async function compileTaskSpec(
     classifyTaskTypeWithLiteModel?: ClassifyTaskType;
     refineCommerceWithLiteModel?: RefineSearchQuery;
     refineResearchWithLiteModel?: RefineSearchQuery;
+    conversationContext?: string;
   } = {},
 ): Promise<{
   taskType: TaskType;
@@ -295,7 +298,8 @@ export async function compileTaskSpec(
     options.taskType ??
     (
       await detectTaskTypeWithLiteModel(goal, {
-        classifyWithLiteModel: options.classifyTaskTypeWithLiteModel,
+        classifyWithLiteModel: async (routeGoal) =>
+          options.classifyTaskTypeWithLiteModel?.(routeGoal),
       })
     ).taskType;
 
