@@ -6,7 +6,8 @@ export const compileTaskSpecTool: AgentToolDefinition = {
   name: "compileTaskSpec",
   async run(context) {
     await context.pushState("Compile the current goal into a structured task.");
-    const conversationContext = context.memory.conversationTurns
+    const conversationTurns = context.memory.conversationTurns ?? [];
+    const conversationContext = conversationTurns
       .slice(-3)
       .map(
         (turn) =>
@@ -27,12 +28,12 @@ export const compileTaskSpecTool: AgentToolDefinition = {
       routeReason,
       currentTimeIso,
       timezone,
-      conversationTurns: context.memory.conversationTurns,
+      conversationTurns,
       classifyTaskTypeWithLiteModel: async (goal) => {
         const refined = await classifyTaskType(goal, {
           signal: context.signal,
           conversationContext,
-          conversationTurns: context.memory.conversationTurns,
+          conversationTurns,
           currentTimeIso,
           timezone,
         });

@@ -17,7 +17,7 @@ export const finalizeDirectAnswerTool: AgentToolDefinition = {
 
     await context.pushState("Generate the final direct answer.");
 
-    const recentTurns = context.memory.conversationTurns.slice(-3);
+    const recentTurns = (context.memory.conversationTurns ?? []).slice(-3);
     let summary = "";
     let markdown = "";
     let keyResults: string[] = [];

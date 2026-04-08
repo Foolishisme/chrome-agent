@@ -48,6 +48,10 @@ describe("query compiler", () => {
     expect(detectTaskType("解释一下事件循环是什么")).toBe("direct_answer");
   });
 
+  it("routes time-sensitive questions to public_research", () => {
+    expect(detectTaskType("今天金价是多少")).toBe("public_research");
+  });
+
   it("prefers lite-model routing when available", async () => {
     const routed = await detectTaskTypeWithLiteModel("3000 的手机推荐", {
       classifyWithLiteModel: async () => ({

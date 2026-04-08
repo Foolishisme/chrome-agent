@@ -15,7 +15,7 @@ export const finalizeCommerceResultTool: AgentToolDefinition = {
     let summary = "";
     let markdown = "";
     let keyResults: string[] = [];
-    const conversationContext = context.memory.conversationTurns
+    const conversationContext = (context.memory.conversationTurns ?? [])
       .slice(-3)
       .map(
         (turn) =>

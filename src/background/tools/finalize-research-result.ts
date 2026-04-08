@@ -23,7 +23,7 @@ export const finalizeResearchResultTool: AgentToolDefinition = {
       ...context.memory.unresolvedIssues,
       ...context.memory.researchSources.flatMap((source) => source.unresolvedIssues),
     ]);
-    const conversationContext = context.memory.conversationTurns
+    const conversationContext = (context.memory.conversationTurns ?? [])
       .slice(-3)
       .map(
         (turn) =>

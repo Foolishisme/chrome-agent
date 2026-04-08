@@ -264,3 +264,34 @@ Updated: 2026-04-08
   - `src/shared/types.ts` 仍只定义 `commerce_search / public_research`
   - `src/background/query-compiler.ts` 仍默认把非购物问题路由到 `public_research`
   - 当前路由链路尚未显式注入当前时间与证据时间
+
+### 8.16 2026-04-08 Direct Answer 已落地
+
+- `src/shared/types.ts / src/shared/schema.ts / src/shared/constants.ts`
+  - `TaskType` 已扩为 `direct_answer / commerce_search / public_research`
+  - canonical tool 已补 `finalizeDirectAnswer`
+  - 默认计划已补 direct-answer 双步骤主链
+- `src/background/query-compiler.ts`
+  - 已新增 `direct_answer` 路由与 `DirectAnswerTaskSpec`
+  - 规则回退已支持“简单稳定知识直接答”“会话内追问直接答”“明显时效敏感问题走搜索”
+- `src/background/runtime-core.ts`
+  - 启动路由时已显式传入当前绝对时间、用户时区和最近几轮会话摘要
+  - `direct_answer` 启动时不再强制跳转到 Google 或京东
+- `src/background/prompting.ts / src/background/llm-client.ts`
+  - task route prompt 已收口为 `direct_answer / commerce_search / public_research`
+  - 已新增 direct-answer 专用最终回答 prompt
+- `src/background/tools/`
+  - 已新增 `finalize-direct-answer.ts`
+  - `compile-task-spec.ts` 已支持 direct-answer task spec 编译
+  - `open-search-results.ts` 已显式拒绝 direct-answer task，避免误入搜索链路
+
+### 8.17 本轮最小验证
+
+- `npm.cmd run build`
+  - 通过
+- `npx.cmd vitest run tests/query-compiler.test.ts tests/runtime-tools.test.ts tests/schema.test.ts`
+  - 3 个测试文件，26 个测试通过
+- `npx.cmd vitest run tests/public-research.test.ts`
+  - 1 个测试文件，9 个测试通过
+- `npm.cmd test`
+  - 12 个测试文件，83 个测试通过

@@ -45,10 +45,10 @@
 | N16 | Side Panel 主按钮按状态收口为 `开始 / 停止 / 再次运行` | `tests/sidepanel.test.ts` | NOT_RUN | 初始态不再直接展示 `重试` |
 | N17 | 时间线运行中默认展开，结果完成后自动折叠 | `tests/sidepanel.test.ts` | NOT_RUN | 作为“执行过程”轻量呈现，不改最终结果协议 |
 | N18 | 最终结果仍保持一次性交付，不引入 token 级流式协议 | 检查 `src/sidepanel/index.ts` / `src/shared/types.ts` | NOT_RUN | 当前决策是先不做真正流式输出 |
-| N19 | `direct_answer` 主链已收口为 canonical 2 步 | 检查 `src/shared/types.ts` / `src/background/query-compiler.ts` | NOT_RUN | 目标序列：`compileTaskSpec -> finalizeDirectAnswer` |
-| N20 | 已搜索且证据充足的问题可直接回答，不再强制打开搜索页 | `tests/runtime.test.ts` / `tests/query-compiler.test.ts` | NOT_RUN | 应支持 conversation 内追问复用已有证据 |
-| N21 | 明显时效敏感或显式要求最新信息的问题不会仅凭内置知识直接回答 | `tests/query-compiler.test.ts` | NOT_RUN | 例如“今天 / 当前 / 最新 / 本周 / 今年 / 现任 / 价格” |
-| N22 | 搜索判断显式接收当前绝对时间、用户时区和近期证据获取时间 | 检查 `src/background/prompting.ts` / `src/background/query-compiler.ts` | NOT_RUN | 不能只给相对时间词 |
+| N19 | `direct_answer` 主链已收口为 canonical 2 步 | 检查 `src/shared/types.ts` / `src/background/query-compiler.ts` | PASS | 已固定为 `compileTaskSpec -> finalizeDirectAnswer` |
+| N20 | 已搜索且证据充足的问题可直接回答，不再强制打开搜索页 | `tests/query-compiler.test.ts` / `tests/runtime-tools.test.ts` | PASS | 已支持 conversation 内追问复用已有证据 |
+| N21 | 明显时效敏感或显式要求最新信息的问题不会仅凭内置知识直接回答 | `tests/query-compiler.test.ts` | PASS | 已覆盖“今天金价是多少”这类时效敏感问题 |
+| N22 | 搜索判断显式接收当前绝对时间、用户时区和近期证据获取时间 | 检查 `src/background/prompting.ts` / `src/background/query-compiler.ts` / `src/background/runtime-core.ts` | PASS | 已显式注入 `currentTimeIso / timezone / conversationTurns.savedAt` |
 
 ## 4. 模块主链验收
 
