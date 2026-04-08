@@ -192,36 +192,36 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 
 Updated: 2026-04-03
 
-## Update Notes
+## 更新说明
 
-- Final result synthesis now goes through one generic structured LLM prompt entrypoint.
-- The results panel renders final markdown first, with optional structured details for items, sources, and unresolved issues.
-- Added V1 lightweight `semanticSnapshot` as an AX-like observation layer without replacing the existing commerce and research extractors.
-- Added V1 deterministic recovery paths:
-  - short wait-and-rescan when a page is not ready
+- 最终结果合成现在统一通过一个通用的结构化 LLM 提示词入口 (entrypoint)。
+- 结果面板优先渲染最终的 markdown，并针对 items、sources 和未解决问题提供了可选的结构化详情。
+- 引入了 V1 轻量级 `semanticSnapshot` 作为类似 AX 的观察层，同时不替换现有的 commerce 和 research 提取器。
+- 增加了 V1 确定性恢复路径：
+  - 页面未就绪时的短时等待并重新扫描
   - one-shot `RECOVER_CLOSE_DIALOG`
-  - one-shot canonical search-page reopen
-  - single-source skip for `public_research`
-- Current automated verification status:
-  - `npm.cmd test`: `9` test files, `56` tests passed
-  - `npm.cmd run build`: passed
+  - one-shot 规范化搜索页重新打开
+  - 针对 `public_research` 的单个信息源跳过策略
+- 当前自动化验证状态：
+  - `npm.cmd test`: `9` 个测试文件, `56` 个测试通过
+  - `npm.cmd run build`: 通过
 
 Updated: 2026-04-07
 
-## Recent UI Notes (2026-04-08)
+## 近期 UI 说明 (2026-04-08)
 
-- The conversation panel now uses one shared turn stream for both current and historical conversations.
-  - Opening history only switches the underlying conversation data.
-  - The history drawer is now only for conversation management: list, create, switch, delete.
-- The input box is now treated as a local draft.
-  - It is no longer backfilled from the latest archived `goal`.
-  - The initial placeholder is “你想知道什么”.
-  - Later turns start blank by default.
-- Each archived turn now keeps its own execution timeline.
-  - Historical process is shown under that turn.
-  - The global runtime panel is only for the currently running session.
-- The results panel is now narrowed to current-turn actions.
-  - It no longer repeats the full final answer body if that body is already shown in the conversation stream.
-  - Historical turns keep their own copy action.
+- 会话面板现在将同一 shared turn stream 用于当前和历史会话。
+  - 打开历史记录仅仅切换底层的会话数据。
+  - 历史抽屉 (history drawer) 现在仅用于会话管理：列表、创建、切换、删除。
+- 输入框现在作为本地草稿处理。
+  - 它不再从最新归档的 `goal` 回填数据。
+  - 初始占位符 (placeholder) 为“你想知道什么”。
+  - 后续的 turn 默认从空白开始。
+- 每个已归档的 turn 现在保留它自己的执行时间线。
+  - 历史执行过程显示在该 turn 下方。
+  - 全局运行状态面板仅用于当前正在运行的会话。
+- 结果面板现在收敛为仅展示当前 turn 的操作。
+  - 如果最终的 final answer 正文已显示在会话流中，结果面板不再重复显示它。
+  - 历史 turns 保留其自己的 copy 操作。
 
 Updated: 2026-04-08

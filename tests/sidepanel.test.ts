@@ -234,7 +234,7 @@ describe("sidepanel result actions", () => {
 
   let requestStatePayload: SessionPublicState | undefined;
   const clipboardWriteText = vi.fn<(...args: [string]) => Promise<void>>();
-  const sendMessage = vi.fn(async (message: { type: string; conversationId?: string; turnId?: number }) => {
+  const sendMessage = vi.fn(async (message: { type: string; conversationId?: string; turnId?: number; goal?: string; searchPreference?: string }) => {
     if (message.type === "REQUEST_SESSION_STATE") {
       return requestStatePayload ? { ok: true, payload: requestStatePayload } : { ok: false };
     }
@@ -336,6 +336,7 @@ describe("sidepanel result actions", () => {
 
     expect(document.getElementById("start-button")).not.toBeNull();
     expect(document.getElementById("stop-button")).toBeNull();
+    expect(document.getElementById("search-preference-toggle")?.getAttribute("aria-pressed")).toBe("false");
     expect(document.getElementById("copy-result-button")).toBeNull();
     expect(document.querySelectorAll("details.section-details")).toHaveLength(1);
     expect(document.body.textContent).toContain("当前会话");
@@ -344,6 +345,31 @@ describe("sidepanel result actions", () => {
     const goalInput = document.getElementById("goal-input") as HTMLTextAreaElement | null;
     expect(goalInput?.value).toBe("");
     expect(goalInput?.getAttribute("placeholder")).toBe("你想知道什么");
+  });
+
+  it("sends prefer_search when the magnifier toggle is enabled before start", async () => {
+    await loadSidepanel();
+
+    const toggleButton = document.getElementById("search-preference-toggle") as HTMLButtonElement | null;
+    const goalInput = document.getElementById("goal-input") as HTMLTextAreaElement | null;
+    const startButton = document.getElementById("start-button") as HTMLButtonElement | null;
+
+    expect(toggleButton).not.toBeNull();
+    expect(goalInput).not.toBeNull();
+    expect(startButton).not.toBeNull();
+
+    toggleButton!.click();
+    goalInput!.value = "解释一下事件循环";
+    goalInput!.dispatchEvent(new Event("input"));
+    startButton!.click();
+
+    await vi.waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith({
+        type: "START_SESSION",
+        goal: "解释一下事件循环",
+        searchPreference: "prefer_search",
+      });
+    });
   });
 
   it("shows timeline instead of runtime status while running", async () => {

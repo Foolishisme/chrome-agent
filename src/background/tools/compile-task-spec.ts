@@ -25,6 +25,7 @@ export const compileTaskSpecTool: AgentToolDefinition = {
 
     const compiled = await compileInitialTaskSpec(context.memory.goal, {
       taskType: context.memory.taskType,
+      searchPreference: context.memory.searchPreference,
       routeReason,
       currentTimeIso,
       timezone,
@@ -36,6 +37,7 @@ export const compileTaskSpecTool: AgentToolDefinition = {
           conversationTurns,
           currentTimeIso,
           timezone,
+          searchPreference: context.memory.searchPreference,
         });
         context.appendLog("llm", "info", "Classified the task type with the lite model.", {
           model: refined.model,

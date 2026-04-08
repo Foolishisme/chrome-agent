@@ -2,6 +2,7 @@ export type PageType = "home" | "search" | "google_search" | "content" | "pdf" |
 
 export type TaskType = "direct_answer" | "commerce_search" | "public_research";
 export type OutputMode = "inline" | "artifact";
+export type SearchPreference = "auto" | "prefer_search";
 
 export type PlanStepStatus = "pending" | "running" | "succeeded" | "failed" | "blocked";
 
@@ -407,6 +408,7 @@ export interface FailureRecord {
 export interface SessionMemory {
   goal: string;
   taskType: TaskType;
+  searchPreference: SearchPreference;
   conversationId?: string;
   conversationTitle?: string;
   currentTurnId?: number;
@@ -457,6 +459,7 @@ export interface SessionMemory {
 export interface SessionPublicState {
   sessionId?: string;
   goal?: string;
+  searchPreference?: SearchPreference;
   conversationId?: string;
   conversationTitle?: string;
   conversationTurns?: ConversationTurn[];

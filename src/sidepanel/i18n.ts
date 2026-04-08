@@ -11,6 +11,9 @@ type MessageBundle = {
   runtimeStatusTitle: string;
   resultsTitle: string;
   goalPlaceholder: string;
+  searchToggleLabel: string;
+  searchToggleHintAuto: string;
+  searchToggleHintPreferSearch: string;
   start: string;
   retry: string;
   stop: string;
@@ -105,6 +108,9 @@ const messages: Record<Locale, MessageBundle> = {
     runtimeStatusTitle: "运行状态",
     resultsTitle: "结果",
     goalPlaceholder: "输入购物或调研目标",
+    searchToggleLabel: "优先搜索",
+    searchToggleHintAuto: "当前为智能回答；点击后遇到边界问题会优先搜索。",
+    searchToggleHintPreferSearch: "当前为优先搜索；点击后恢复智能回答。",
     start: "开始",
     retry: "重试",
     stop: "停止",
@@ -212,6 +218,9 @@ const messages: Record<Locale, MessageBundle> = {
     runtimeStatusTitle: "Runtime State",
     resultsTitle: "Results",
     goalPlaceholder: "Describe a shopping or research goal",
+    searchToggleLabel: "Prefer Search",
+    searchToggleHintAuto: "Auto mode. Click to prefer search for ambiguous goals.",
+    searchToggleHintPreferSearch: "Prefer-search mode. Click to return to auto mode.",
     start: "Start",
     retry: "Retry",
     stop: "Stop",

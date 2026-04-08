@@ -10,6 +10,7 @@ import type {
   DebugLogLevel,
   PlanStep,
   PlanStepStatus,
+  SearchPreference,
   SessionMemory,
   SessionPublicState,
   SnapshotData,
@@ -195,6 +196,7 @@ function toPublicState(memory: SessionMemory): SessionPublicState {
     conversationId: memory.conversationId,
     conversationTitle: memory.conversationTitle,
     conversationTurns: buildConversationTurns(memory),
+    searchPreference: memory.searchPreference,
     taskType: memory.taskType,
     taskSpec: memory.taskSpec,
     status: memory.runtimeMeta.status,
@@ -515,6 +517,7 @@ export class BrowserAgentRuntime {
       conversationTitle?: string;
       conversationTurns?: ConversationTurn[];
       currentTurnId?: number;
+      searchPreference?: SearchPreference;
     } = {},
   ): Promise<StartSessionResponse> {
     if (this.activeSession) {
@@ -533,12 +536,14 @@ export class BrowserAgentRuntime {
 
     const route = await detectTaskTypeWithLiteModel(goal, {
       conversationTurns: options.conversationTurns,
+      searchPreference: options.searchPreference,
       classifyWithLiteModel: async (routeGoal) => {
         const classified = await classifyTaskType(routeGoal, {
           conversationContext,
           conversationTurns: options.conversationTurns,
           currentTimeIso,
           timezone,
+          searchPreference: options.searchPreference,
         });
         return {
           taskType: classified.taskType,
@@ -553,6 +558,7 @@ export class BrowserAgentRuntime {
     const memory: SessionMemory = {
       goal,
       taskType,
+      searchPreference: options.searchPreference ?? "auto",
       conversationId: options.conversationId,
       conversationTitle: options.conversationTitle,
       currentTurnId: options.currentTurnId,

@@ -4,6 +4,7 @@ import type {
   DebugLogEntry,
   PlanStep,
   ResultArtifact,
+  SearchPreference,
   SessionPublicState,
   StepRecord,
 } from "../shared/types";
@@ -81,6 +82,7 @@ let currentState: SessionPublicState = {
 };
 
 let draftGoal = "";
+let draftSearchPreference: SearchPreference = "auto";
 let uiNotice = "";
 let uiNoticeTone: "info" | "error" = "info";
 let uiNoticeTimer: number | undefined;
@@ -98,6 +100,10 @@ function hasSessionActivity() {
 
 function getCurrentProgressText() {
   return currentState.error ?? currentState.stepSummary ?? currentState.finalResult?.summary ?? messages.assistantWaiting;
+}
+
+function getActiveSearchPreference() {
+  return currentState.status === "running" ? currentState.searchPreference ?? draftSearchPreference : draftSearchPreference;
 }
 
 function escapeHtml(value: unknown) {
@@ -544,6 +550,7 @@ function renderConversationThread() {
 
 function renderConversationSection() {
   const conversationActionsDisabled = currentState.status === "running";
+  const activeSearchPreference = getActiveSearchPreference();
   const actionButton =
     currentState.status === "running"
       ? `<button id="stop-button" class="button-danger">${escapeHtml(messages.stop)}</button>`
@@ -605,7 +612,20 @@ function renderConversationSection() {
           : ""
       }
       ${renderConversationThread()}
-      <textarea id="goal-input" class="goal-input" placeholder="${escapeHtml(conversationInputPlaceholder)}">${escapeHtml(draftGoal)}</textarea>
+      <div class="goal-input-shell">
+        <textarea id="goal-input" class="goal-input goal-input-with-toggle" placeholder="${escapeHtml(conversationInputPlaceholder)}">${escapeHtml(draftGoal)}</textarea>
+        <button
+          id="search-preference-toggle"
+          type="button"
+          class="goal-input-search-toggle${activeSearchPreference === "prefer_search" ? " goal-input-search-toggle-active" : ""}"
+          aria-pressed="${activeSearchPreference === "prefer_search"}"
+          aria-label="${escapeHtml(messages.searchToggleLabel)}"
+          title="${escapeHtml(activeSearchPreference === "prefer_search" ? messages.searchToggleHintPreferSearch : messages.searchToggleHintAuto)}"
+          ${conversationActionsDisabled ? "disabled" : ""}
+        >
+          <span aria-hidden="true">🔎</span>
+        </button>
+      </div>
       <div class="button-row">
         ${actionButton}
       </div>
@@ -961,6 +981,7 @@ function render() {
   `;
 
   const goalInput = document.getElementById("goal-input") as HTMLTextAreaElement | null;
+  const searchPreferenceToggle = document.getElementById("search-preference-toggle");
   const startButton = document.getElementById("start-button");
   const stopButton = document.getElementById("stop-button");
   const toggleConversationsButton = document.getElementById("toggle-conversations-button");
@@ -969,6 +990,11 @@ function render() {
 
   goalInput?.addEventListener("input", () => {
     draftGoal = goalInput.value;
+  });
+
+  searchPreferenceToggle?.addEventListener("click", () => {
+    draftSearchPreference = draftSearchPreference === "prefer_search" ? "auto" : "prefer_search";
+    render();
   });
 
   startButton?.addEventListener("click", async () => {
@@ -983,6 +1009,7 @@ function render() {
     await chrome.runtime.sendMessage({
       type: "START_SESSION",
       goal,
+      searchPreference: draftSearchPreference,
     });
   });
 

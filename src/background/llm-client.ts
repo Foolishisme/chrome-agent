@@ -392,6 +392,7 @@ export async function classifyTaskType(
     conversationTurns?: ConversationTurn[];
     currentTimeIso?: string;
     timezone?: string;
+    searchPreference?: "auto" | "prefer_search";
   } = {},
 ): Promise<{
   taskType: TaskType;
@@ -405,6 +406,7 @@ export async function classifyTaskType(
       conversationTurns: options.conversationTurns,
       currentTimeIso: options.currentTimeIso,
       timezone: options.timezone,
+      searchPreference: options.searchPreference,
     }),
     taskRouteSchema,
     "simple",

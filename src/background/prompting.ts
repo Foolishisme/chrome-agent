@@ -5,6 +5,7 @@ import type {
   PlanStep,
   PublicResearchTaskSpec,
   ResearchSourceResult,
+  SearchPreference,
   SearchTaskSpec,
   TaskType,
 } from "../shared/types";
@@ -38,6 +39,7 @@ export function buildTaskRoutePromptWithContext(
     conversationTurns?: ConversationTurn[];
     currentTimeIso?: string;
     timezone?: string;
+    searchPreference?: SearchPreference;
   } = {},
 ) {
   return [
@@ -46,12 +48,15 @@ export function buildTaskRoutePromptWithContext(
     'Schema: {"taskType":"direct_answer|commerce_search|public_research","reason":"..."}',
     `Current absolute time: ${options.currentTimeIso ?? new Date().toISOString()}`,
     `User timezone: ${options.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC"}`,
+    `Search preference: ${options.searchPreference ?? "auto"}`,
     "Rules:",
     "- commerce_search is for shopping, product recommendation, budgeted product search, or clear purchase intent.",
     "- public_research is for web-search tasks, source-based investigation, or questions that likely depend on current external facts.",
     "- direct_answer is for simple stable knowledge, explanations, or follow-up questions that can be answered from recent conversation evidence without opening search pages.",
     "- If recent conversation already contains enough evidence for the user's follow-up, choose direct_answer.",
     "- If the user explicitly asks for current, latest, recent, live, today, price, news, official, sourced, or time-sensitive facts, choose public_research.",
+    "- If search preference is prefer_search and the case is ambiguous, prefer public_research.",
+    "- Even when search preference is prefer_search, keep direct_answer for clearly stable knowledge or clearly sufficient recent conversation evidence.",
     "- If the user asks for products to buy, recommend, compare by budget, or shortlist items, choose commerce_search.",
     "- If the user asks to research a topic, gather sources, verify facts, or search public information, choose public_research.",
     "- Choose exactly one taskType.",

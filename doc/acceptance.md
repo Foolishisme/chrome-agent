@@ -49,6 +49,8 @@
 | N20 | 已搜索且证据充足的问题可直接回答，不再强制打开搜索页 | `tests/query-compiler.test.ts` / `tests/runtime-tools.test.ts` | PASS | 已支持 conversation 内追问复用已有证据 |
 | N21 | 明显时效敏感或显式要求最新信息的问题不会仅凭内置知识直接回答 | `tests/query-compiler.test.ts` | PASS | 已覆盖“今天金价是多少”这类时效敏感问题 |
 | N22 | 搜索判断显式接收当前绝对时间、用户时区和近期证据获取时间 | 检查 `src/background/prompting.ts` / `src/background/query-compiler.ts` / `src/background/runtime-core.ts` | PASS | 已显式注入 `currentTimeIso / timezone / conversationTurns.savedAt` |
+| N23 | 输入框可切换 `智能回答 / 优先搜索` 偏好，且该偏好会作为启动参数传入 runtime | `tests/sidepanel.test.ts` | PASS | 已覆盖放大镜开关与 `START_SESSION.searchPreference` |
+| N24 | `prefer_search` 只影响边界问题，不覆盖明确可直接回答的问题 | `tests/query-compiler.test.ts` | PASS | 已覆盖“解释一下事件循环是什么”仍走 `direct_answer` |
 
 ## 4. 模块主链验收
 

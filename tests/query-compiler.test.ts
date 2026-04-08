@@ -52,6 +52,28 @@ describe("query compiler", () => {
     expect(detectTaskType("今天金价是多少")).toBe("public_research");
   });
 
+  it("keeps clear direct answers even when prefer_search is enabled", async () => {
+    await expect(
+      detectTaskTypeWithLiteModel("解释一下事件循环是什么", {
+        searchPreference: "prefer_search",
+      }),
+    ).resolves.toMatchObject({
+      taskType: "direct_answer",
+      source: "rule",
+    });
+  });
+
+  it("prefers public_research for ambiguous goals when prefer_search is enabled", async () => {
+    await expect(
+      detectTaskTypeWithLiteModel("帮我看看 Playwright 和 Cypress 怎么选", {
+        searchPreference: "prefer_search",
+      }),
+    ).resolves.toMatchObject({
+      taskType: "public_research",
+      source: "rule",
+    });
+  });
+
   it("prefers lite-model routing when available", async () => {
     const routed = await detectTaskTypeWithLiteModel("3000 的手机推荐", {
       classifyWithLiteModel: async () => ({

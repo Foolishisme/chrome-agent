@@ -295,3 +295,22 @@ Updated: 2026-04-08
   - 1 个测试文件，9 个测试通过
 - `npm.cmd test`
   - 12 个测试文件，83 个测试通过
+
+### 8.18 2026-04-08 搜索偏好开关
+
+- `src/sidepanel/index.ts / public/sidepanel.css / src/sidepanel/i18n.ts`
+  - 输入框右上角已新增放大镜开关，用于切换 `智能回答 / 优先搜索`
+  - 开关状态作为下一轮启动参数传入后台，不由前端直接决定 task module
+- `src/shared/protocol.ts / src/shared/types.ts`
+  - 已新增 `searchPreference = auto | prefer_search`
+- `src/background/runtime-core.ts / src/background/query-compiler.ts / src/background/prompting.ts`
+  - 路由判断已显式接收搜索偏好
+  - 当用户选择 `prefer_search` 时，边界不清的问题会更偏向进入 `public_research`
+  - 但明确可直接回答的问题仍保持 `direct_answer`
+
+### 8.19 本轮最小验证
+
+- `npx.cmd vitest run tests/query-compiler.test.ts tests/sidepanel.test.ts`
+  - 2 个测试文件，23 个测试通过
+- `npm.cmd run build`
+  - 通过

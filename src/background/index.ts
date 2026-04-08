@@ -119,6 +119,7 @@ chrome.runtime.onMessage.addListener(
           conversationTitle: preferredConversation.title,
           conversationTurns: toConversationTurns(preferredConversation),
           currentTurnId: preferredConversation.nextTurnId,
+          searchPreference: message.searchPreference ?? "auto",
         });
         const payload = await buildSessionStateResponse();
         sendResponse({

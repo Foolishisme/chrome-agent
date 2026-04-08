@@ -7,6 +7,7 @@ import type {
   OutputMode,
   PlanStep,
   PublicResearchTaskSpec,
+  SearchPreference,
   TaskSpec,
   TaskType,
 } from "../shared/types";
@@ -68,6 +69,10 @@ function hasConversationEvidence(turns: ConversationTurn[] | undefined) {
   return (turns?.length ?? 0) > 0;
 }
 
+function hasStableKnowledgeSignal(goal: string) {
+  return /是什么|什么意思|解释一下|解释下|讲讲|介绍一下|原理|概念|作用|区别|怎么理解|为何|为什么/.test(goal);
+}
+
 function resolveCurrentTimeIso(currentTimeIso?: string) {
   return currentTimeIso ?? new Date().toISOString();
 }
@@ -109,6 +114,7 @@ export function detectTaskTypeWithContext(
   goal: string,
   options: {
     conversationTurns?: ConversationTurn[];
+    searchPreference?: SearchPreference;
   } = {},
 ): TaskType {
   if (hasResearchSignal(goal) && !hasCommerceCategory(goal)) {
@@ -127,6 +133,14 @@ export function detectTaskTypeWithContext(
     return "direct_answer";
   }
 
+  if (hasStableKnowledgeSignal(goal)) {
+    return "direct_answer";
+  }
+
+  if (options.searchPreference === "prefer_search") {
+    return "public_research";
+  }
+
   return "direct_answer";
 }
 
@@ -135,6 +149,7 @@ export async function detectTaskTypeWithLiteModel(
   options: {
     classifyWithLiteModel?: ClassifyTaskType;
     conversationTurns?: ConversationTurn[];
+    searchPreference?: SearchPreference;
   } = {},
 ): Promise<{ taskType: TaskType; reason: string; source: "llm-lite" | "rule" }> {
   if (options.classifyWithLiteModel) {
@@ -151,6 +166,7 @@ export async function detectTaskTypeWithLiteModel(
       const message = error instanceof Error ? error.message : "lite model routing failed";
       const taskType = detectTaskTypeWithContext(goal, {
         conversationTurns: options.conversationTurns,
+        searchPreference: options.searchPreference,
       });
       return {
         taskType,
@@ -162,6 +178,7 @@ export async function detectTaskTypeWithLiteModel(
 
   const taskType = detectTaskTypeWithContext(goal, {
     conversationTurns: options.conversationTurns,
+    searchPreference: options.searchPreference,
   });
   return {
     taskType,
@@ -388,6 +405,7 @@ export async function compileTaskSpec(
     routeReason?: string;
     currentTimeIso?: string;
     timezone?: string;
+    searchPreference?: SearchPreference;
   } = {},
 ): Promise<{
   taskType: TaskType;
@@ -401,6 +419,7 @@ export async function compileTaskSpec(
         classifyWithLiteModel: async (routeGoal) =>
           options.classifyTaskTypeWithLiteModel?.(routeGoal),
         conversationTurns: options.conversationTurns,
+        searchPreference: options.searchPreference,
       })
     ).taskType;
 

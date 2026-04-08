@@ -1,8 +1,9 @@
-import type { ActionResult, AgentAction, ManualExtractionRecord, SessionPublicState, SnapshotData } from "./types";
+import type { ActionResult, AgentAction, ManualExtractionRecord, SearchPreference, SessionPublicState, SnapshotData } from "./types";
 
 export type StartSessionMessage = {
   type: "START_SESSION";
   goal: string;
+  searchPreference?: SearchPreference;
 };
 
 export type StopSessionMessage = {
