@@ -90,6 +90,7 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (message.type === "REQUEST_MANUAL_EXTRACTION_HISTORY") {
+      // Deprecated internal QA route. Kept temporarily for backend-only manual review flows.
       void getManualExtractionHistory()
         .then((history) =>
           sendResponse({
@@ -107,6 +108,7 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (message.type === "CLEAR_MANUAL_EXTRACTION_HISTORY") {
+      // Deprecated internal QA route. Kept temporarily for backend-only manual review flows.
       void clearManualExtractionHistory()
         .then(() =>
           sendResponse({
@@ -124,6 +126,7 @@ chrome.runtime.onMessage.addListener(
     }
 
     if (message.type === "EXTRACT_CURRENT_PAGE") {
+      // Deprecated internal QA route. Kept temporarily for backend-only manual review flows.
       void (async () => {
         if (runtime.getState().status === "running") {
           throw new Error("Stop the current session before manual page extraction.");

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ManualExtractionRecord, SessionPublicState } from "../src/shared/types";
+import type { SessionPublicState } from "../src/shared/types";
 
 type RuntimeMessage = {
   type: string;
@@ -66,32 +66,6 @@ function createInlineState(): SessionPublicState {
   };
 }
 
-function createManualRecord(): ManualExtractionRecord {
-  return {
-    id: "manual-1",
-    url: "https://example.com/article",
-    pageTitle: "Example Article",
-    pageType: "content",
-    extractedAt: Date.now(),
-    extraction: {
-      status: "success",
-      pageTitle: "Example Article",
-      bodyExcerpt: "A readable article summary.\n\nPoint 1\n\nPoint 2",
-      textLength: 420,
-      extractionStrategy: "readability",
-    },
-    contentState: {
-      readable: true,
-      textLength: 420,
-      paragraphCount: 5,
-      hasPasswordInput: false,
-      hasBlockingOverlay: false,
-      likelyLoginWall: false,
-      likelySpa: false,
-    },
-  };
-}
-
 async function loadSidepanel() {
   vi.resetModules();
   await import("../src/sidepanel/index");
@@ -102,18 +76,6 @@ describe("sidepanel result actions", () => {
   const sendMessage = vi.fn(async (message: { type: string }) => {
     if (message.type === "REQUEST_SESSION_STATE") {
       return { ok: false };
-    }
-
-    if (message.type === "REQUEST_MANUAL_EXTRACTION_HISTORY") {
-      return { ok: true, history: [] };
-    }
-
-    if (message.type === "EXTRACT_CURRENT_PAGE") {
-      return { ok: true, history: [createManualRecord()] };
-    }
-
-    if (message.type === "CLEAR_MANUAL_EXTRACTION_HISTORY") {
-      return { ok: true, history: [] };
     }
 
     return { ok: true };
@@ -203,22 +165,6 @@ describe("sidepanel result actions", () => {
       expect(createObjectURL).toHaveBeenCalledTimes(1);
       expect(anchorClickSpy).toHaveBeenCalledTimes(1);
       expect(revokeObjectURL).toHaveBeenCalledWith("blob:artifact");
-    });
-  });
-
-  it("extracts the current page and renders the saved local sample", async () => {
-    await loadSidepanel();
-
-    const button = document.getElementById("extract-current-page-button");
-    expect(button).not.toBeNull();
-
-    (button as HTMLButtonElement).click();
-
-    await vi.waitFor(() => {
-      expect(sendMessage).toHaveBeenCalledWith({ type: "EXTRACT_CURRENT_PAGE" });
-      expect(document.body.textContent).toContain("Example Article");
-      expect(document.body.textContent).toContain("A readable article summary.");
-      expect(document.body.textContent).toContain("readability");
     });
   });
 });

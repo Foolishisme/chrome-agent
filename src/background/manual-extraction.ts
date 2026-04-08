@@ -2,6 +2,9 @@ import type { ExecuteActionResponse, SnapshotResponse } from "../shared/protocol
 import type { ManualExtractionRecord } from "../shared/types";
 import { sendMessageToTab } from "./runtime-core";
 
+// Deprecated internal QA helper.
+// Keep the backend path available temporarily for local debugging and offline review,
+// but do not wire new side panel UI or product flows to this module.
 const STORAGE_KEY = "manualExtractionHistory";
 const MAX_HISTORY_ENTRIES = 20;
 

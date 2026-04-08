@@ -1,7 +1,6 @@
 import { DEFAULT_GOAL } from "../shared/constants";
 import type {
   DebugLogEntry,
-  ManualExtractionRecord,
   PlanStep,
   ResultArtifact,
   SessionPublicState,
@@ -26,8 +25,6 @@ let lastGoal = DEFAULT_GOAL;
 let uiNotice = "";
 let uiNoticeTone: "info" | "error" = "info";
 let uiNoticeTimer: number | undefined;
-let manualExtractionHistory: ManualExtractionRecord[] = [];
-let manualExtractionBusy = false;
 
 function escapeHtml(value: unknown) {
   const text = value === undefined || value === null ? "" : String(value);
@@ -326,8 +323,6 @@ function renderTimelineStep(step: StepRecord) {
 }
 
 function renderConversationSection() {
-  const manualDisabled = manualExtractionBusy || currentState.status === "running";
-
   return `
     <div class="controls">
       <textarea id="goal-input" class="goal-input" placeholder="${escapeHtml(messages.goalPlaceholder)}">${escapeHtml(lastGoal)}</textarea>
@@ -335,22 +330,6 @@ function renderConversationSection() {
         <button id="start-button" class="button-primary">${escapeHtml(messages.start)}</button>
         <button id="retry-button" class="button-secondary">${escapeHtml(messages.retry)}</button>
         <button id="stop-button" class="button-danger">${escapeHtml(messages.stop)}</button>
-      </div>
-      <div class="button-row button-row-secondary">
-        <button
-          id="extract-current-page-button"
-          class="button-secondary"
-          ${manualDisabled ? "disabled" : ""}
-        >
-          ${escapeHtml(messages.extractCurrentPage)}
-        </button>
-        <button
-          id="clear-samples-button"
-          class="button-secondary"
-          ${manualExtractionBusy || manualExtractionHistory.length === 0 ? "disabled" : ""}
-        >
-          ${escapeHtml(messages.clearExtractedSamples)}
-        </button>
       </div>
     </div>
   `;
@@ -676,67 +655,6 @@ function renderResultsSection() {
   `;
 }
 
-function renderManualExtractionRecord(record: ManualExtractionRecord, index: number) {
-  const readableText =
-    record.contentState === undefined ? messages.emptyValue : record.contentState.readable ? messages.resultOk : messages.resultPartial;
-  const paragraphText = record.contentState?.paragraphCount ?? messages.emptyValue;
-  const issueText = record.extraction.reason ?? record.contentState?.reason ?? messages.emptyValue;
-
-  return `
-    <details class="source-card"${index === 0 ? " open" : ""}>
-      <summary class="source-summary">
-        <span>${escapeHtml(record.pageTitle || record.url)}</span>
-        <span class="pill">${escapeHtml(record.extraction.status === "success" ? messages.resultOk : messages.resultPartial)}</span>
-      </summary>
-      <div class="source-body">
-        <div><strong>${escapeHtml(messages.manualSampleUrl)}:</strong> <a class="result-link" href="${escapeHtml(record.url)}" target="_blank" rel="noreferrer">${escapeHtml(record.url)}</a></div>
-        <div><strong>${escapeHtml(messages.manualSampleStatus)}:</strong> ${escapeHtml(record.extraction.status)}</div>
-        <div><strong>${escapeHtml(messages.manualSampleStrategy)}:</strong> ${escapeHtml(record.extraction.extractionStrategy ?? messages.emptyValue)}</div>
-        <div><strong>${escapeHtml(messages.manualSampleTextLength)}:</strong> ${escapeHtml(record.extraction.textLength)}</div>
-        <div><strong>${escapeHtml(messages.manualSampleReadable)}:</strong> ${escapeHtml(readableText)}</div>
-        <div><strong>${escapeHtml(messages.manualSampleParagraphs)}:</strong> ${escapeHtml(paragraphText)}</div>
-        <div><strong>${escapeHtml(messages.sourceExcerpt)}:</strong> ${escapeHtml(record.extraction.bodyExcerpt || messages.emptyValue)}</div>
-        <div><strong>${escapeHtml(messages.manualSampleReason)}:</strong> ${escapeHtml(issueText)}</div>
-        <div><strong>${escapeHtml(messages.timelineResult)}:</strong> ${escapeHtml(new Date(record.extractedAt).toLocaleString())}</div>
-      </div>
-    </details>
-  `;
-}
-
-function renderManualSamplesSection() {
-  const actions = `
-    <div class="result-toolbar">
-      <button
-        id="extract-current-page-button-panel"
-        type="button"
-        class="button-secondary action-button"
-        ${manualExtractionBusy || currentState.status === "running" ? "disabled" : ""}
-      >
-        ${escapeHtml(messages.extractCurrentPage)}
-      </button>
-      <button
-        id="clear-samples-button-panel"
-        type="button"
-        class="button-secondary action-button"
-        ${manualExtractionBusy || manualExtractionHistory.length === 0 ? "disabled" : ""}
-      >
-        ${escapeHtml(messages.clearExtractedSamples)}
-      </button>
-    </div>
-  `;
-
-  const content =
-    manualExtractionHistory.length > 0
-      ? `<div class="timeline">${manualExtractionHistory.map((record, index) => renderManualExtractionRecord(record, index)).join("")}</div>`
-      : `<div class="muted">${escapeHtml(messages.manualSamplesEmpty)}</div>`;
-
-  return `
-    <p class="muted">${escapeHtml(messages.manualSamplesHint)}</p>
-    ${actions}
-    ${content}
-  `;
-}
-
 function render() {
   const shouldOpenRuntime = currentState.status !== "idle" || currentState.timeline.length > 0 || currentState.logs.length > 0;
 
@@ -753,7 +671,6 @@ function render() {
         <h2>${escapeHtml(messages.resultsTitle)}</h2>
         ${renderResultsSection()}
       </section>
-      ${renderTopLevelSection(messages.manualSamplesTitle, renderManualSamplesSection(), manualExtractionHistory.length > 0)}
     </div>
   `;
 
@@ -761,14 +678,6 @@ function render() {
   const startButton = document.getElementById("start-button");
   const retryButton = document.getElementById("retry-button");
   const stopButton = document.getElementById("stop-button");
-  const extractButtons = [
-    document.getElementById("extract-current-page-button"),
-    document.getElementById("extract-current-page-button-panel"),
-  ].filter(Boolean);
-  const clearButtons = [
-    document.getElementById("clear-samples-button"),
-    document.getElementById("clear-samples-button-panel"),
-  ].filter(Boolean);
 
   startButton?.addEventListener("click", async () => {
     const goal = goalInput?.value.trim() || DEFAULT_GOAL;
@@ -789,71 +698,6 @@ function render() {
   stopButton?.addEventListener("click", async () => {
     await chrome.runtime.sendMessage({
       type: "STOP_SESSION",
-    });
-  });
-
-  const handleManualExtraction = async () => {
-    manualExtractionBusy = true;
-    render();
-
-    try {
-      const response = (await chrome.runtime.sendMessage({
-        type: "EXTRACT_CURRENT_PAGE",
-      })) as {
-        ok: boolean;
-        history?: ManualExtractionRecord[];
-        error?: string;
-      };
-
-      if (!response.ok) {
-        throw new Error(response.error || messages.manualSampleSaveFailed);
-      }
-
-      manualExtractionHistory = response.history ?? manualExtractionHistory;
-      setUiNotice(messages.manualSampleSaved);
-    } catch {
-      setUiNotice(messages.manualSampleSaveFailed, "error");
-    } finally {
-      manualExtractionBusy = false;
-      render();
-    }
-  };
-
-  extractButtons.forEach((button) => {
-    button?.addEventListener("click", () => {
-      void handleManualExtraction();
-    });
-  });
-
-  const handleClearSamples = async () => {
-    manualExtractionBusy = true;
-    render();
-
-    try {
-      const response = (await chrome.runtime.sendMessage({
-        type: "CLEAR_MANUAL_EXTRACTION_HISTORY",
-      })) as {
-        ok: boolean;
-        history?: ManualExtractionRecord[];
-      };
-
-      if (!response.ok) {
-        throw new Error(messages.manualSampleClearFailed);
-      }
-
-      manualExtractionHistory = response.history ?? [];
-      setUiNotice(messages.manualSampleClearReady);
-    } catch {
-      setUiNotice(messages.manualSampleClearFailed, "error");
-    } finally {
-      manualExtractionBusy = false;
-      render();
-    }
-  };
-
-  clearButtons.forEach((button) => {
-    button?.addEventListener("click", () => {
-      void handleClearSamples();
     });
   });
 
@@ -935,21 +779,9 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 
 async function bootstrap() {
-  const [stateResponse, historyResponse] = (await Promise.all([
-    chrome.runtime.sendMessage({
-      type: "REQUEST_SESSION_STATE",
-    }),
-    chrome.runtime.sendMessage({
-      type: "REQUEST_MANUAL_EXTRACTION_HISTORY",
-    }),
-  ])) as [
-    { ok: boolean; payload?: SessionPublicState },
-    { ok: boolean; history?: ManualExtractionRecord[] },
-  ];
-
-  if (historyResponse.ok && historyResponse.history) {
-    manualExtractionHistory = historyResponse.history;
-  }
+  const stateResponse = (await chrome.runtime.sendMessage({
+    type: "REQUEST_SESSION_STATE",
+  })) as { ok: boolean; payload?: SessionPublicState };
 
   if (stateResponse.ok && stateResponse.payload) {
     applyState(stateResponse.payload);
