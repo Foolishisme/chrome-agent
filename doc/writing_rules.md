@@ -6,6 +6,7 @@
 
 - `doc/spec.md`
 - `doc/constraints.md`
+- `doc/interaction.md`
 - `doc/plan.md`
 - `doc/status.md`
 - `doc/acceptance.md`
@@ -18,16 +19,18 @@
 
 ## 2. 文档分层
 
-当前文档体系固定为四层：
+当前文档体系固定为五层：
 
 1. 真理源
-2. 路径层
-3. 状态层
-4. 沉淀层
+2. 表达层
+3. 路径层
+4. 状态层
+5. 沉淀层
 
 对应关系：
 
 - 真理源：`spec.md / constraints.md`
+- 表达层：`interaction.md`
 - 路径层：`plan.md`
 - 状态层：`status.md / threads/active/`
 - 沉淀层：`acceptance.md / pitfalls.md / adr/ / history/`
@@ -38,6 +41,7 @@
 
 - `spec.md` 回答“应该是什么”
 - `constraints.md` 回答“绝对不能怎么做”
+- `interaction.md` 回答“系统应如何被理解、等待、信任和接管”
 - `plan.md` 回答“当前准备怎么做”
 - `status.md` 回答“当前 checkpoint 在哪里”
 - `acceptance.md` 回答“怎样算通过”
@@ -220,6 +224,20 @@
 - 必须包含背景、决策、被放弃方案、影响
 - 只有真正拍板的事项才进入 ADR
 
+### 4.10 `doc/interaction.md`
+
+定位：
+
+- 产品表达规则
+- 交互层级
+- 结果、过程、输入与历史的默认关系
+
+不应写：
+
+- runtime / tool 协议细节
+- 当日实现进度
+- 视觉样式微调
+
 ## 5. 更新规则
 
 ### 5.1 改设计时
@@ -240,20 +258,26 @@
 
 - `doc/plan.md`
 
-### 5.4 改 checkpoint 时
+### 5.4 改产品表达或交互规则时
+
+优先更新：
+
+- `doc/interaction.md`
+
+### 5.5 改 checkpoint 时
 
 优先更新：
 
 - `doc/status.md`
 - `doc/threads/active/`
 
-### 5.5 改验收口径或状态时
+### 5.6 改验收口径或状态时
 
 优先更新：
 
 - `doc/acceptance.md`
 
-### 5.6 改长期决策时
+### 5.7 改长期决策时
 
 优先新增或更新：
 
@@ -265,6 +289,7 @@
 
 - `spec.md`
 - `constraints.md`
+- `interaction.md`
 - `plan.md`
 - `status.md`
 - `acceptance.md`
@@ -275,4 +300,4 @@
 - `adr/`
 - `history/`
 
-Updated: 2026-04-03
+Updated: 2026-04-08

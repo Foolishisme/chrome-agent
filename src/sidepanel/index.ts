@@ -121,18 +121,17 @@ function formatDuration(ms: number | undefined) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+function getFinalResultDisplayMarkdown() {
+  return (
+    currentState.finalResult?.markdown?.trim() ||
+    currentState.finalResult?.artifacts.find((artifact) => artifact.kind === "markdown")?.content?.trim() ||
+    currentState.finalResult?.summary?.trim() ||
+    ""
+  );
+}
+
 function getDefaultResultCopyText() {
-  const markdown = currentState.finalResult?.markdown?.trim();
-  if (markdown) {
-    return markdown;
-  }
-
-  const summary = currentState.finalResult?.summary?.trim();
-  if (summary) {
-    return summary;
-  }
-
-  return "";
+  return getFinalResultDisplayMarkdown();
 }
 
 function setUiNotice(message: string, tone: "info" | "error" = "info") {
@@ -449,6 +448,7 @@ function renderSavedConversationTurn(turn: ConversationTurn) {
                   type="button"
                   class="button-secondary action-button action-button-small"
                   data-rollback-turn-id="${turn.turnId}"
+                  ${currentState.status === "running" ? "disabled" : ""}
                 >
                   ${escapeHtml(archiveUiText.rollbackTurn)}
                 </button>
@@ -461,6 +461,15 @@ function renderSavedConversationTurn(turn: ConversationTurn) {
       <div class="conversation-turn conversation-turn-assistant">
         <div class="conversation-turn-head">
           <span>${escapeHtml(archiveUiText.assistantTurn)}</span>
+          <span class="conversation-turn-actions">
+            <button
+              type="button"
+              class="button-secondary action-button action-button-small"
+              data-copy-turn-id="${turn.turnId}"
+            >
+              ${escapeHtml(messages.resultCopyButton)}
+            </button>
+          </span>
         </div>
         <div class="conversation-turn-body">
           ${renderMarkdownBlock(turn.answerMarkdown)}
@@ -476,8 +485,9 @@ function renderLiveConversationTurn() {
     return "";
   }
 
+  const liveCopyText = getFinalResultDisplayMarkdown();
   const assistantBody = currentState.finalResult
-    ? renderMarkdownBlock(currentState.finalResult.markdown)
+    ? renderMarkdownBlock(getFinalResultDisplayMarkdown())
     : `<p class="muted">${escapeHtml(getCurrentProgressText())}</p>`;
 
   return `
@@ -491,10 +501,25 @@ function renderLiveConversationTurn() {
       <div class="conversation-turn conversation-turn-assistant">
         <div class="conversation-turn-head">
           <span>${escapeHtml(archiveUiText.assistantTurn)}</span>
+          ${
+            liveCopyText
+              ? `
+                <span class="conversation-turn-actions">
+                  <button
+                    type="button"
+                    class="button-secondary action-button action-button-small"
+                    data-copy-live-result="true"
+                  >
+                    ${escapeHtml(messages.resultCopyButton)}
+                  </button>
+                </span>
+              `
+              : ""
+          }
         </div>
         <div class="conversation-turn-body">
           ${assistantBody}
-          ${renderConversationTurnTimeline(currentState.timeline, currentState.status === "running")}
+          ${currentState.status === "running" ? "" : renderConversationTurnTimeline(currentState.timeline)}
         </div>
       </div>
     </div>
@@ -518,6 +543,7 @@ function renderConversationThread() {
 }
 
 function renderConversationSection() {
+  const conversationActionsDisabled = currentState.status === "running";
   const actionButton =
     currentState.status === "running"
       ? `<button id="stop-button" class="button-danger">${escapeHtml(messages.stop)}</button>`
@@ -532,6 +558,7 @@ function renderConversationSection() {
                 type="button"
                 class="conversation-list-item${conversation.conversationId === currentState.conversationId ? " conversation-list-item-active" : ""}"
                 data-select-conversation-id="${escapeHtml(conversation.conversationId)}"
+                ${conversationActionsDisabled ? "disabled" : ""}
               >
                 <span>${escapeHtml(conversation.title)}</span>
                 <span class="conversation-meta">${escapeHtml(conversation.turnCount)}</span>
@@ -547,7 +574,7 @@ function renderConversationSection() {
         <button id="toggle-conversations-button" type="button" class="button-secondary action-button">
           ${escapeHtml(archiveUiText.currentConversation)}: ${escapeHtml(currentConversationTitle)}
         </button>
-        <button id="create-conversation-button" type="button" class="button-secondary action-button">
+        <button id="create-conversation-button" type="button" class="button-secondary action-button" ${conversationActionsDisabled ? "disabled" : ""}>
           ${escapeHtml(archiveUiText.newConversation)}
         </button>
       </div>
@@ -565,6 +592,7 @@ function renderConversationSection() {
                         id="delete-conversation-button"
                         type="button"
                         class="button-secondary action-button"
+                        ${conversationActionsDisabled ? "disabled" : ""}
                       >
                         ${escapeHtml(archiveUiText.deleteConversation)}
                       </button>
@@ -632,6 +660,14 @@ function renderExecutionTrace(open: boolean) {
   }
 
   return renderNestedDetails(messages.timelineTitle, buildTimelineMarkup(), open);
+}
+
+function hasFailureState() {
+  return (
+    currentState.status === "error" ||
+    Boolean(currentState.error) ||
+    Boolean(currentState.finalResult && currentState.finalResult.status !== "success")
+  );
 }
 
 function renderRuntimeSection() {
@@ -702,6 +738,7 @@ function renderRuntimeSection() {
   return `
     ${runtimeHeadline}
     ${runtimeSummary}
+    ${renderExecutionTrace(true)}
     ${renderNestedDetails(messages.logsTitle, logsMarkup)}
     ${renderRuntimeDetailsSection()}
   `;
@@ -720,8 +757,8 @@ function renderArtifactDetail(title: string, content: string, open = false) {
 
 function renderDocumentArtifact(artifact: ResultArtifact, index: number) {
   return `
-    <details class="source-card">
-      <summary class="source-summary document-summary">
+    <div class="source-card">
+      <div class="source-summary document-summary">
         <span>${escapeHtml(artifact.title)}</span>
         <span class="document-actions">
           <button
@@ -739,11 +776,8 @@ function renderDocumentArtifact(artifact: ResultArtifact, index: number) {
             ${escapeHtml(messages.documentDownloadButton)}
           </button>
         </span>
-      </summary>
-      <div class="source-body">
-        ${renderMarkdownBlock(artifact.content)}
       </div>
-    </details>
+    </div>
   `;
 }
 
@@ -859,13 +893,10 @@ function renderRuntimeDetailsSection() {
 }
 
 function renderResultsSection() {
-  const currentProgress = getCurrentProgressText();
-  const resultCopyText = getDefaultResultCopyText();
   const documentArtifacts = getDocumentArtifacts();
   const outputMode = currentState.finalResult?.outputMode ?? (documentArtifacts.length > 0 ? "artifact" : "inline");
   const errorMarkup = currentState.error ? `<div class="error-box">${escapeHtml(currentState.error)}</div>` : "";
   const noticeMarkup = uiNotice ? `<div class="notice-box notice-${uiNoticeTone}">${escapeHtml(uiNotice)}</div>` : "";
-  const processMarkup = renderExecutionTrace(!currentState.finalResult);
 
   const documentsMarkup =
     documentArtifacts.length > 0
@@ -881,48 +912,30 @@ function renderResultsSection() {
       : "";
 
   if (!currentState.finalResult) {
-    return `
-      ${errorMarkup}
-      ${noticeMarkup}
-      <div class="result-pending">
-        <span class="status-label">${escapeHtml(messages.assistantSummary)}</span>
-        <div class="debug-value">${escapeHtml(currentProgress)}</div>
-      </div>
-      ${processMarkup || `<p class="muted">${escapeHtml(messages.resultsHint)}</p>`}
-    `;
+    return "";
+  }
+
+  if (outputMode === "inline") {
+    return "";
   }
 
   if (outputMode === "artifact") {
     return `
       ${errorMarkup}
       ${noticeMarkup}
-      <p class="muted"><strong>${escapeHtml(messages.resultSummaryTitle)}:</strong> ${escapeHtml(currentState.finalResult.summary)}</p>
       ${documentsMarkup || `<div class="muted">${escapeHtml(messages.documentEmpty)}</div>`}
-      ${processMarkup}
     `;
   }
 
-  return `
-    ${errorMarkup}
-    <div class="result-toolbar">
-      <button
-        id="copy-result-button"
-        type="button"
-        class="button-secondary action-button"
-        ${resultCopyText ? "" : "disabled"}
-        >
-          ${escapeHtml(messages.resultCopyButton)}
-        </button>
-    </div>
-    ${noticeMarkup}
-    ${renderMarkdownBlock(currentState.finalResult.markdown)}
-    ${processMarkup}
-  `;
+  return "";
 }
 
 function render() {
-  const showSessionSections = hasSessionActivity();
-  const shouldOpenRuntime = currentState.status === "running" && !currentState.finalResult;
+  const showResultsSection =
+    Boolean(currentState.finalResult) &&
+    (currentState.finalResult?.outputMode === "artifact" || getDocumentArtifacts().length > 0);
+  const showTimelineSection = currentState.status === "running";
+  const showRuntimeSection = hasFailureState();
 
   app.innerHTML = `
     <div class="panel-shell">
@@ -933,16 +946,17 @@ function render() {
 
       ${renderTopLevelSection(messages.conversationTitle, renderConversationSection(), true)}
       ${
-        showSessionSections
+        showResultsSection
           ? `
             <section class="section">
               <h2>${escapeHtml(messages.resultsTitle)}</h2>
               ${renderResultsSection()}
             </section>
-            ${renderTopLevelSection(messages.runtimeStatusTitle, renderRuntimeSection(), shouldOpenRuntime)}
           `
           : ""
       }
+      ${showTimelineSection ? renderTopLevelSection(messages.timelineTitle, buildTimelineMarkup(), true) : ""}
+      ${showRuntimeSection ? renderTopLevelSection(messages.runtimeStatusTitle, renderRuntimeSection(), true) : ""}
     </div>
   `;
 
@@ -1093,6 +1107,47 @@ function render() {
         setUiNotice(archiveUiText.rollbackConversationReady);
       } catch {
         setUiNotice(archiveUiText.rollbackConversationFailed, "error");
+      }
+    });
+  });
+
+  document.querySelectorAll<HTMLElement>("[data-copy-turn-id]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const turnId = Number.parseInt(button.dataset.copyTurnId ?? "", 10);
+      if (!Number.isFinite(turnId)) {
+        setUiNotice(messages.resultCopyUnavailable, "error");
+        return;
+      }
+
+      const turn = (currentState.conversationTurns ?? []).find((item) => item.turnId === turnId);
+      const text = turn?.answerMarkdown?.trim();
+      if (!text) {
+        setUiNotice(messages.resultCopyUnavailable, "error");
+        return;
+      }
+
+      try {
+        await copyTextToClipboard(text);
+        setUiNotice(messages.resultCopyReady);
+      } catch {
+        setUiNotice(messages.resultCopyFailed, "error");
+      }
+    });
+  });
+
+  document.querySelectorAll<HTMLElement>("[data-copy-live-result]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const text = getDefaultResultCopyText();
+      if (!text) {
+        setUiNotice(messages.resultCopyUnavailable, "error");
+        return;
+      }
+
+      try {
+        await copyTextToClipboard(text);
+        setUiNotice(messages.resultCopyReady);
+      } catch {
+        setUiNotice(messages.resultCopyFailed, "error");
       }
     });
   });

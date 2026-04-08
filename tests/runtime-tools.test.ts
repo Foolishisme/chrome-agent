@@ -116,6 +116,68 @@ describe("runtime tool helpers", () => {
     expect(summary).toContain("MacBook Air 13");
     expect(summary).toContain("Apple Store");
   });
+
+  it("finalizes a direct answer from conversation evidence when live generation is unavailable", async () => {
+    const tool = getToolDefinition("finalizeDirectAnswer");
+    const memory = createMemory({
+      goal: "那第二点再展开一下",
+      taskType: "direct_answer",
+      plan: [
+        {
+          stepId: "compile-task-spec",
+          goal: "compile",
+          allowedTools: ["compileTaskSpec"],
+          successCriteria: [],
+          status: "succeeded",
+        },
+        {
+          stepId: "finalize-direct-answer",
+          goal: "finalize",
+          allowedTools: ["finalizeDirectAnswer"],
+          successCriteria: [],
+          status: "running",
+        },
+      ],
+      conversationTurns: [
+        {
+          turnId: 1,
+          sessionId: "session-1",
+          goal: "解释一下 Playwright 和 Selenium 的区别",
+          answerSummary: "Playwright 在现代浏览器支持和自动等待上更强。",
+          answerMarkdown: "summary",
+          timeline: [],
+          savedAt: Date.now() - 10_000,
+        },
+      ],
+      taskSpec: {
+        taskType: "direct_answer",
+        originalGoal: "那第二点再展开一下",
+        outputMode: "inline",
+        routeReason: "recent conversation already contains enough evidence",
+        currentTimeIso: "2026-04-08T08:00:00.000Z",
+        timezone: "Asia/Shanghai",
+        evidenceTurnCount: 1,
+      },
+    });
+
+    const result = await tool.run({
+      memory,
+      signal: new AbortController().signal,
+      scanPage: vi.fn(),
+      ensureUsableSnapshot: vi.fn(),
+      executeAction: vi.fn(),
+      settleAfterAction: vi.fn(),
+      appendLog: vi.fn(),
+      recordStep: vi.fn(),
+      pushState: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(result.stepStatus).toBe("succeeded");
+    expect(result.terminal).toBe(true);
+    expect(memory.finalResult?.status).toBe("partial");
+    expect(memory.finalResult?.markdown).toContain("当前会话依据");
+    expect(memory.finalResult?.markdown).toContain("Playwright 在现代浏览器支持和自动等待上更强");
+  });
 });
 
 describe("runtime recovery path", () => {

@@ -1,4 +1,6 @@
 import type {
+  ConversationTurn,
+  DirectAnswerTaskSpec,
   ExtractedItem,
   PlanStep,
   PublicResearchTaskSpec,
@@ -11,18 +13,50 @@ export function buildTaskRoutePrompt(goal: string) {
   return buildTaskRoutePromptWithContext(goal);
 }
 
-export function buildTaskRoutePromptWithContext(goal: string, conversationContext?: string) {
+function formatConversationTurns(turns: ConversationTurn[] | undefined) {
+  const recentTurns = turns?.slice(-3) ?? [];
+  if (recentTurns.length === 0) {
+    return "[]";
+  }
+
+  return JSON.stringify(
+    recentTurns.map((turn) => ({
+      turnId: turn.turnId,
+      savedAt: new Date(turn.savedAt).toISOString(),
+      userGoal: turn.goal,
+      assistantSummary: turn.answerSummary,
+    })),
+    null,
+    2,
+  );
+}
+
+export function buildTaskRoutePromptWithContext(
+  goal: string,
+  options: {
+    conversationContext?: string;
+    conversationTurns?: ConversationTurn[];
+    currentTimeIso?: string;
+    timezone?: string;
+  } = {},
+) {
   return [
     "You classify browser-agent tasks.",
     "Return JSON only.",
-    'Schema: {"taskType":"commerce_search|public_research","reason":"..."}',
+    'Schema: {"taskType":"direct_answer|commerce_search|public_research","reason":"..."}',
+    `Current absolute time: ${options.currentTimeIso ?? new Date().toISOString()}`,
+    `User timezone: ${options.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC"}`,
     "Rules:",
     "- commerce_search is for shopping, product recommendation, budgeted product search, or clear purchase intent.",
-    "- public_research is for explanations, comparisons, background research, summaries, and source-based investigation.",
+    "- public_research is for web-search tasks, source-based investigation, or questions that likely depend on current external facts.",
+    "- direct_answer is for simple stable knowledge, explanations, or follow-up questions that can be answered from recent conversation evidence without opening search pages.",
+    "- If recent conversation already contains enough evidence for the user's follow-up, choose direct_answer.",
+    "- If the user explicitly asks for current, latest, recent, live, today, price, news, official, sourced, or time-sensitive facts, choose public_research.",
     "- If the user asks for products to buy, recommend, compare by budget, or shortlist items, choose commerce_search.",
-    "- If the user asks to research a topic, summarize sources, explain differences, or gather public information, choose public_research.",
+    "- If the user asks to research a topic, gather sources, verify facts, or search public information, choose public_research.",
     "- Choose exactly one taskType.",
-    ...(conversationContext ? [`Recent conversation context:\n${conversationContext}`] : []),
+    `Recent conversation turns: ${formatConversationTurns(options.conversationTurns)}`,
+    ...(options.conversationContext ? [`Recent conversation context:\n${options.conversationContext}`] : []),
     `User goal: ${goal}`,
   ].join("\n");
 }
@@ -170,5 +204,33 @@ export function buildFinalResultPrompt(options: {
       null,
       2,
     )}`,
+  ].join("\n");
+}
+
+export function buildDirectAnswerPrompt(options: {
+  goal: string;
+  taskSpec: DirectAnswerTaskSpec;
+  conversationTurns?: ConversationTurn[];
+}) {
+  return [
+    "## Role",
+    "You are a concise assistant that answers directly when browsing is unnecessary.",
+    "",
+    "## Output Schema",
+    "Return JSON only.",
+    'Schema: {"summary":"1-sentence compact recap for the UI.","markdown":"The full direct answer in markdown.","keyResults":["1-4 short bullets"],"suggestedNextAction":"One concrete next step."}',
+    "",
+    "## Hard Rules",
+    "1. Output professional, concise Chinese.",
+    "2. Answer the user's current question directly instead of describing agent workflow.",
+    "3. Use recent conversation evidence when it is relevant, but do not restate long chat history.",
+    "4. Do not invent fresh external facts, citations, or links that are not present in the provided context.",
+    "5. If the evidence is incomplete, answer only the stable part and state the uncertainty briefly.",
+    "",
+    `Current absolute time: ${options.taskSpec.currentTimeIso}`,
+    `User timezone: ${options.taskSpec.timezone}`,
+    `Route reason: ${options.taskSpec.routeReason}`,
+    `Recent conversation turns: ${formatConversationTurns(options.conversationTurns)}`,
+    `User goal: ${options.goal}`,
   ].join("\n");
 }

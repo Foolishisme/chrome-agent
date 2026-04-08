@@ -93,13 +93,14 @@ export const queryRefinementSchema = z.object({
 });
 
 export const taskRouteSchema = z.object({
-  taskType: z.union([z.literal("commerce_search"), z.literal("public_research")]),
+  taskType: z.union([z.literal("direct_answer"), z.literal("commerce_search"), z.literal("public_research")]),
   reason: z.string().min(1),
 });
 
 export const nextToolSelectionSchema = z.object({
   toolName: z.union([
     z.literal("compileTaskSpec"),
+    z.literal("finalizeDirectAnswer"),
     z.literal("openSearchResults"),
     z.literal("collectCommerceCandidates"),
     z.literal("collectResearchCandidates"),

@@ -37,12 +37,12 @@ function createConversationTurns(): ConversationTurn[] {
       answerSummary: "黄金近期波动上行。",
       answerMarkdown: "## 结论\n黄金近期波动上行。",
       timeline: createTurnTimeline("Gold trend timeline"),
-      savedAt: Date.now() - 5000,
+      savedAt: Date.now() - 5_000,
     },
     {
       turnId: 2,
       sessionId: "session-2",
-      goal: "黄金是否与近期战争有关",
+      goal: "黄金是否与近期战争有关？",
       answerSummary: "战争是避险情绪因素之一。",
       answerMarkdown: "## 结论\n战争是避险情绪因素之一。",
       timeline: createTurnTimeline("War factor timeline"),
@@ -58,7 +58,7 @@ function createRunningState(): SessionPublicState {
     conversationTurns: createConversationTurns(),
     availableConversations: conversationSummaries,
     sessionId: "session-running",
-    goal: "黄金是否与近期战争有关",
+    goal: "黄金是否与近期战争有关？",
     status: "running",
     currentStep: 1,
     currentStepId: "collectResearchCandidates",
@@ -95,7 +95,7 @@ function createArtifactState(): SessionPublicState {
     conversationTurns: createConversationTurns(),
     availableConversations: conversationSummaries,
     sessionId: "session-artifact",
-    goal: "黄金是否与近期战争有关",
+    goal: "黄金是否与近期战争有关？",
     status: "done",
     currentStep: 4,
     plan: [],
@@ -135,7 +135,7 @@ function createInlineState(): SessionPublicState {
     conversationTurns: createConversationTurns(),
     availableConversations: conversationSummaries,
     sessionId: "session-inline",
-    goal: "黄金是否与近期战争有关",
+    goal: "黄金是否与近期战争有关？",
     status: "done",
     currentStep: 4,
     plan: [],
@@ -165,6 +165,47 @@ function createInlineState(): SessionPublicState {
   };
 }
 
+function createFailedState(): SessionPublicState {
+  return {
+    conversationId: "conversation-1",
+    conversationTitle: "近期黄金",
+    conversationTurns: createConversationTurns(),
+    availableConversations: conversationSummaries,
+    sessionId: "session-failed",
+    goal: "Will source reading fail?",
+    status: "error",
+    currentStep: 3,
+    currentStepId: "readResearchSourceFacts",
+    currentTool: "readResearchSourceFacts",
+    stepSummary: "Source reading failed.",
+    plan: [],
+    items: [],
+    logs: [],
+    timeline: [
+      {
+        step: 3,
+        status: "error",
+        stepSummary: "Source reading failed.",
+        timestamp: Date.now(),
+      },
+    ],
+    error: "Source reading failed.",
+    updatedAt: Date.now(),
+    finalResult: {
+      outputMode: "inline",
+      status: "failed",
+      summary: "Source reading failed.",
+      markdown: "## 结论\nSource reading failed.",
+      keyResults: [],
+      completedSteps: [],
+      remainingOrFailedSteps: ["readResearchSourceFacts"],
+      errorsOrBlockers: ["Source reading failed."],
+      artifacts: [],
+      suggestedNextAction: "",
+    },
+  };
+}
+
 async function loadSidepanel() {
   vi.resetModules();
   await import("../src/sidepanel/index");
@@ -180,6 +221,7 @@ describe("sidepanel result actions", () => {
     timeline: [],
     updatedAt: Date.now(),
   };
+
   const rolledBackState: SessionPublicState = {
     ...createInlineState(),
     finalResult: {
@@ -241,9 +283,11 @@ describe("sidepanel result actions", () => {
 
     return { ok: true };
   });
+
   const addListener = vi.fn((listener: (message: RuntimeMessage) => void) => {
     onRuntimeMessage = listener;
   });
+
   const createObjectURL = vi.fn(() => "blob:artifact");
   const revokeObjectURL = vi.fn();
   let anchorClickSpy: ReturnType<typeof vi.spyOn>;
@@ -292,17 +336,17 @@ describe("sidepanel result actions", () => {
 
     expect(document.getElementById("start-button")).not.toBeNull();
     expect(document.getElementById("stop-button")).toBeNull();
-    expect(document.getElementById("retry-button")).toBeNull();
     expect(document.getElementById("copy-result-button")).toBeNull();
     expect(document.querySelectorAll("details.section-details")).toHaveLength(1);
     expect(document.body.textContent).toContain("当前会话");
     expect(document.body.textContent).toContain("新建会话");
+
     const goalInput = document.getElementById("goal-input") as HTMLTextAreaElement | null;
     expect(goalInput?.value).toBe("");
     expect(goalInput?.getAttribute("placeholder")).toBe("你想知道什么");
   });
 
-  it("shows live execution trace before a final result exists", async () => {
+  it("shows timeline instead of runtime status while running", async () => {
     await loadSidepanel();
     onRuntimeMessage?.({
       type: "SESSION_UPDATE",
@@ -311,41 +355,52 @@ describe("sidepanel result actions", () => {
 
     expect(document.getElementById("start-button")).toBeNull();
     expect(document.getElementById("stop-button")).not.toBeNull();
-    expect(document.getElementById("retry-button")).toBeNull();
     expect(document.getElementById("copy-result-button")).toBeNull();
     expect(document.body.textContent).toContain("Collecting source candidates.");
     expect(document.body.textContent).toContain("Gold trend timeline");
-
-    const conversationThread = document.querySelector(".conversation-thread");
-    const goalInput = document.getElementById("goal-input");
-    expect(conversationThread).not.toBeNull();
-    expect(goalInput).not.toBeNull();
-    expect(conversationThread?.compareDocumentPosition(goalInput as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-    const openDetails = Array.from(document.querySelectorAll("details.debug-detail[open]"));
-    expect(openDetails.length).toBeGreaterThan(0);
+    expect(document.querySelectorAll("section.section")).toHaveLength(2);
+    expect((document.getElementById("create-conversation-button") as HTMLButtonElement | null)?.disabled).toBe(true);
+    expect(document.querySelector(".status-grid")).toBeNull();
   });
 
-  it("renders a default copy action and copies the final markdown", async () => {
+  it("keeps inline success in the conversation stream without a duplicate results panel", async () => {
     await loadSidepanel();
     onRuntimeMessage?.({
       type: "SESSION_UPDATE",
       payload: createInlineState(),
     });
 
-    const button = document.getElementById("copy-result-button");
-    expect(button).not.toBeNull();
-    expect(document.getElementById("retry-button")).toBeNull();
+    expect(document.getElementById("copy-result-button")).toBeNull();
     expect(document.getElementById("stop-button")).toBeNull();
     expect(document.getElementById("start-button")).not.toBeNull();
+    expect(document.querySelectorAll("details.section-details")).toHaveLength(1);
+    expect(document.querySelectorAll("section.section")).toHaveLength(1);
+    expect(document.querySelector("[data-copy-turn-id='2']")).not.toBeNull();
+  });
 
-    const runtimeSection = document.querySelectorAll("details.section-details")[1] as HTMLDetailsElement | undefined;
-    expect(runtimeSection?.open).toBe(false);
+  it("shows runtime status when the session fails", async () => {
+    await loadSidepanel();
+    onRuntimeMessage?.({
+      type: "SESSION_UPDATE",
+      payload: createFailedState(),
+    });
 
-    (button as HTMLButtonElement).click();
+    expect(document.querySelectorAll("section.section")).toHaveLength(2);
+    expect(document.querySelector(".status-grid")).not.toBeNull();
+    expect(document.body.textContent).toContain("Source reading failed.");
+  });
+
+  it("copies a historical turn from the shared conversation stream", async () => {
+    requestStatePayload = createInlineState();
+    await loadSidepanel();
+
+    const turnCopyButton = document.querySelector("[data-copy-turn-id='1']");
+    expect(turnCopyButton).not.toBeNull();
+
+    (turnCopyButton as HTMLButtonElement).click();
 
     await vi.waitFor(() => {
-      expect(clipboardWriteText).toHaveBeenCalledWith("## Summary\nCollected a usable result.");
+      expect(clipboardWriteText).toHaveBeenCalledWith(createConversationTurns()[0]!.answerMarkdown);
     });
   });
 
@@ -362,7 +417,7 @@ describe("sidepanel result actions", () => {
     (toggleButton as HTMLButtonElement).click();
 
     await vi.waitFor(() => {
-      expect(document.body.textContent).toContain("黄金是否与近期战争有关");
+      expect(document.body.textContent).toContain("黄金是否与近期战争有关？");
       expect(document.querySelector("[data-rollback-turn-id='1']")).not.toBeNull();
     });
 
@@ -382,18 +437,17 @@ describe("sidepanel result actions", () => {
     });
   });
 
-  it("renders document artifact actions and triggers download from a collapsible card", async () => {
+  it("renders document artifact actions and triggers download for artifact output", async () => {
     await loadSidepanel();
     onRuntimeMessage?.({
       type: "SESSION_UPDATE",
       payload: createArtifactState(),
     });
 
-    expect(document.getElementById("retry-button")).toBeNull();
     expect(document.getElementById("copy-result-button")).toBeNull();
 
-    const details = document.querySelector("details.source-card");
-    expect(details).not.toBeNull();
+    const sections = document.querySelectorAll("section.section");
+    expect(sections).toHaveLength(2);
 
     const downloadButton = document.querySelector("[data-download-artifact-index='0']");
     expect(downloadButton).not.toBeNull();

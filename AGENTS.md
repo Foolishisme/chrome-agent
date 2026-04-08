@@ -39,6 +39,7 @@
 
 - [doc/spec.md](./doc/spec.md)
 - [doc/constraints.md](./doc/constraints.md)
+- [doc/interaction.md](./doc/interaction.md)
 - [doc/plan.md](./doc/plan.md)
 - [doc/thread_bootstrap.md](./doc/thread_bootstrap.md)
 - [doc/status.md](./doc/status.md)
@@ -49,7 +50,7 @@
 说明：
 
 - `README.md` 是项目总览，不是设计真相
-- 设计、红线、路径、现状、验收以 `doc/` 下对应文档为准
+- 设计、红线、交互表达、路径、现状、验收以 `doc/` 下对应文档为准
 - `doc/pitfalls.md` 是专题复盘文档，用于记录已确认坑点、原因和处理方法
 - 线程实例优先查看 `doc/threads/active/`
 
@@ -71,6 +72,7 @@
 
 - 设计变化：更新 `doc/spec.md`
 - 红线变化：更新 `doc/constraints.md`
+- 产品表达或交互规则变化：更新 `doc/interaction.md`
 - 迁移路径变化：更新 `doc/plan.md`
 - 新线程启动上下文变化：更新 `doc/thread_bootstrap.md`
 - 代码现状变化：更新 `doc/status.md`
@@ -93,4 +95,4 @@
 - 这一步是否必须进入 `Runtime` 的最小执行循环
 - 这次变更应更新哪一份文档，而不是顺手改很多份
 
-Updated: 2026-04-03
+Updated: 2026-04-08

@@ -257,6 +257,11 @@ async function getOrPrepareSessionTab(taskType: TaskType): Promise<{ tab: chrome
     throw new RuntimeError("No active tab is available.", "NO_ACTIVE_TAB");
   }
 
+  if (taskType === "direct_answer") {
+    const readyTab = tab.status === "complete" ? tab : await waitForTabComplete(tab.id);
+    return { tab: readyTab, navigatedToHome: false, fromUrl: tab.url ?? undefined };
+  }
+
   if (taskType === "commerce_search") {
     if (isJdUrl(tab.url)) {
       const readyTab = await waitForTabComplete(tab.id);
@@ -516,14 +521,25 @@ export class BrowserAgentRuntime {
       this.stop();
     }
 
+    const currentTimeIso = new Date().toISOString();
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
     const conversationContext = (options.conversationTurns ?? [])
       .slice(-3)
-      .map((turn) => `Turn ${turn.turnId}\nUser: ${turn.goal}\nAssistant final result: ${turn.answerSummary}`)
+      .map(
+        (turn) =>
+          `Turn ${turn.turnId} | savedAt: ${new Date(turn.savedAt).toISOString()}\nUser: ${turn.goal}\nAssistant final result: ${turn.answerSummary}`,
+      )
       .join("\n\n");
 
     const route = await detectTaskTypeWithLiteModel(goal, {
+      conversationTurns: options.conversationTurns,
       classifyWithLiteModel: async (routeGoal) => {
-        const classified = await classifyTaskType(routeGoal, { conversationContext });
+        const classified = await classifyTaskType(routeGoal, {
+          conversationContext,
+          conversationTurns: options.conversationTurns,
+          currentTimeIso,
+          timezone,
+        });
         return {
           taskType: classified.taskType,
           reason: classified.reason,
@@ -543,7 +559,12 @@ export class BrowserAgentRuntime {
       conversationTurns: options.conversationTurns ?? [],
       plan: buildPlanSteps(taskType),
       toolHistory: [],
-      currentFacts: {},
+      currentFacts: {
+        routeReason: route.reason,
+        routeSource: route.source,
+        routeEvaluatedAt: currentTimeIso,
+        routeTimezone: timezone,
+      },
       stepHistory: [],
       logs: [],
       rawExtractedItems: [],
@@ -554,6 +575,9 @@ export class BrowserAgentRuntime {
       activeSourceIndex: 0,
       failures: [],
       liveStepSummary:
+        taskType === "direct_answer"
+          ? "Ready to answer directly."
+          :
         navigatedToHome && taskType === "commerce_search"
           ? "Detected a non-JD page and opened jd.com automatically."
           : navigatedToHome && taskType === "public_research"

@@ -207,3 +207,21 @@ Updated: 2026-04-03
   - `npm.cmd run build`: passed
 
 Updated: 2026-04-07
+
+## Recent UI Notes (2026-04-08)
+
+- The conversation panel now uses one shared turn stream for both current and historical conversations.
+  - Opening history only switches the underlying conversation data.
+  - The history drawer is now only for conversation management: list, create, switch, delete.
+- The input box is now treated as a local draft.
+  - It is no longer backfilled from the latest archived `goal`.
+  - The initial placeholder is “你想知道什么”.
+  - Later turns start blank by default.
+- Each archived turn now keeps its own execution timeline.
+  - Historical process is shown under that turn.
+  - The global runtime panel is only for the currently running session.
+- The results panel is now narrowed to current-turn actions.
+  - It no longer repeats the full final answer body if that body is already shown in the conversation stream.
+  - Historical turns keep their own copy action.
+
+Updated: 2026-04-08

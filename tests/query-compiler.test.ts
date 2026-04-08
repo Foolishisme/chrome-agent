@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { compilePublicResearchTask, compileSearchTask, detectOutputMode, detectTaskType, detectTaskTypeWithLiteModel } from "../src/background/query-compiler";
+import {
+  compileDirectAnswerTask,
+  compilePublicResearchTask,
+  compileSearchTask,
+  compileTaskSpec,
+  detectOutputMode,
+  detectTaskType,
+  detectTaskTypeWithLiteModel,
+} from "../src/background/query-compiler";
 
 describe("query compiler", () => {
   it("builds the search query directly from the lite model", async () => {
@@ -36,6 +44,10 @@ describe("query compiler", () => {
     expect(detectTaskType("帮我找 5000 元耳机")).toBe("commerce_search");
   });
 
+  it("routes stable knowledge questions to direct_answer", () => {
+    expect(detectTaskType("解释一下事件循环是什么")).toBe("direct_answer");
+  });
+
   it("prefers lite-model routing when available", async () => {
     const routed = await detectTaskTypeWithLiteModel("3000 的手机推荐", {
       classifyWithLiteModel: async () => ({
@@ -55,6 +67,25 @@ describe("query compiler", () => {
     const routed = await detectTaskTypeWithLiteModel("调研 Playwright 和 Selenium 的区别");
 
     expect(routed.taskType).toBe("public_research");
+    expect(routed.source).toBe("rule");
+  });
+
+  it("uses conversation turns when rule fallback handles a follow-up question", async () => {
+    const routed = await detectTaskTypeWithLiteModel("那第二点再展开一下", {
+      conversationTurns: [
+        {
+          turnId: 1,
+          sessionId: "session-1",
+          goal: "解释一下 Playwright 和 Selenium 的区别",
+          answerSummary: "Playwright 在现代浏览器支持和自动等待上更强。",
+          answerMarkdown: "summary",
+          timeline: [],
+          savedAt: Date.now(),
+        },
+      ],
+    });
+
+    expect(routed.taskType).toBe("direct_answer");
     expect(routed.source).toBe("rule");
   });
 
@@ -86,5 +117,42 @@ describe("query compiler", () => {
   it("only enables artifact output for explicit report/document requests", () => {
     expect(detectOutputMode("100元的电动牙刷推荐")).toBe("inline");
     expect(detectOutputMode("帮我生成一份电动牙刷选购报告")).toBe("artifact");
+  });
+
+  it("builds a direct-answer task spec from the recent conversation context", () => {
+    const task = compileDirectAnswerTask("那第二点再展开一下", {
+      routeReason: "recent conversation already contains enough evidence",
+      currentTimeIso: "2026-04-08T08:00:00.000Z",
+      timezone: "Asia/Shanghai",
+      conversationTurns: [
+        {
+          turnId: 1,
+          sessionId: "session-1",
+          goal: "解释一下 Playwright 和 Selenium 的区别",
+          answerSummary: "Playwright 在现代浏览器支持和自动等待上更强。",
+          answerMarkdown: "summary",
+          timeline: [],
+          savedAt: Date.now(),
+        },
+      ],
+    });
+
+    expect(task.taskType).toBe("direct_answer");
+    expect(task.routeReason).toContain("recent conversation");
+    expect(task.evidenceTurnCount).toBe(1);
+    expect(task.currentTimeIso).toBe("2026-04-08T08:00:00.000Z");
+    expect(task.timezone).toBe("Asia/Shanghai");
+  });
+
+  it("builds a two-step plan for direct answers", async () => {
+    const compiled = await compileTaskSpec("解释一下事件循环是什么", {
+      taskType: "direct_answer",
+      currentTimeIso: "2026-04-08T08:00:00.000Z",
+      timezone: "Asia/Shanghai",
+    });
+
+    expect(compiled.taskType).toBe("direct_answer");
+    expect(compiled.plan).toHaveLength(2);
+    expect(compiled.plan[1]?.allowedTools).toEqual(["finalizeDirectAnswer"]);
   });
 });

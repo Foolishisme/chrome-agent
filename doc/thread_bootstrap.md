@@ -15,9 +15,15 @@
 - `commerce_search`
 - `public_research`
 
+当前已拍板待落地的新增能力：
+
+- `direct_answer`
+  - 面向简单稳定知识问答、已搜索且证据充足后的追问，以及无需再开浏览器的直接回答
+
 ## 2. 必须先记住的规则
 
 - `LLM` 负责生成静态初始 plan、选择下一步 tool、更新 step 状态和最终汇总
+- 是否需要搜索由 `LLM` 在规划阶段结合当前绝对时间、用户目标和近期证据判断
 - `Tools` 负责提供可复用能力，并把脏活、局部恢复和 fallback 封装在内部
 - `Memory` 只保留结构化 plan、tool result、artifacts 和事实
 - `Runtime` 负责护栏、执行、持久化、停止与恢复，不再硬编码每个任务模块的固定 workflow
@@ -37,12 +43,13 @@
 ## 4. 新线程优先回答的问题
 
 1. 当前任务目标是什么
-2. 当前需要的静态初始 plan 是什么
-3. 哪些能力值得成为 `runtime-visible tool`
-4. 哪些步骤应留在 tool 内部
-5. 当前是否已有对应的线程实例位于 `doc/threads/active/`
-6. 当前 step 需要记什么结构化状态到 memory
-7. 这次变更应更新哪一份文档
+2. 当前目标是否其实可以 `direct_answer`
+3. 当前需要的静态初始 plan 是什么
+4. 哪些能力值得成为 `runtime-visible tool`
+5. 哪些步骤应留在 tool 内部
+6. 当前是否已有对应的线程实例位于 `doc/threads/active/`
+7. 当前 step 需要记什么结构化状态到 memory
+8. 这次变更应更新哪一份文档
 
 ## 5. 可直接复制给 agent 的提示
 

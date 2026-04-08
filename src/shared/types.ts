@@ -1,12 +1,13 @@
 export type PageType = "home" | "search" | "google_search" | "content" | "pdf" | "unknown";
 
-export type TaskType = "commerce_search" | "public_research";
+export type TaskType = "direct_answer" | "commerce_search" | "public_research";
 export type OutputMode = "inline" | "artifact";
 
 export type PlanStepStatus = "pending" | "running" | "succeeded" | "failed" | "blocked";
 
 export type ToolName =
   | "compileTaskSpec"
+  | "finalizeDirectAnswer"
   | "openSearchResults"
   | "collectCommerceCandidates"
   | "collectResearchCandidates"
@@ -223,7 +224,17 @@ export interface PublicResearchTaskSpec {
   sourceTargetCount: number;
 }
 
-export type TaskSpec = CommerceTaskSpec | PublicResearchTaskSpec;
+export interface DirectAnswerTaskSpec {
+  taskType: "direct_answer";
+  originalGoal: string;
+  outputMode?: OutputMode;
+  routeReason: string;
+  currentTimeIso: string;
+  timezone: string;
+  evidenceTurnCount: number;
+}
+
+export type TaskSpec = CommerceTaskSpec | PublicResearchTaskSpec | DirectAnswerTaskSpec;
 
 export interface SnapshotData {
   url: string;

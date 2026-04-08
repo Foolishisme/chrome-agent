@@ -126,3 +126,45 @@
 - 引入执行中动态改 plan
 - 先做长记忆泛化
 - 先做完整 `LLM` 可选工具通用化
+## 7. 2026-04-08 补充记录
+
+### 7.1 本轮补充结论
+
+- 连续对话前端已收口为一套统一会话流，不再让“历史会话”和“当前会话”各维护一套线程视图
+- 历史抽屉当前只负责：
+  - 查看会话列表
+  - 切换会话
+  - 新建会话
+  - 删除当前会话
+- 输入框当前按本地 draft 处理，不再被历史 `goal` 或 session state 自动回填
+- 每个 turn 现在都会保留自己的执行时间线，历史过程跟着 turn 走，不再依赖全局 runtime 面板
+
+### 7.2 UI 收口结果
+
+- `src/sidepanel/index.ts`
+  - 主对话区已经变成唯一的问答正文显示区
+  - `inline` 成功结果不再单独占用“结果”区，避免最新回答重复显示
+  - 历史 turn 和 live turn 都支持复制结果
+  - 当前运行中，底部展示的是执行时间线
+  - 失败 / 阻塞 / 停止时，底部展示的是运行状态和原因
+  - 运行中禁用了会话切换 / 新建 / 删除 / 回退，避免用户误判“切换后状态丢失”
+- `src/background/runtime-core.ts`
+  - 当前 turn 成功结束后，归档时会携带本轮 timeline
+- `src/background/session-archive.ts`
+  - conversation turn 已补 `timeline`
+  - 旧本地 turn 缺少 `timeline` 时回填为空数组
+
+### 7.3 本轮验证
+
+- `npx.cmd vitest run tests/sidepanel.test.ts tests/session-archive.test.ts`
+  - 2 个测试文件，8 个测试通过
+- `npm.cmd run build`
+  - 通过
+
+### 7.4 当前剩余边界
+
+- 会话相关中文文案目前仍有一部分在 sidepanel 内局部覆盖，尚未彻底统一回 `i18n`
+- 当前运行中不支持旁观其他会话，只做“禁切换”这条更稳的 demo 语义
+- `artifact` 模式仍保留独立结果区；若后续要把文档预览并回会话流，需要单独定规则
+
+Updated: 2026-04-08

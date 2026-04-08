@@ -5,6 +5,8 @@ import {
   detectSearchBlocker,
   ensureUsableSnapshotWithDialogRecovery,
   hasMatchingQuery,
+  isCommerceTask,
+  isResearchTask,
   needsSearchReopen,
   reopenSearchResults,
 } from "./helpers";
@@ -16,14 +18,20 @@ export const openSearchResultsTool: AgentToolDefinition = {
       throw new RuntimeError("Task spec is missing before search.", "TASK_SPEC_MISSING");
     }
 
-    const expectedSearchPage = context.memory.taskSpec.taskType === "commerce_search" ? "search" : "google_search";
+    if (!isCommerceTask(context.memory.taskSpec) && !isResearchTask(context.memory.taskSpec)) {
+      throw new RuntimeError("Open-search-results only supports commerce or public research tasks.", "INVALID_SEARCH_TASK");
+    }
+
+    const taskSpec = context.memory.taskSpec;
+
+    const expectedSearchPage = taskSpec.taskType === "commerce_search" ? "search" : "google_search";
     let snapshot = await ensureUsableSnapshotWithDialogRecovery(context, "Search page blocked before submission.");
 
-    if (snapshot.pageType === expectedSearchPage && hasMatchingQuery(snapshot, context.memory.taskSpec.searchQuery)) {
+    if (snapshot.pageType === expectedSearchPage && hasMatchingQuery(snapshot, taskSpec.searchQuery)) {
       context.memory.recoveryHint = undefined;
       context.memory.lastError = undefined;
       context.memory.nextIntent =
-        context.memory.taskSpec.taskType === "commerce_search"
+        taskSpec.taskType === "commerce_search"
           ? "Collect product candidates from the JD result page."
           : "Collect source candidates from the Google result page.";
 
@@ -45,13 +53,13 @@ export const openSearchResultsTool: AgentToolDefinition = {
 
     const action = {
       type: "NAVIGATE" as const,
-      url: buildSearchUrl(context.memory.taskSpec),
+      url: buildSearchUrl(taskSpec),
     };
     const result = await context.executeAction(
       action,
-      context.memory.taskSpec.taskType === "commerce_search"
-        ? `Open the JD search results for "${context.memory.taskSpec.searchQuery}".`
-        : `Open the Google search results for "${context.memory.taskSpec.searchQuery}".`,
+      taskSpec.taskType === "commerce_search"
+        ? `Open the JD search results for "${taskSpec.searchQuery}".`
+        : `Open the Google search results for "${taskSpec.searchQuery}".`,
     );
     await context.settleAfterAction(action);
     snapshot = await ensureUsableSnapshotWithDialogRecovery(context, "Search results page stayed blocked after navigation.");
@@ -65,7 +73,7 @@ export const openSearchResultsTool: AgentToolDefinition = {
     context.memory.unresolvedIssues = [];
     context.memory.runtimeMeta.recoveryCount = 0;
     context.memory.nextIntent =
-      context.memory.taskSpec.taskType === "commerce_search"
+      taskSpec.taskType === "commerce_search"
         ? "Collect product candidates from the JD result page."
         : "Collect source candidates from the Google result page.";
     context.memory.recoveryHint = undefined;
@@ -83,7 +91,7 @@ export const openSearchResultsTool: AgentToolDefinition = {
     if (needsSearchReopen(snapshot, expectedSearchPage)) {
       const reopenedSnapshot = await reopenSearchResults(
         context,
-        context.memory.taskSpec,
+        taskSpec,
         `Received ${snapshot.pageType} after opening search results.`,
       );
       if (reopenedSnapshot) {
@@ -129,10 +137,10 @@ export const openSearchResultsTool: AgentToolDefinition = {
       });
     }
 
-    const searchQueryMatched = hasMatchingQuery(snapshot, context.memory.taskSpec.searchQuery);
+    const searchQueryMatched = hasMatchingQuery(snapshot, taskSpec.searchQuery);
     return createToolResult({
       status: searchQueryMatched ? "success" : "partial",
-      summary: `Search page ready: ${context.memory.taskSpec.searchQuery}`,
+      summary: `Search page ready: ${taskSpec.searchQuery}`,
       outputs: {
         url: snapshot.url,
         pageType: snapshot.pageType,

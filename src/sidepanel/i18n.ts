@@ -91,7 +91,7 @@ type MessageBundle = {
   emptyValue: string;
   budgetLow: string;
   budgetHealthy: string;
-  taskTypeLabels: Record<"commerce_search" | "public_research", string>;
+  taskTypeLabels: Record<"direct_answer" | "commerce_search" | "public_research", string>;
   statusLabels: Record<RuntimeStatus, string>;
   stepStatusLabels: Record<PlanStepStatus, string>;
 };
@@ -186,6 +186,7 @@ const messages: Record<Locale, MessageBundle> = {
     budgetLow: "接近上限",
     budgetHealthy: "正常",
     taskTypeLabels: {
+      direct_answer: "直接回答",
       commerce_search: "商城调研",
       public_research: "公网调研",
     },
@@ -292,6 +293,7 @@ const messages: Record<Locale, MessageBundle> = {
     budgetLow: "Low",
     budgetHealthy: "Healthy",
     taskTypeLabels: {
+      direct_answer: "Direct Answer",
       commerce_search: "Commerce Research",
       public_research: "Public Research",
     },

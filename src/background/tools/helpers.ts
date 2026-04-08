@@ -4,6 +4,8 @@ import type {
   ActionResult,
   AgentAction,
   CommerceTaskSpec,
+  ConversationTurn,
+  DirectAnswerTaskSpec,
   ExtractedItem,
   FinalResult,
   OutputMode,
@@ -60,6 +62,10 @@ export function buildSearchUrl(taskSpec: TaskSpec) {
     url.searchParams.set("keyword", taskSpec.searchQuery);
     url.searchParams.set("enc", "utf-8");
     return url.toString();
+  }
+
+  if (taskSpec.taskType !== "public_research") {
+    throw new RuntimeError("Direct answers do not have a search URL.", "DIRECT_ANSWER_NO_SEARCH_URL");
   }
 
   const url = new URL("https://www.google.com/search");
@@ -328,6 +334,37 @@ export function buildCommerceFinalMarkdown(goal: string, items: ExtractedItem[],
   return lines.join("\n");
 }
 
+export function buildDirectAnswerFallbackSummary(goal: string, conversationTurns: ConversationTurn[]) {
+  if (conversationTurns.length === 0) {
+    return `当前未能稳定生成“${goal}”的直接回答，建议改为搜索模式以获取更可靠信息。`;
+  }
+
+  return `基于当前会话已有信息，已直接整理“${goal}”的回答。`;
+}
+
+export function buildDirectAnswerFinalMarkdown(goal: string, conversationTurns: ConversationTurn[], summary: string) {
+  const recentTurns = conversationTurns.slice(-3);
+  const lines = [
+    "## 直接回答",
+    summary,
+    "",
+    "## 当前问题",
+    goal,
+  ];
+
+  if (recentTurns.length > 0) {
+    lines.push("", "## 当前会话依据");
+    lines.push(
+      ...recentTurns.map(
+        (turn, index) =>
+          `- ${index + 1}. ${new Date(turn.savedAt).toISOString()} | 用户：${turn.goal} | 回答摘要：${turn.answerSummary}`,
+      ),
+    );
+  }
+
+  return lines.join("\n");
+}
+
 export function dedupeIssues(issues: string[]) {
   return Array.from(new Set(issues.filter(Boolean)));
 }
@@ -468,14 +505,31 @@ export function isResearchTask(taskSpec: TaskSpec | undefined): taskSpec is Publ
   return !!taskSpec && taskSpec.taskType === "public_research";
 }
 
-function createMarkdownArtifact(memory: SessionMemory, markdown: string, summary: string): ResultArtifact {
-  const isCommerce = memory.taskType === "commerce_search";
+export function isDirectAnswerTask(taskSpec: TaskSpec | undefined): taskSpec is DirectAnswerTaskSpec {
+  return !!taskSpec && taskSpec.taskType === "direct_answer";
+}
 
+function createMarkdownArtifact(memory: SessionMemory, markdown: string, summary: string): ResultArtifact {
   return {
-    id: isCommerce ? "commerce-result-markdown" : "research-result-markdown",
+    id:
+      memory.taskType === "commerce_search"
+        ? "commerce-result-markdown"
+        : memory.taskType === "public_research"
+          ? "research-result-markdown"
+          : "direct-answer-markdown",
     kind: "markdown",
-    title: isCommerce ? "Commerce Result Report" : "Research Result Report",
-    fileName: isCommerce ? "commerce-result.md" : "research-result.md",
+    title:
+      memory.taskType === "commerce_search"
+        ? "Commerce Result Report"
+        : memory.taskType === "public_research"
+          ? "Research Result Report"
+          : "Direct Answer",
+    fileName:
+      memory.taskType === "commerce_search"
+        ? "commerce-result.md"
+        : memory.taskType === "public_research"
+          ? "research-result.md"
+          : "direct-answer.md",
     mimeType: "text/markdown",
     content: markdown,
     summary,
@@ -527,13 +581,33 @@ export function buildFallbackFinalResult(
 ): FinalResult {
   const resolvedStatus =
     status ??
-    (memory.taskType === "commerce_search"
+    (memory.taskType === "direct_answer"
+      ? memory.conversationTurns.length > 0
+        ? "partial"
+        : "failed"
+      : memory.taskType === "commerce_search"
       ? memory.extractedItems.length > 0
         ? "partial"
         : "failed"
       : memory.researchSources.length > 0
         ? "partial"
         : "failed");
+
+  if (memory.taskType === "direct_answer") {
+    const markdown = buildDirectAnswerFinalMarkdown(memory.goal, memory.conversationTurns, reason);
+    const keyResults = memory.conversationTurns
+      .slice(-3)
+      .map((turn) => turn.answerSummary)
+      .filter(Boolean)
+      .slice(0, 3);
+    return createFinalResult(memory, {
+      status: resolvedStatus,
+      summary: reason,
+      markdown,
+      keyResults,
+      errorsOrBlockers: [...memory.unresolvedIssues, ...memory.failures.map((failure) => failure.message), reason],
+    });
+  }
 
   if (memory.taskType === "commerce_search") {
     const markdown = buildCommerceFinalMarkdown(memory.goal, memory.extractedItems, reason);

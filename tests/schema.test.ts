@@ -28,6 +28,15 @@ describe("schema contracts", () => {
     expect(parsed.toolName).toBe("readResearchSourceFacts");
   });
 
+  it("accepts the direct-answer finalization tool", () => {
+    const parsed = nextToolSelectionSchema.parse({
+      toolName: "finalizeDirectAnswer",
+      reason: "The task has enough context and only needs a direct final answer.",
+    });
+
+    expect(parsed.toolName).toBe("finalizeDirectAnswer");
+  });
+
   it("accepts the final-result synthesis payload", () => {
     const parsed = finalResultSynthesisSchema.parse({
       summary: "Collected enough results.",

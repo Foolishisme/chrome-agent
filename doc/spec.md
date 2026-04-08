@@ -39,6 +39,8 @@
 
 当前已跑通的任务模块：
 
+- `direct_answer`
+  - 面向简单稳定知识问答、已搜索且证据充足后的追问，以及无需再开浏览器的直接回答
 - `commerce_search`
   - 京东站内商品搜索、提取、过滤和推荐输出
 - `public_research`
@@ -60,6 +62,7 @@ LLM 负责：
 
 - 理解用户目标
 - 生成静态初始 plan
+- 判断当前问题是否需要搜索，还是可以直接回答
 - 在多工具 step 内选择下一步 tool
 - 生成最终输出
 - 对第一页 research 候选做轻量重排序
@@ -141,6 +144,7 @@ Runtime 不负责：
 当前只保留一套 canonical tool：
 
 - `compileTaskSpec`
+- `finalizeDirectAnswer`
 - `openSearchResults`
 - `collectCommerceCandidates`
 - `collectResearchCandidates`
@@ -244,7 +248,19 @@ Runtime 不负责：
 
 ## 8. 当前模块主链
 
-### 8.1 commerce_search
+### 8.1 direct_answer
+
+固定序列：
+
+`compileTaskSpec -> finalizeDirectAnswer`
+
+其中：
+
+- `compileTaskSpec` 负责判断当前问题是否可直接回答
+- 直接回答适用于简单稳定知识、当前 conversation 已有充分证据，或已完成搜索后的证据内追问
+- 若问题明显依赖最新外部事实、当前时间或现势状态，则不走 `direct_answer`
+
+### 8.2 commerce_search
 
 固定序列：
 
@@ -254,7 +270,7 @@ Runtime 不负责：
 
 - `collectCommerceCandidates` 内部处理提取、过滤和必要 scroll recovery
 
-### 8.2 public_research
+### 8.3 public_research
 
 固定序列：
 

@@ -1,6 +1,15 @@
 import { KNOWN_CATEGORY_KEYWORDS, RESEARCH_INTENT_KEYWORDS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
-import type { CommerceTaskSpec, OutputMode, PlanStep, PublicResearchTaskSpec, TaskSpec, TaskType } from "../shared/types";
+import type {
+  CommerceTaskSpec,
+  ConversationTurn,
+  DirectAnswerTaskSpec,
+  OutputMode,
+  PlanStep,
+  PublicResearchTaskSpec,
+  TaskSpec,
+  TaskType,
+} from "../shared/types";
 
 interface RefineSearchQuery {
   (goal: string): Promise<{ searchQuery: string; reason: string } | undefined>;
@@ -45,6 +54,28 @@ function hasResearchSignal(goal: string) {
   return RESEARCH_INTENT_KEYWORDS.some((keyword) => goal.includes(keyword));
 }
 
+function hasFreshnessSignal(goal: string) {
+  return /今天|今日|昨天|明天|现在|当前|目前|最近|最新|实时|本周|本月|今年|刚刚|现任|股价|价格|汇率|天气|比分|新闻|CEO|ceo|president/i.test(
+    goal,
+  );
+}
+
+function hasFollowUpSignal(goal: string) {
+  return /刚才|上面|前面|继续|再说|再讲|展开|详细说|详细讲|补充|这个|那个|第一点|第二点|上一轮|刚刚提到/.test(goal);
+}
+
+function hasConversationEvidence(turns: ConversationTurn[] | undefined) {
+  return (turns?.length ?? 0) > 0;
+}
+
+function resolveCurrentTimeIso(currentTimeIso?: string) {
+  return currentTimeIso ?? new Date().toISOString();
+}
+
+function resolveTimezone(timezone?: string) {
+  return timezone ?? (Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+}
+
 function buildFallbackResearchQuery(goal: string) {
   const normalized = goal
     .replace(/[，。！？、；：]/g, " ")
@@ -71,6 +102,15 @@ export function detectOutputMode(goal: string): OutputMode {
 }
 
 export function detectTaskType(goal: string): TaskType {
+  return detectTaskTypeWithContext(goal);
+}
+
+export function detectTaskTypeWithContext(
+  goal: string,
+  options: {
+    conversationTurns?: ConversationTurn[];
+  } = {},
+): TaskType {
   if (hasResearchSignal(goal) && !hasCommerceCategory(goal)) {
     return "public_research";
   }
@@ -79,13 +119,22 @@ export function detectTaskType(goal: string): TaskType {
     return "commerce_search";
   }
 
-  return "public_research";
+  if (hasFreshnessSignal(goal)) {
+    return "public_research";
+  }
+
+  if (hasConversationEvidence(options.conversationTurns) && hasFollowUpSignal(goal)) {
+    return "direct_answer";
+  }
+
+  return "direct_answer";
 }
 
 export async function detectTaskTypeWithLiteModel(
   goal: string,
   options: {
     classifyWithLiteModel?: ClassifyTaskType;
+    conversationTurns?: ConversationTurn[];
   } = {},
 ): Promise<{ taskType: TaskType; reason: string; source: "llm-lite" | "rule" }> {
   if (options.classifyWithLiteModel) {
@@ -100,7 +149,9 @@ export async function detectTaskTypeWithLiteModel(
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "lite model routing failed";
-      const taskType = detectTaskType(goal);
+      const taskType = detectTaskTypeWithContext(goal, {
+        conversationTurns: options.conversationTurns,
+      });
       return {
         taskType,
         reason: `lite model unavailable, fallback to rule-based routing: ${message}`,
@@ -109,7 +160,9 @@ export async function detectTaskTypeWithLiteModel(
     }
   }
 
-  const taskType = detectTaskType(goal);
+  const taskType = detectTaskTypeWithContext(goal, {
+    conversationTurns: options.conversationTurns,
+  });
   return {
     taskType,
     reason: "lite model unavailable, fallback to rule-based routing",
@@ -118,6 +171,25 @@ export async function detectTaskTypeWithLiteModel(
 }
 
 export function buildPlanSteps(taskType: TaskType): PlanStep[] {
+  if (taskType === "direct_answer") {
+    return [
+      {
+        stepId: "compile-task-spec",
+        goal: "判断当前问题是否可以直接回答并整理上下文",
+        allowedTools: ["compileTaskSpec"],
+        successCriteria: ["确定 direct_answer 路由", "整理当前时间和历史对话证据"],
+        status: "pending",
+      },
+      {
+        stepId: "finalize-direct-answer",
+        goal: "直接生成最终回答",
+        allowedTools: ["finalizeDirectAnswer"],
+        successCriteria: ["输出结构化最终结果"],
+        status: "pending",
+      },
+    ];
+  }
+
   if (taskType === "commerce_search") {
     return [
       {
@@ -188,6 +260,30 @@ export function buildPlanSteps(taskType: TaskType): PlanStep[] {
       status: "pending",
     },
   ];
+}
+
+export function compileDirectAnswerTask(
+  goal: string,
+  options: {
+    routeReason?: string;
+    currentTimeIso?: string;
+    timezone?: string;
+    conversationTurns?: ConversationTurn[];
+  } = {},
+): DirectAnswerTaskSpec {
+  const evidenceTurns = options.conversationTurns?.slice(-3) ?? [];
+
+  return {
+    taskType: "direct_answer",
+    originalGoal: goal,
+    outputMode: detectOutputMode(goal),
+    routeReason:
+      options.routeReason ??
+      (evidenceTurns.length > 0 ? "recent conversation already contains enough context for a direct answer" : "the goal looks like stable knowledge or a simple direct answer request"),
+    currentTimeIso: resolveCurrentTimeIso(options.currentTimeIso),
+    timezone: resolveTimezone(options.timezone),
+    evidenceTurnCount: evidenceTurns.length,
+  };
 }
 
 export async function compileCommerceTask(
@@ -288,6 +384,10 @@ export async function compileTaskSpec(
     refineCommerceWithLiteModel?: RefineSearchQuery;
     refineResearchWithLiteModel?: RefineSearchQuery;
     conversationContext?: string;
+    conversationTurns?: ConversationTurn[];
+    routeReason?: string;
+    currentTimeIso?: string;
+    timezone?: string;
   } = {},
 ): Promise<{
   taskType: TaskType;
@@ -300,8 +400,23 @@ export async function compileTaskSpec(
       await detectTaskTypeWithLiteModel(goal, {
         classifyWithLiteModel: async (routeGoal) =>
           options.classifyTaskTypeWithLiteModel?.(routeGoal),
+        conversationTurns: options.conversationTurns,
       })
     ).taskType;
+
+  if (taskType === "direct_answer") {
+    const taskSpec = compileDirectAnswerTask(goal, {
+      routeReason: options.routeReason,
+      currentTimeIso: options.currentTimeIso,
+      timezone: options.timezone,
+      conversationTurns: options.conversationTurns,
+    });
+    return {
+      taskType,
+      taskSpec,
+      plan: buildPlanSteps(taskType),
+    };
+  }
 
   if (taskType === "commerce_search") {
     const taskSpec = await compileCommerceTask(goal, {

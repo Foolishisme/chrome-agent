@@ -236,6 +236,10 @@ Updated: 2026-04-08
   - 会话主视图已改为统一 turn 流展示，历史抽屉只保留会话列表与管理动作
   - 当前轮输入框固定在会话流底部，不再被上一轮问题自动回填
   - 会话管理按钮与回退/删除操作已固定为中文文案
+  - 结果区已收口为当前轮操作区，不再重复渲染完整正文
+  - 历史 turn 已恢复单独复制入口
+  - `inline` 成功结果不再占用独立结果区；底部只在运行中显示时间线，在失败/阻塞/停止时显示状态
+  - 历史过程通过各自 turn 下的时间线查看
 - `src/background/session-archive.ts`
   - 归档 turn 已补充 `timeline`
   - 旧 turn 若不存在 `timeline`，回填为空数组，避免前端读取旧本地数据时报错
@@ -245,6 +249,18 @@ Updated: 2026-04-08
 ### 8.14 本轮最小验证
 
 - `npx.cmd vitest run tests/sidepanel.test.ts tests/session-archive.test.ts`
-  - 2 个测试文件，6 个测试通过
+  - 2 个测试文件，8 个测试通过
 - `npm.cmd run build`
   - 通过
+
+### 8.15 2026-04-08 Direct Answer 设计拍板
+
+- `doc/spec.md / constraints.md / plan.md / acceptance.md / thread_bootstrap.md`
+  - 已将 `direct_answer` 收口为正式 task module
+  - 已拍板是否需要搜索由 `LLM` 在规划阶段判断
+  - 已拍板路由判断输入需显式包含当前绝对时间、用户时区、近期证据摘要与证据获取时间
+  - 已拍板简单稳定知识、或当前 conversation 已有充分证据时应优先直接回答
+- 当前代码仍未落地：
+  - `src/shared/types.ts` 仍只定义 `commerce_search / public_research`
+  - `src/background/query-compiler.ts` 仍默认把非购物问题路由到 `public_research`
+  - 当前路由链路尚未显式注入当前时间与证据时间

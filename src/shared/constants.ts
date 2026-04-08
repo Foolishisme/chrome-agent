@@ -25,6 +25,7 @@ export const DEFAULT_LOCALE = "zh-CN" as const;
 export const SENSITIVE_KEYWORDS = ["购物车", "购买", "立即购买", "提交订单", "去结算", "支付"];
 
 export const DEFAULT_PLANS: Record<TaskType, string[]> = {
+  direct_answer: ["解析问题并判断可直接回答", "直接生成最终回答"],
   commerce_search: ["解析任务并生成搜索词", "执行站内搜索", "提取搜索结果", "过滤候选商品", "统一汇总并输出结果"],
   public_research: ["解析调研任务并生成查询词", "打开 Google 搜索结果页", "提取第一页自然结果", "筛选候选来源", "逐页读取来源并提取事实", "统一汇总并输出结果"],
 };
@@ -47,4 +48,4 @@ export const KNOWN_CATEGORY_KEYWORDS = [
   "洗衣机",
 ];
 
-export const RESEARCH_INTENT_KEYWORDS = ["调研", "研究", "总结", "资料", "来源", "背景", "区别", "优缺点", "是什么"];
+export const RESEARCH_INTENT_KEYWORDS = ["调研", "研究", "查一下", "查一查", "搜一下", "搜索", "资料", "来源", "背景", "新闻", "公开信息"];

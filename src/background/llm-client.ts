@@ -3,6 +3,8 @@ import { LIMITS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
 import { finalResultSynthesisSchema, nextToolSelectionSchema, queryRefinementSchema, researchCandidateReorderSchema, taskRouteSchema } from "../shared/schema";
 import type {
+  ConversationTurn,
+  DirectAnswerTaskSpec,
   ExtractedItem,
   PlanStep,
   PublicResearchTaskSpec,
@@ -13,6 +15,7 @@ import type {
   ToolName,
 } from "../shared/types";
 import {
+  buildDirectAnswerPrompt,
   buildFinalResultPrompt,
   buildCommerceQueryRefinementPrompt,
   buildNextToolPrompt,
@@ -386,6 +389,9 @@ export async function classifyTaskType(
   goal: string,
   options: RequestOptions & {
     conversationContext?: string;
+    conversationTurns?: ConversationTurn[];
+    currentTimeIso?: string;
+    timezone?: string;
   } = {},
 ): Promise<{
   taskType: TaskType;
@@ -394,7 +400,12 @@ export async function classifyTaskType(
   provider: ProviderName;
 }> {
   const response = await requestProviderJson(
-    buildTaskRoutePromptWithContext(goal, options.conversationContext),
+    buildTaskRoutePromptWithContext(goal, {
+      conversationContext: options.conversationContext,
+      conversationTurns: options.conversationTurns,
+      currentTimeIso: options.currentTimeIso,
+      timezone: options.timezone,
+    }),
     taskRouteSchema,
     "simple",
     options,
@@ -441,6 +452,28 @@ export async function generateFinalResult(
 ) {
   const response = await requestProviderJson(
     buildFinalResultPrompt(input),
+    finalResultSynthesisSchema,
+    "default",
+    options,
+  );
+
+  return {
+    ...response.data,
+    model: response.model,
+    provider: response.provider,
+  };
+}
+
+export async function generateDirectAnswerResult(
+  input: {
+    goal: string;
+    taskSpec: DirectAnswerTaskSpec;
+    conversationTurns?: ConversationTurn[];
+  },
+  options: RequestOptions = {},
+) {
+  const response = await requestProviderJson(
+    buildDirectAnswerPrompt(input),
     finalResultSynthesisSchema,
     "default",
     options,
