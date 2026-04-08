@@ -12,7 +12,14 @@ function createStoredState(sessionId: string, goal: string, summary: string): Se
     plan: [],
     items: [],
     logs: [],
-    timeline: [],
+    timeline: [
+      {
+        step: 1,
+        status: "done",
+        stepSummary: `${goal} timeline`,
+        timestamp: Date.now(),
+      },
+    ],
     updatedAt: Date.now(),
     finalResult: {
       outputMode: "inline",
@@ -100,6 +107,8 @@ describe("session archive", () => {
     expect(current.conversationTurns).toHaveLength(2);
     expect(current.conversationTurns?.[0]?.turnId).toBe(1);
     expect(current.conversationTurns?.[1]?.turnId).toBe(2);
+    expect(current.conversationTurns?.[0]?.timeline).toHaveLength(1);
+    expect(current.conversationTurns?.[1]?.timeline?.[0]?.stepSummary).toContain("timeline");
     expect(current.finalResult?.summary).toBe("战争是避险情绪因素之一。");
 
     const rolledBack = await rollbackConversationState(conversation.conversationId, 1, emptyFallback);

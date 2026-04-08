@@ -17,6 +17,17 @@ const conversationSummaries: ConversationSummary[] = [
   },
 ];
 
+function createTurnTimeline(stepSummary: string) {
+  return [
+    {
+      step: 1,
+      status: "done" as const,
+      stepSummary,
+      timestamp: Date.now(),
+    },
+  ];
+}
+
 function createConversationTurns(): ConversationTurn[] {
   return [
     {
@@ -25,6 +36,7 @@ function createConversationTurns(): ConversationTurn[] {
       goal: "近期黄金",
       answerSummary: "黄金近期波动上行。",
       answerMarkdown: "## 结论\n黄金近期波动上行。",
+      timeline: createTurnTimeline("Gold trend timeline"),
       savedAt: Date.now() - 5000,
     },
     {
@@ -33,6 +45,7 @@ function createConversationTurns(): ConversationTurn[] {
       goal: "黄金是否与近期战争有关",
       answerSummary: "战争是避险情绪因素之一。",
       answerMarkdown: "## 结论\n战争是避险情绪因素之一。",
+      timeline: createTurnTimeline("War factor timeline"),
       savedAt: Date.now(),
     },
   ];
@@ -282,6 +295,11 @@ describe("sidepanel result actions", () => {
     expect(document.getElementById("retry-button")).toBeNull();
     expect(document.getElementById("copy-result-button")).toBeNull();
     expect(document.querySelectorAll("details.section-details")).toHaveLength(1);
+    expect(document.body.textContent).toContain("当前会话");
+    expect(document.body.textContent).toContain("新建会话");
+    const goalInput = document.getElementById("goal-input") as HTMLTextAreaElement | null;
+    expect(goalInput?.value).toBe("");
+    expect(goalInput?.getAttribute("placeholder")).toBe("你想知道什么");
   });
 
   it("shows live execution trace before a final result exists", async () => {
@@ -296,6 +314,13 @@ describe("sidepanel result actions", () => {
     expect(document.getElementById("retry-button")).toBeNull();
     expect(document.getElementById("copy-result-button")).toBeNull();
     expect(document.body.textContent).toContain("Collecting source candidates.");
+    expect(document.body.textContent).toContain("Gold trend timeline");
+
+    const conversationThread = document.querySelector(".conversation-thread");
+    const goalInput = document.getElementById("goal-input");
+    expect(conversationThread).not.toBeNull();
+    expect(goalInput).not.toBeNull();
+    expect(conversationThread?.compareDocumentPosition(goalInput as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     const openDetails = Array.from(document.querySelectorAll("details.debug-detail[open]"));
     expect(openDetails.length).toBeGreaterThan(0);
@@ -327,6 +352,9 @@ describe("sidepanel result actions", () => {
   it("opens the conversation drawer and rolls back to a selected turn", async () => {
     requestStatePayload = createInlineState();
     await loadSidepanel();
+
+    expect(document.querySelector("[data-rollback-turn-id='1']")).not.toBeNull();
+    expect((document.getElementById("goal-input") as HTMLTextAreaElement | null)?.value).toBe("");
 
     const toggleButton = document.getElementById("toggle-conversations-button");
     expect(toggleButton).not.toBeNull();

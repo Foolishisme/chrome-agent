@@ -180,6 +180,7 @@ export async function saveSuccessfulSessionArchive(
   options: {
     conversationId?: string;
     conversationTitle?: string;
+    timeline?: SessionPublicState["timeline"];
   } = {},
 ) {
   if (!state.sessionId || !state.goal || !state.finalResult || state.finalResult.status !== "success") {
@@ -198,6 +199,7 @@ export async function saveSuccessfulSessionArchive(
     goal: state.goal,
     answerSummary: state.finalResult.summary,
     answerMarkdown: getAnswerMarkdown(state),
+    timeline: [...(options.timeline ?? state.timeline ?? [])],
     savedAt: Date.now(),
     state: {
       ...state,
@@ -264,7 +266,12 @@ export async function deleteConversation(conversationId: string) {
 }
 
 export function toConversationTurns(archive: StoredConversationArchive | undefined): ConversationTurn[] {
-  return archive?.turns.map(({ state: _state, ...turn }) => turn) ?? [];
+  return (
+    archive?.turns.map(({ state: _state, timeline, ...turn }) => ({
+      ...turn,
+      timeline: timeline ?? [],
+    })) ?? []
+  );
 }
 
 export function buildSessionStateFromConversation(
@@ -304,7 +311,7 @@ export async function loadConversationState(conversationId: string, fallbackStat
 }
 
 export async function createConversationState(fallbackState: SessionPublicState) {
-  const archive = await createConversation();
+  const archive = await createConversation("新会话");
   const summaries = await listConversationSummaries();
   return buildSessionStateFromConversation(archive, summaries, fallbackState);
 }

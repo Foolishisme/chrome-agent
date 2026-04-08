@@ -109,10 +109,27 @@ body {
   border: 1px solid rgba(120, 93, 66, 0.12);
 }
 
+.conversation-drawer-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: #7a4a1b;
+}
+
 .conversation-drawer-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.conversation-drawer-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.conversation-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .conversation-list-item {
@@ -165,6 +182,10 @@ body {
 
 .conversation-turn-assistant {
   background: #f8f6f1;
+}
+
+.conversation-turn-pair-live .conversation-turn-assistant {
+  border-color: rgba(31, 111, 120, 0.2);
 }
 
 .conversation-turn-head {

@@ -161,6 +161,7 @@ function buildCurrentConversationTurn(memory: SessionMemory): ConversationTurn |
     goal: memory.goal,
     answerSummary: memory.finalResult.summary,
     answerMarkdown,
+    timeline: memory.stepHistory.slice(),
     savedAt: Date.now(),
   };
 }
@@ -655,6 +656,7 @@ export class BrowserAgentRuntime {
       await saveSuccessfulSessionArchive(session.lastPublicState, {
         conversationId: session.memory.conversationId,
         conversationTitle: session.memory.conversationTitle,
+        timeline: session.memory.stepHistory,
       });
       this.lastPublicState = session.lastPublicState;
       if (this.activeSession === session) {

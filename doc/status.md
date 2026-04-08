@@ -229,3 +229,22 @@
 - 当前回退后 `turnId` 继续递增、不补位，但前端不显示内部 turn 编号
 
 Updated: 2026-04-08
+
+### 8.13 2026-04-08 Conversation UI 收口
+
+- `src/sidepanel/index.ts`
+  - 会话主视图已改为统一 turn 流展示，历史抽屉只保留会话列表与管理动作
+  - 当前轮输入框固定在会话流底部，不再被上一轮问题自动回填
+  - 会话管理按钮与回退/删除操作已固定为中文文案
+- `src/background/session-archive.ts`
+  - 归档 turn 已补充 `timeline`
+  - 旧 turn 若不存在 `timeline`，回填为空数组，避免前端读取旧本地数据时报错
+- `src/background/runtime-core.ts`
+  - 成功 turn 归档时会携带本轮执行时间线
+
+### 8.14 本轮最小验证
+
+- `npx.cmd vitest run tests/sidepanel.test.ts tests/session-archive.test.ts`
+  - 2 个测试文件，6 个测试通过
+- `npm.cmd run build`
+  - 通过

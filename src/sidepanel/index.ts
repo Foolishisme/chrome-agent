@@ -1,6 +1,6 @@
-import { DEFAULT_GOAL } from "../shared/constants";
 import type { SessionStateResponse } from "../shared/protocol";
 import type {
+  ConversationTurn,
   DebugLogEntry,
   PlanStep,
   ResultArtifact,
@@ -48,6 +48,27 @@ const archiveUiText = navigator.language.startsWith("zh")
       rollbackConversationFailed: "Failed to roll back the conversation.",
       untitledConversation: "Untitled Conversation",
     };
+const conversationInputPlaceholder = "你想知道什么";
+const emptyGoalNotice = "请先输入问题。";
+
+Object.assign(archiveUiText, {
+  currentConversation: "当前会话",
+  newConversation: "新建会话",
+  conversationHistoryEmpty: "还没有历史会话。",
+  conversationTurnsEmpty: "当前会话还没有历史内容。",
+  userTurn: "提问",
+  assistantTurn: "回答",
+  rollbackTurn: "回退到此轮",
+  deleteConversation: "删除会话",
+  createConversationReady: "已创建新会话。",
+  createConversationFailed: "创建新会话失败。",
+  deleteConversationReady: "已删除当前会话。",
+  deleteConversationFailed: "删除当前会话失败。",
+  selectConversationFailed: "切换历史会话失败。",
+  rollbackConversationReady: "已回退到选中轮次。",
+  rollbackConversationFailed: "回退会话失败。",
+  untitledConversation: "未命名会话",
+});
 
 let currentState: SessionPublicState = {
   status: "idle",
@@ -59,7 +80,7 @@ let currentState: SessionPublicState = {
   updatedAt: Date.now(),
 };
 
-let lastGoal = DEFAULT_GOAL;
+let draftGoal = "";
 let uiNotice = "";
 let uiNoticeTone: "info" | "error" = "info";
 let uiNoticeTimer: number | undefined;
@@ -391,6 +412,111 @@ function renderTimelineStep(step: StepRecord) {
   `;
 }
 
+function renderTimelineList(records: StepRecord[]) {
+  if (records.length === 0) {
+    return `<div class="muted">${escapeHtml(messages.timelineWaiting)}</div>`;
+  }
+
+  return `<div class="timeline">${records.map((record) => renderTimelineStep(record)).join("")}</div>`;
+}
+
+function renderConversationTurnTimeline(records: StepRecord[], open = false) {
+  if (records.length === 0) {
+    return "";
+  }
+
+  return renderNestedDetails(messages.timelineTitle, renderTimelineList(records), open);
+}
+
+function hasSavedTurnForSession(sessionId: string | undefined) {
+  if (!sessionId) {
+    return false;
+  }
+
+  return (currentState.conversationTurns ?? []).some((turn) => turn.sessionId === sessionId);
+}
+
+function renderSavedConversationTurn(turn: ConversationTurn) {
+  return `
+    <div class="conversation-turn-pair">
+      <div class="conversation-turn conversation-turn-user">
+        <div class="conversation-turn-head">
+          <span>${escapeHtml(archiveUiText.userTurn)}</span>
+          ${
+            currentState.conversationId
+              ? `
+                <button
+                  type="button"
+                  class="button-secondary action-button action-button-small"
+                  data-rollback-turn-id="${turn.turnId}"
+                >
+                  ${escapeHtml(archiveUiText.rollbackTurn)}
+                </button>
+              `
+              : ""
+          }
+        </div>
+        <div class="conversation-turn-body">${escapeHtml(turn.goal)}</div>
+      </div>
+      <div class="conversation-turn conversation-turn-assistant">
+        <div class="conversation-turn-head">
+          <span>${escapeHtml(archiveUiText.assistantTurn)}</span>
+        </div>
+        <div class="conversation-turn-body">
+          ${renderMarkdownBlock(turn.answerMarkdown)}
+          ${renderConversationTurnTimeline(turn.timeline)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderLiveConversationTurn() {
+  if (!currentState.goal || currentState.status === "idle" || hasSavedTurnForSession(currentState.sessionId)) {
+    return "";
+  }
+
+  const assistantBody = currentState.finalResult
+    ? renderMarkdownBlock(currentState.finalResult.markdown)
+    : `<p class="muted">${escapeHtml(getCurrentProgressText())}</p>`;
+
+  return `
+    <div class="conversation-turn-pair conversation-turn-pair-live">
+      <div class="conversation-turn conversation-turn-user">
+        <div class="conversation-turn-head">
+          <span>${escapeHtml(archiveUiText.userTurn)}</span>
+        </div>
+        <div class="conversation-turn-body">${escapeHtml(currentState.goal)}</div>
+      </div>
+      <div class="conversation-turn conversation-turn-assistant">
+        <div class="conversation-turn-head">
+          <span>${escapeHtml(archiveUiText.assistantTurn)}</span>
+        </div>
+        <div class="conversation-turn-body">
+          ${assistantBody}
+          ${renderConversationTurnTimeline(currentState.timeline, currentState.status === "running")}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderConversationThread() {
+  const savedTurns = currentState.conversationTurns ?? [];
+  const liveTurn = renderLiveConversationTurn();
+
+  if (savedTurns.length === 0 && !liveTurn) {
+    return `<div class="muted">${escapeHtml(archiveUiText.conversationTurnsEmpty)}</div>`;
+  }
+
+  return `
+    <div class="conversation-thread">
+      ${savedTurns.map((turn) => renderSavedConversationTurn(turn)).join("")}
+      ${liveTurn}
+    </div>
+  `;
+}
+
 function renderConversationSection() {
   const actionButton =
     currentState.status === "running"
@@ -414,42 +540,6 @@ function renderConversationSection() {
           )
           .join("")
       : `<div class="muted">${escapeHtml(archiveUiText.conversationHistoryEmpty)}</div>`;
-  const conversationTurns =
-    (currentState.conversationTurns?.length ?? 0) > 0
-      ? currentState.conversationTurns
-          ?.map(
-            (turn) => `
-              <div class="conversation-turn-pair">
-                <div class="conversation-turn conversation-turn-user">
-                  <div class="conversation-turn-head">
-                    <span>${escapeHtml(archiveUiText.userTurn)}</span>
-                    ${
-                      currentState.conversationId
-                        ? `
-                          <button
-                            type="button"
-                            class="button-secondary action-button action-button-small"
-                            data-rollback-turn-id="${turn.turnId}"
-                          >
-                            ${escapeHtml(archiveUiText.rollbackTurn)}
-                          </button>
-                        `
-                        : ""
-                    }
-                  </div>
-                  <div class="conversation-turn-body">${escapeHtml(turn.goal)}</div>
-                </div>
-                <div class="conversation-turn conversation-turn-assistant">
-                  <div class="conversation-turn-head">
-                    <span>${escapeHtml(archiveUiText.assistantTurn)}</span>
-                  </div>
-                  <div class="conversation-turn-body">${renderMarkdownBlock(turn.answerMarkdown)}</div>
-                </div>
-              </div>
-            `,
-          )
-          .join("") ?? ""
-      : `<div class="muted">${escapeHtml(archiveUiText.conversationTurnsEmpty)}</div>`;
 
   return `
     <div class="controls">
@@ -465,30 +555,29 @@ function renderConversationSection() {
         showConversationDrawer
           ? `
             <div class="conversation-drawer">
+              <div class="conversation-drawer-head">历史会话</div>
               <div class="conversation-drawer-list">${conversationHistory}</div>
-              <div class="conversation-drawer-thread">
+              <div class="conversation-drawer-actions">
                 ${
                   currentState.conversationId
                     ? `
-                      <div class="result-toolbar">
-                        <button
-                          id="delete-conversation-button"
-                          type="button"
-                          class="button-secondary action-button"
-                        >
-                          ${escapeHtml(archiveUiText.deleteConversation)}
-                        </button>
-                      </div>
+                      <button
+                        id="delete-conversation-button"
+                        type="button"
+                        class="button-secondary action-button"
+                      >
+                        ${escapeHtml(archiveUiText.deleteConversation)}
+                      </button>
                     `
                     : ""
                 }
-                ${conversationTurns}
               </div>
             </div>
           `
           : ""
       }
-      <textarea id="goal-input" class="goal-input" placeholder="${escapeHtml(messages.goalPlaceholder)}">${escapeHtml(lastGoal)}</textarea>
+      ${renderConversationThread()}
+      <textarea id="goal-input" class="goal-input" placeholder="${escapeHtml(conversationInputPlaceholder)}">${escapeHtml(draftGoal)}</textarea>
       <div class="button-row">
         ${actionButton}
       </div>
@@ -551,7 +640,7 @@ function renderRuntimeSection() {
     <div class="debug-grid" style="margin-bottom: 12px;">
       <div class="debug-card" style="grid-column: 1 / -1;">
         <span class="status-label">${escapeHtml(messages.userGoal)}</span>
-        <div class="debug-value">${escapeHtml(currentState.goal ?? lastGoal)}</div>
+        <div class="debug-value">${escapeHtml(currentState.goal ?? draftGoal)}</div>
       </div>
       <div class="debug-card" style="grid-column: 1 / -1;">
         <span class="status-label">${escapeHtml(messages.assistantSummary)}</span>
@@ -864,9 +953,19 @@ function render() {
   const createConversationButton = document.getElementById("create-conversation-button");
   const deleteConversationButton = document.getElementById("delete-conversation-button");
 
+  goalInput?.addEventListener("input", () => {
+    draftGoal = goalInput.value;
+  });
+
   startButton?.addEventListener("click", async () => {
-    const goal = goalInput?.value.trim() || DEFAULT_GOAL;
-    lastGoal = goal;
+    const goal = goalInput?.value.trim() ?? "";
+    if (!goal) {
+      setUiNotice(emptyGoalNotice, "error");
+      return;
+    }
+
+    draftGoal = "";
+    render();
     await chrome.runtime.sendMessage({
       type: "START_SESSION",
       goal,
@@ -906,7 +1005,7 @@ function render() {
       if (response.payload) {
         applyState(response.payload);
       }
-      lastGoal = DEFAULT_GOAL;
+      draftGoal = "";
       setUiNotice(archiveUiText.createConversationReady);
     } catch {
       setUiNotice(archiveUiText.createConversationFailed, "error");
@@ -1081,9 +1180,6 @@ function applyState(next: SessionPublicState | undefined) {
     conversationId: hasConversationId ? next.conversationId : currentState.conversationId,
     conversationTitle: hasConversationTitle ? next.conversationTitle : currentState.conversationTitle,
   };
-  if (next.goal) {
-    lastGoal = next.goal;
-  }
   render();
 }
 

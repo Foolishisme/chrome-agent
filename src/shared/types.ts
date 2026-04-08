@@ -276,6 +276,7 @@ export interface ConversationTurn {
   goal: string;
   answerSummary: string;
   answerMarkdown: string;
+  timeline: StepRecord[];
   savedAt: number;
 }
 
