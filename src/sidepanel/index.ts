@@ -90,11 +90,14 @@ let showConversationDrawer = false;
 const browserAgentWindow = window as Window & typeof globalThis & { __browserAgentElapsedTicker?: number };
 let pendingSessionSubmission:
   | {
+      requestId: number;
       goal: string;
       searchPreference: SearchPreference;
       startedAt: number;
     }
   | undefined;
+let nextPendingSessionRequestId = 0;
+const cancelledPendingSessionRequestIds = new Set<number>();
 const optimisticAssistantProgressText = navigator.language.startsWith("zh")
   ? "正在理解问题并启动会话..."
   : "Understanding the question and starting the session...";
@@ -695,9 +698,9 @@ function renderConversationSection() {
   const conversationActionsDisabled = currentState.status === "running" || Boolean(pendingSessionSubmission);
   const activeSearchPreference = getActiveSearchPreference();
   const actionButton =
-    currentState.status === "running"
+    currentState.status === "running" || Boolean(pendingSessionSubmission)
       ? `<button id="stop-button" type="button" class="goal-input-action-button goal-input-stop-button" title="${escapeHtml(messages.stop)}">⏹</button>`
-      : `<button id="start-button" type="button" class="goal-input-action-button goal-input-start-button" title="${escapeHtml(messages.start)}" ${pendingSessionSubmission ? "disabled" : ""}>↑</button>`;
+      : `<button id="start-button" type="button" class="goal-input-action-button goal-input-start-button" title="${escapeHtml(messages.start)}">↑</button>`;
   const currentConversationTitle = currentState.conversationTitle ?? archiveUiText.untitledConversation;
   const conversationHistory =
     (currentState.availableConversations ?? []).length > 0
@@ -1145,16 +1148,12 @@ function render() {
 
   goalInput?.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (pendingSessionSubmission) {
+      if (currentState.status === "running" || pendingSessionSubmission) {
         return;
       }
 
-      if (currentState.status === "running") {
-        stopButton?.click();
-      } else {
-        startButton?.click();
-      }
+      e.preventDefault();
+      startButton?.click();
     }
   });
 
@@ -1170,7 +1169,9 @@ function render() {
       return;
     }
 
+    const requestId = ++nextPendingSessionRequestId;
     pendingSessionSubmission = {
+      requestId,
       goal,
       searchPreference: draftSearchPreference,
       startedAt: Date.now(),
@@ -1189,10 +1190,18 @@ function render() {
         throw new Error(response.error || "启动会话失败");
       }
 
+      if (cancelledPendingSessionRequestIds.delete(requestId)) {
+        return;
+      }
+
       if (response.payload) {
         applyState(response.payload);
       }
     } catch (error) {
+      if (cancelledPendingSessionRequestIds.delete(requestId)) {
+        return;
+      }
+
       pendingSessionSubmission = undefined;
       draftGoal = goal;
       render();
@@ -1201,6 +1210,12 @@ function render() {
   });
 
   stopButton?.addEventListener("click", async () => {
+    if (pendingSessionSubmission) {
+      cancelledPendingSessionRequestIds.add(pendingSessionSubmission.requestId);
+      pendingSessionSubmission = undefined;
+      render();
+    }
+
     await chrome.runtime.sendMessage({
       type: "STOP_SESSION",
     });

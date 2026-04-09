@@ -414,7 +414,8 @@ describe("sidepanel result actions", () => {
 
     expect(document.body.textContent).toContain("为什么南京叫南京");
     expect(document.body.textContent).toMatch(/正在理解问题并启动会话|Understanding the question and starting the session/);
-    expect((document.getElementById("start-button") as HTMLButtonElement | null)?.disabled).toBe(true);
+    expect(document.getElementById("start-button")).toBeNull();
+    expect(document.getElementById("stop-button")).not.toBeNull();
 
     resolveStartSession?.({
       ok: true,
@@ -438,14 +439,13 @@ describe("sidepanel result actions", () => {
     expect(document.getElementById("copy-result-button")).toBeNull();
     expect(document.body.textContent).toContain("Collecting source candidates.");
     expect(document.body.textContent).toContain("Gold trend timeline");
-    expect(document.querySelectorAll("section.section")).toHaveLength(2);
+    expect(document.querySelectorAll("section.section")).toHaveLength(1);
     expect((document.getElementById("create-conversation-button") as HTMLButtonElement | null)?.disabled).toBe(true);
     expect(document.querySelector(".status-grid")).toBeNull();
-    const elapsedLabels = Array.from(document.querySelectorAll("[data-timeline-elapsed]")).map((node) => node.textContent ?? "");
-    expect(elapsedLabels.some((label) => label.includes(":"))).toBe(true);
+    expect(document.body.textContent).toMatch(/思考中|Thinking/);
   });
 
-  it("submits stop when Enter is pressed during a running session", async () => {
+  it("does not submit stop when Enter is pressed during a running session", async () => {
     await loadSidepanel();
     onRuntimeMessage?.({
       type: "SESSION_UPDATE",
@@ -457,10 +457,8 @@ describe("sidepanel result actions", () => {
 
     goalInput!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
 
-    await vi.waitFor(() => {
-      expect(sendMessage).toHaveBeenCalledWith({
-        type: "STOP_SESSION",
-      });
+    expect(sendMessage).not.toHaveBeenCalledWith({
+      type: "STOP_SESSION",
     });
   });
 
@@ -477,12 +475,57 @@ describe("sidepanel result actions", () => {
     expect(document.querySelectorAll("details.section-details")).toHaveLength(1);
     expect(document.querySelectorAll("section.section")).toHaveLength(1);
     expect(document.querySelector("[data-copy-turn-id='2']")).not.toBeNull();
-    expect(
-      Array.from(document.querySelectorAll("[data-timeline-elapsed]")).some((node) => {
-        const label = node.textContent ?? "";
-        return label.includes("完成") || label.startsWith("Done in ");
-      }),
-    ).toBe(true);
+    expect(document.body.textContent).toMatch(/已思考|Thought for/);
+  });
+
+  it("allows cancelling while the optimistic startup state is pending", async () => {
+    let resolveStartSession:
+      | ((value: { ok: boolean; payload?: SessionPublicState; error?: string }) => void)
+      | undefined;
+
+    sendMessage.mockImplementation(async (message: { type: string; goal?: string; searchPreference?: string }) => {
+      if (message.type === "REQUEST_SESSION_STATE") {
+        return { ok: false };
+      }
+
+      if (message.type === "START_SESSION") {
+        return await new Promise<{ ok: boolean; payload?: SessionPublicState; error?: string }>((resolve) => {
+          resolveStartSession = resolve;
+        });
+      }
+
+      return { ok: true };
+    });
+
+    await loadSidepanel();
+
+    const goalInput = document.getElementById("goal-input") as HTMLTextAreaElement | null;
+    const startButton = document.getElementById("start-button") as HTMLButtonElement | null;
+
+    goalInput!.value = "为什么南京叫南京";
+    goalInput!.dispatchEvent(new Event("input"));
+    startButton!.click();
+
+    const stopButton = document.getElementById("stop-button") as HTMLButtonElement | null;
+    expect(stopButton).not.toBeNull();
+
+    stopButton!.click();
+
+    await vi.waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith({
+        type: "STOP_SESSION",
+      });
+      expect(document.getElementById("start-button")).not.toBeNull();
+    });
+
+    resolveStartSession?.({
+      ok: false,
+      error: "The session was stopped.",
+    });
+
+    await vi.waitFor(() => {
+      expect(document.body.textContent).not.toContain("启动会话失败");
+    });
   });
 
   it("shows runtime status when the session fails", async () => {
