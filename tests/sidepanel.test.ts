@@ -207,6 +207,54 @@ function createFailedState(): SessionPublicState {
   };
 }
 
+function createStoppedState(): SessionPublicState {
+  return {
+    conversationId: "conversation-1",
+    conversationTitle: "杩戞湡榛勯噾",
+    conversationTurns: createConversationTurns(),
+    availableConversations: conversationSummaries,
+    sessionId: "session-stopped",
+    goal: "Will source reading fail?",
+    status: "done",
+    currentStep: 2,
+    currentStepId: "filterResearchCandidates",
+    currentTool: "filterResearchCandidates",
+    stepSummary: "Session stopped.",
+    plan: [],
+    items: [],
+    logs: [],
+    timeline: [
+      {
+        step: 2,
+        status: "failed",
+        stepSummary: "Session stopped.",
+        timestamp: Date.now(),
+      },
+    ],
+    error: "The session was stopped before completion.",
+    updatedAt: Date.now(),
+    finalResult: {
+      outputMode: "inline",
+      status: "partial",
+      summary: "The session was stopped before completion.",
+      markdown: "## 结论\nThe session was stopped before completion.",
+      keyResults: [],
+      completedSteps: [],
+      remainingOrFailedSteps: ["filterResearchCandidates"],
+      errorsOrBlockers: ["The session was stopped before completion."],
+      artifacts: [],
+      suggestedNextAction: "",
+    },
+  };
+}
+
+function createRunningStateWithTransientError(): SessionPublicState {
+  return {
+    ...createRunningState(),
+    error: "Retrying after a transient read failure.",
+  };
+}
+
 async function loadSidepanel() {
   vi.resetModules();
   await import("../src/sidepanel/index");
@@ -538,6 +586,30 @@ describe("sidepanel result actions", () => {
     expect(document.querySelectorAll("section.section")).toHaveLength(2);
     expect(document.querySelector(".status-grid")).not.toBeNull();
     expect(document.body.textContent).toContain("Source reading failed.");
+  });
+
+  it("does not show runtime status when the user stops the session", async () => {
+    await loadSidepanel();
+    onRuntimeMessage?.({
+      type: "SESSION_UPDATE",
+      payload: createStoppedState(),
+    });
+
+    expect(document.querySelectorAll("section.section")).toHaveLength(1);
+    expect(document.querySelector(".status-grid")).toBeNull();
+    expect(document.body.textContent).toContain("The session was stopped before completion.");
+  });
+
+  it("does not show runtime status for transient tool errors while the session is still running", async () => {
+    await loadSidepanel();
+    onRuntimeMessage?.({
+      type: "SESSION_UPDATE",
+      payload: createRunningStateWithTransientError(),
+    });
+
+    expect(document.querySelectorAll("section.section")).toHaveLength(1);
+    expect(document.querySelector(".status-grid")).toBeNull();
+    expect(document.body.textContent).toContain("Retrying after a transient read failure.");
   });
 
   it("copies a historical turn from the shared conversation stream", async () => {

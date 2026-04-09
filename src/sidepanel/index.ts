@@ -837,11 +837,8 @@ function renderExecutionTrace(open: boolean) {
 }
 
 function hasFailureState() {
-  return (
-    currentState.status === "error" ||
-    Boolean(currentState.error) ||
-    Boolean(currentState.finalResult && currentState.finalResult.status !== "success")
-  );
+  const finalStatus = currentState.finalResult?.status;
+  return currentState.status === "error" || finalStatus === "failed" || finalStatus === "blocked";
 }
 
 function renderRuntimeSection() {
