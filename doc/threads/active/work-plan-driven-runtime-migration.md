@@ -5,8 +5,8 @@
 - Thread: `work-plan-driven-runtime-migration`
 - Status: `DOING`
 - Owner: `Codex + user`
-- Related taskModule: `commerce_search / public_research`
-- Updated: `2026-04-07`
+- Related taskModule: `direct_answer / commerce_search / public_research / browser_research`
+- Updated: `2026-04-09`
 
 ## 2. 本轮结论
 
@@ -167,4 +167,45 @@
 - 当前运行中不支持旁观其他会话，只做“禁切换”这条更稳的 demo 语义
 - `artifact` 模式仍保留独立结果区；若后续要把文档预览并回会话流，需要单独定规则
 
-Updated: 2026-04-08
+## 8. 2026-04-09 通用调研方向补充记录
+
+### 8.1 设计结论
+
+- 顶层继续保持三类方向：
+  - `direct_answer`
+  - `commerce_search`
+  - `browser_research`
+- `direct_answer` 继续作为单独的轻路由分支，不并入浏览器主链
+- `commerce_search` 暂时仍保留为独立垂直任务模块，不立即并入 `browser_research`
+- `browser_research` 当前先不做“四类齐上”，只先做：
+  - `site_overview`
+  - `multi_source_overview`
+- 当前 `public_research` 视为 `multi_source_overview` 的已实现代表，不急于先改名
+
+### 8.2 执行约束
+
+- “是否需要调研”和“进入哪种调研 mode”在 `compileTaskSpec` 一次性判断
+- 不拆成“先判要不要调研，再判 site / multi-source”的两次大判断
+- 站内多级跳转、附件跟进、文档下载与解析继续封在 tool 内部
+- 当前不新增独立 `download` runtime-visible tool
+
+### 8.3 下一步建议
+
+- 先保持现有 `public_research` 主链作为多站概况型 research
+- 下一阶段新增 `site_overview MVP`
+- `site_precise / multi_source_precise` 后置，等概况型主链稳定后再评估
+
+### 8.4 `site_overview MVP` 范围
+
+- 最小目标：
+  - 读取站点主页
+  - 读取主页直达的一跳高价值页面
+  - 输出粗粒度概况、来源列表和覆盖边界
+- 当前不做：
+  - 深层递归
+  - 下载型资料主链
+  - 精准字段确认
+- 最小停止条件：
+  - 达到 `pageReadLimit`
+  - 高价值候选耗尽
+  - 入口被登录墙 / 验证码 / 非网页资源阻断

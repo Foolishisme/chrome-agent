@@ -93,4 +93,15 @@
 5. `M1 - M6`
 6. `L1 - L8`
 
+## 8. 下一阶段预备验收
+
+| 编号 | 验收项 | 验证方式 | 当前状态 | 备注 |
+|---|---|---|---|---|
+| G1 | 顶层路由可一次性输出 `direct_answer / commerce_search / site_overview / multi_source_overview`，而不是先判“是否调研”再二次判 mode | `tests/query-compiler.test.ts` | NOT_RUN | 当前已支持 `direct_answer / commerce_search / public_research`，后续继续收口 |
+| G2 | `site_overview` MVP 可读取主页与前 `N` 个高价值页面并输出概况 | `tests/site-overview.test.ts` / 真机手测 | NOT_RUN | 下一阶段主目标 |
+| G3 | `site_overview` 结果会明确标注读取范围、覆盖边界与未覆盖区域 | `tests/sidepanel.test.ts` / 结果样例检查 | NOT_RUN | 不允许把概况型结果伪装成精确确认 |
+| G4 | 通用调研方向下，文档附件跟进、下载与解析仍保留在读取 tool 内部，不新增独立 `download` runtime-visible tool | 检查 `src/background/tools/` / `src/shared/types.ts` | NOT_RUN | 当前设计约束 |
+| G5 | `site_overview` 只在主页与一跳站内高价值页面范围内工作，不做深层递归 | `tests/site-overview.test.ts` | NOT_RUN | MVP 范围约束 |
+| G6 | `site_overview` 达到 `pageReadLimit`、候选耗尽或入口受阻时会停止，并返回正确的 `success / partial / blocked / failed` | `tests/site-overview.test.ts` / 真机手测 | NOT_RUN | 对齐已拍板 stop condition |
+
 Updated: 2026-04-09

@@ -46,6 +46,20 @@
 - `public_research`
   - Google 搜索、第一页来源筛选与重排序、逐页读取和调研汇总
 
+当前已拍板的更大任务家族方向：
+
+- `direct_answer`
+  - 非浏览器证据获取分支，面向无需继续开浏览器的直接回答
+- `browser_research`
+  - 广义网页调研家族，面向浏览器中的证据获取、页面读取与结果交付
+  - 当前已实现代表分支仍是 `public_research`
+  - 下一阶段优先收口两个概况型 mode：
+    - `site_overview`
+    - `multi_source_overview`
+  - `site_precise / multi_source_precise` 暂不进入主线
+- `commerce_search`
+  - 当前仍保留为独立垂直任务模块，不立即并入 `browser_research`
+
 当前不应假设：
 
 - 已支持执行中动态改写 plan
@@ -62,7 +76,8 @@ LLM 负责：
 
 - 理解用户目标
 - 生成静态初始 plan
-- 判断当前问题是否需要搜索，还是可以直接回答
+- 在 `compileTaskSpec` 阶段一次性判断当前目标应进入 `direct_answer / commerce_search / 当前或未来的 browser_research mode`
+- “是否需要调研”和“进入哪种调研 mode”在同一次路由内完成，不拆成两次独立大判断
 - 在多工具 step 内选择下一步 tool
 - 生成最终输出
 - 对第一页 research 候选做轻量重排序
@@ -83,6 +98,7 @@ Tools 负责：
 
 - 执行一个清晰能力边界内的工作
 - 封装局部恢复、滚动、重开、fallback
+- 在 research 任务内封装候选发现、站内跟进、附件读取、下载和解析等脏活
 - 返回统一高层 `ToolResult`
 
 Tools 不负责：
@@ -281,6 +297,98 @@ Runtime 不负责：
 
 - `collectResearchCandidates` 内部处理第一页提取、过滤和轻量重排序
 - `readResearchSourceFacts` 允许同一 step 重复执行，直到达到来源目标或候选耗尽
+
+### 8.4 browser_research（设计方向）
+
+广义网页调研的统一最小骨架为：
+
+`compileTaskSpec -> acquireCandidates -> readSourceFacts -> validateOrAggregate -> finalizeResult`
+
+其中：
+
+- `site_overview`
+  - 面向单站点概况型调研
+  - 最小目标是读取主页及前 `N` 个高价值页面，输出带覆盖边界的粗粒度概况
+- `multi_source_overview`
+  - 面向多站点概况型调研
+  - 当前由 `public_research` 作为已实现代表分支承接
+- `site_precise / multi_source_precise`
+  - 面向精确信息确认与字段提取
+  - 当前只作为后续方向，不进入主线承诺
+
+当前收口原则：
+
+- 不因为通用调研方向而立即新增一批 runtime-visible tool 名称
+- 当前优先复用 `collectResearchCandidates / readResearchSourceFacts / finalizeResearchResult`
+- 站内多级跳转、附件跟进、文档下载与解析优先放在 tool 内部，不暴露成 plan-visible 原子动作
+
+#### 8.4.1 `site_overview` MVP
+
+`site_overview` 的最小目标不是“完整理解整个站点”，而是：
+
+- 从一个明确站点入口开始
+- 读取主页与前 `N` 个高价值页面
+- 输出带来源和覆盖边界的粗粒度站点概况
+
+最小 `TaskSpec` 应至少包含：
+
+- `taskType = browser_research`
+- `researchMode = site_overview`
+- `entryUrl`
+- `targetDomain`
+- `pageReadLimit`
+- `candidateLimit`
+- `maxLinkDepth = 1`
+- `outputIntent = overview`
+
+当前默认约束：
+
+- `pageReadLimit` 默认控制在 `3-5`
+- `candidateLimit` 只覆盖主页直达的一跳候选
+- 只读站内 `http/https` 页面
+- 当前不承诺 PDF / Word / Excel / 下载型资料进入主链
+
+最小 `PlanStep` 模板为：
+
+1. `compileTaskSpec`
+2. `acquireCandidates`
+3. `readSourceFacts`
+4. `validateOrAggregate`
+5. `finalizeResult`
+
+各步完成标准：
+
+1. `compileTaskSpec`
+   - 已确认当前目标属于 `site_overview`
+   - 已拿到入口、域名范围、页数预算和输出意图
+2. `acquireCandidates`
+   - 已读取主页
+   - 已从主页直达链接中筛出前 `N` 个高价值页面候选
+3. `readSourceFacts`
+   - 已读取主页与若干候选页面正文
+   - 达到 `pageReadLimit` 或候选耗尽即结束
+4. `validateOrAggregate`
+   - 已形成可用于最终输出的主题摘要、来源列表和覆盖边界
+5. `finalizeResult`
+   - 已输出站点概况
+   - 已明确标出读取范围、未覆盖区域与不确定性
+
+`site_overview` 的最小停止条件：
+
+- `success`
+  - 已成功读取主页，且至少读取 `2` 个高价值页面，能够产出带来源的概况
+- `partial`
+  - 主页可读，但高价值页面不足、部分页面不可读，仍可产出有限概况
+- `blocked`
+  - 站点入口被登录、验证码、权限墙或非网页资源阻断，无法进入最小读取范围
+- `failed`
+  - 入口无效、同域候选为空，或在页数预算内没有拿到任何可读正文
+
+当前不允许把以下情况伪装成 `success`：
+
+- 只读了主页就输出“完整站点画像”
+- 只读到了导航标题，没有拿到正文
+- 页面明显被登录墙、验证码或下载型入口阻断
 
 ## 9. 最小护栏
 

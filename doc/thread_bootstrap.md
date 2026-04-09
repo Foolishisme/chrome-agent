@@ -23,10 +23,21 @@
 - `searchPreference = auto | prefer_search`
   - 只在边界不清时影响路由，不覆盖明确可直接回答的问题
 
+当前已拍板的下一阶段方向：
+
+- 顶层继续保持：
+  - `direct_answer`
+  - `commerce_search`
+  - `browser_research`
+- `browser_research` 当前先只计划两个概况型 mode：
+  - `site_overview`
+  - `multi_source_overview`
+- “是否需要调研”和“进入哪种调研 mode”在同一次路由中完成，不拆成两次大判断
+
 ## 2. 必须先记住的规则
 
 - `LLM` 负责生成静态初始 plan、选择下一步 tool、更新 step 状态和最终汇总
-- 是否需要搜索由 `LLM` 在规划阶段结合当前绝对时间、用户目标、近期证据和 `searchPreference` 判断
+- 是否需要调研以及进入哪种任务 mode，由 `LLM` 在规划阶段结合当前绝对时间、用户目标、近期证据和 `searchPreference` 一次性判断
 - `Tools` 负责提供可复用能力，并把脏活、局部恢复和 fallback 封装在内部
 - `Memory` 只保留结构化 plan、tool result、artifacts 和事实
 - `Runtime` 负责护栏、执行、持久化、停止与恢复，不再硬编码每个任务模块的固定 workflow
@@ -47,12 +58,16 @@
 
 1. 当前任务目标是什么
 2. 当前目标是否其实可以 `direct_answer`
-3. 当前需要的静态初始 plan 是什么
-4. 哪些能力值得成为 `runtime-visible tool`
-5. 哪些步骤应留在 tool 内部
-6. 当前是否已有对应的线程实例位于 `doc/threads/active/`
-7. 当前 step 需要记什么结构化状态到 memory
-8. 这次变更应更新哪一份文档
+3. 如果不是，当前属于：
+   - `commerce_search`
+   - `site_overview`
+   - `multi_source_overview`
+4. 当前需要的静态初始 plan 是什么
+5. 哪些能力值得成为 `runtime-visible tool`
+6. 哪些步骤应留在 tool 内部
+7. 当前是否已有对应的线程实例位于 `doc/threads/active/`
+8. 当前 step 需要记什么结构化状态到 memory
+9. 这次变更应更新哪一份文档
 
 ## 5. 可直接复制给 agent 的提示
 
@@ -72,6 +87,8 @@ LLM plan-driven tool orchestration
 - 无论成功失败，最终都必须输出 `success | partial | failed | blocked`
 - v1 先不做执行中复杂 plan 改写
 - 默认不把 raw DOM 动作直接暴露给 LLM
+- 当前通用调研方向先只做 `site_overview / multi_source_overview`
+- 站内多级跳转、附件跟进、文档下载与解析优先留在 tool 内部，不单独抽成下载 tool
 
 请先判断：
 1. 当前目标需要什么 plan

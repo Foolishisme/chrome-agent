@@ -18,6 +18,9 @@
 - 结果输出已收口为 `inline | artifact`
 - `public_research` 已在第一页过滤后增加轻量 research 候选重排序
 - 下一步优先做真机护栏验证、provider 联调和路由体验验证
+- 下一阶段的大方向已收口为：保留 `direct_answer / commerce_search`，并把广义网页调研收口为 `browser_research` 家族
+- `browser_research` 当前先只计划两个概况型 mode：`site_overview / multi_source_overview`
+- 下一步准备把 `site_overview MVP` 落成最小可执行主链：主页 + 一跳高价值页面 + 覆盖边界输出
 
 ## 3. Done
 
@@ -109,6 +112,8 @@
 - research 第一页候选重排序已落地，但尚缺“重排前后成功来源命中率”记录
 - 自动化真机扩展会话验证仍被浏览器扩展附着条件阻塞
 - `direct_answer / prefer_search` 已落地，但仍缺真机连续追问样本与误判样本记录
+- `browser_research` 当前仍只有 `public_research` 这一个已实现代表分支，`site_overview` 尚未落地
+- 精准型 research 尚未进入主线，当前不应高估“官网字段确认 / 文档名单抽取”的完成度
 
 ## 6. Rejected Paths
 
@@ -126,7 +131,8 @@
 3. 记录 research 第一页重排前后的成功来源命中率
 4. 做 Gemini / DeepSeek provider live request 联调确认
 5. 打通自动化真机扩展验证链路
-6. 根据新增真实失败模式决定是否继续细拆 tool 或扩展 PDF artifact
+6. 起草并落地 `site_overview MVP` 的最小 task spec / plan template / stop condition
+7. 根据新增真实失败模式决定是否继续细拆 tool、扩展精准型 research 或补 PDF artifact
 
 ## 8. 2026-04-08 补充
 
@@ -238,8 +244,6 @@
 - 当前历史会话列表仍是本地 demo 设施，没有登录、多端同步或数据库抽象
 - 当前回退后 `turnId` 继续递增、不补位，但前端不显示内部 turn 编号
 
-Updated: 2026-04-08
-
 ### 8.13 2026-04-08 Conversation UI 收口
 
 - `src/sidepanel/index.ts`
@@ -321,3 +325,34 @@ Updated: 2026-04-08
   - 2 个测试文件，20 个测试通过
 - `npm.cmd run build`
   - 通过
+
+### 8.20 2026-04-09 通用调研方向拍板
+
+- 顶层产品方向继续保持：
+  - `direct_answer`
+  - `commerce_search`
+  - `browser_research`
+- `browser_research` 当前先不做“四类齐上”，而是只先做两类概况型 mode：
+  - `site_overview`
+  - `multi_source_overview`
+- 当前 `public_research` 视为 `multi_source_overview` 的已实现代表，不急于先改名
+- “是否需要调研”和“属于哪种调研”在 `compileTaskSpec` 一次性完成，不拆成两次大判断
+- 站内多级跳转、附件跟进、文档下载与解析仍优先留在 tool 内部，不抽成独立下载 tool
+
+### 8.21 2026-04-09 `site_overview MVP` 最小范围
+
+- 当前 `site_overview MVP` 只承诺：
+  - 读取主页
+  - 读取主页直达的一跳高价值页面
+  - 输出粗粒度概况、来源列表和覆盖边界
+- 当前不承诺：
+  - 深层站内递归
+  - 下载型资料进入主链
+  - 精准字段确认
+- 最小停止条件已拍板为：
+  - 主页 + 若干高价值页面读完即停
+  - 达到 `pageReadLimit` 即停
+  - 候选耗尽即停
+  - 登录墙 / 验证码 / 入口不可读时返回 `partial / blocked`
+
+Updated: 2026-04-09
