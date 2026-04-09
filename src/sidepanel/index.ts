@@ -1,4 +1,4 @@
-import type { SessionStateResponse } from "../shared/protocol";
+import type { SessionStateResponse, StartSessionResponse } from "../shared/protocol";
 import type {
   ConversationTurn,
   DebugLogEntry,
@@ -87,9 +87,21 @@ let uiNotice = "";
 let uiNoticeTone: "info" | "error" = "info";
 let uiNoticeTimer: number | undefined;
 let showConversationDrawer = false;
+const browserAgentWindow = window as Window & typeof globalThis & { __browserAgentElapsedTicker?: number };
+let pendingSessionSubmission:
+  | {
+      goal: string;
+      searchPreference: SearchPreference;
+      startedAt: number;
+    }
+  | undefined;
+const optimisticAssistantProgressText = navigator.language.startsWith("zh")
+  ? "正在理解问题并启动会话..."
+  : "Understanding the question and starting the session...";
 
 function hasSessionActivity() {
   return (
+    Boolean(pendingSessionSubmission) ||
     currentState.status !== "idle" ||
     currentState.timeline.length > 0 ||
     currentState.logs.length > 0 ||
@@ -99,6 +111,10 @@ function hasSessionActivity() {
 }
 
 function getCurrentProgressText() {
+  if (pendingSessionSubmission && currentState.status === "idle") {
+    return optimisticAssistantProgressText;
+  }
+
   return currentState.error ?? currentState.stepSummary ?? currentState.finalResult?.summary ?? messages.assistantWaiting;
 }
 
@@ -125,6 +141,94 @@ function formatDuration(ms: number | undefined) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatCompactDuration(ms: number | undefined) {
+  if (ms === undefined) {
+    return messages.emptyValue;
+  }
+
+  const totalSeconds = Math.max(1, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes === 0) {
+    return navigator.language.startsWith("zh") ? `${totalSeconds}秒` : `${totalSeconds}s`;
+  }
+
+  if (navigator.language.startsWith("zh")) {
+    return seconds === 0 ? `${minutes}分` : `${minutes}分${seconds}秒`;
+  }
+
+  return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+}
+
+function getTimelineDurationMs(records: StepRecord[]) {
+  if (records.length === 0) {
+    return undefined;
+  }
+
+  const timestamps = records
+    .map((record) => record.timestamp)
+    .filter((timestamp) => Number.isFinite(timestamp))
+    .sort((left, right) => left - right);
+
+  if (timestamps.length === 0) {
+    return undefined;
+  }
+
+  return Math.max(1000, timestamps.at(-1)! - timestamps[0]!);
+}
+
+function getDisplayedElapsedMs() {
+  if (currentState.elapsedMs !== undefined) {
+    if (currentState.status !== "running") {
+      return currentState.elapsedMs;
+    }
+
+    return currentState.elapsedMs + Math.max(0, Date.now() - currentState.updatedAt);
+  }
+
+  return getTimelineDurationMs(currentState.timeline);
+}
+
+function formatTimelineElapsedLabel(elapsedMs: number | undefined, completed: boolean) {
+  if (elapsedMs === undefined) {
+    return "";
+  }
+
+  if (!completed) {
+    return formatDuration(elapsedMs);
+  }
+
+  const compact = formatCompactDuration(elapsedMs);
+  return navigator.language.startsWith("zh") ? `${compact}完成` : `Done in ${compact}`;
+}
+
+function syncLiveElapsedTicker() {
+  const ticker = browserAgentWindow.__browserAgentElapsedTicker;
+  const shouldRun = currentState.status === "running";
+
+  if (!shouldRun) {
+    if (ticker !== undefined) {
+      window.clearInterval(ticker);
+      delete browserAgentWindow.__browserAgentElapsedTicker;
+    }
+    return;
+  }
+
+  if (ticker !== undefined) {
+    return;
+  }
+
+  browserAgentWindow.__browserAgentElapsedTicker = window.setInterval(() => {
+    if (!app.isConnected || currentState.status !== "running") {
+      syncLiveElapsedTicker();
+      return;
+    }
+
+    render();
+  }, 1000);
 }
 
 function getFinalResultDisplayMarkdown() {
@@ -334,21 +438,37 @@ function renderMarkdownBlock(markdown: string | undefined) {
   return `<div class="markdown-output">${parts.join("")}</div>`;
 }
 
-function renderTopLevelSection(title: string, content: string, open = true) {
+function renderTopLevelSection(title: string, content: string, open = true, summaryMeta?: string) {
   return `
     <section class="section">
       <details class="section-details"${open ? " open" : ""}>
-        <summary class="section-summary"><h2>${escapeHtml(title)}</h2></summary>
+        <summary class="section-summary">
+          <div class="section-summary-content">
+            <h2>${escapeHtml(title)}</h2>
+            ${
+              summaryMeta
+                ? `<span class="summary-meta" data-timeline-elapsed="true">${escapeHtml(summaryMeta)}</span>`
+                : ""
+            }
+          </div>
+        </summary>
         <div class="section-body">${content}</div>
       </details>
     </section>
   `;
 }
 
-function renderNestedDetails(title: string, content: string, open = false) {
+function renderNestedDetails(title: string, content: string, open = false, summaryMeta?: string) {
   return `
     <details class="debug-detail"${open ? " open" : ""}>
-      <summary>${escapeHtml(title)}</summary>
+      <summary class="debug-detail-summary">
+        <span class="debug-detail-title">${escapeHtml(title)}</span>
+        ${
+          summaryMeta
+            ? `<span class="summary-meta" data-timeline-elapsed="true">${escapeHtml(summaryMeta)}</span>`
+            : ""
+        }
+      </summary>
       <div class="section-body">${content}</div>
     </details>
   `;
@@ -425,12 +545,28 @@ function renderTimelineList(records: StepRecord[]) {
   return `<div class="timeline">${records.map((record) => renderTimelineStep(record)).join("")}</div>`;
 }
 
-function renderConversationTurnTimeline(records: StepRecord[], open = false) {
-  if (records.length === 0) {
+function renderConversationTurnTimeline(records: StepRecord[], open = false, isRunning = false) {
+  if (records.length === 0 && !isRunning) {
     return "";
   }
 
-  return renderNestedDetails(messages.timelineTitle, renderTimelineList(records), open);
+  const durationMs = isRunning ? getDisplayedElapsedMs() : getTimelineDurationMs(records);
+  const compact = durationMs !== undefined ? formatCompactDuration(durationMs) : "";
+  let customizedTitle = "";
+  if (navigator.language.startsWith("zh")) {
+    customizedTitle = isRunning ? `思考中 ${compact}` : `已思考 ${compact}`;
+  } else {
+    customizedTitle = isRunning ? `Thinking ${compact}` : `Thought for ${compact}`;
+  }
+
+  return `
+    <details class="timeline-details"${open ? " open" : ""} style="margin-bottom: 12px;">
+      <summary style="cursor: pointer; color: #7b6e62; font-weight: 600; font-size: 12px; margin-bottom: 8px; display: list-item;">
+        <span>${escapeHtml(customizedTitle)}</span>
+      </summary>
+      <div class="section-body">${renderTimelineList(records)}</div>
+    </details>
+  `;
 }
 
 function hasSavedTurnForSession(sessionId: string | undefined) {
@@ -444,42 +580,44 @@ function hasSavedTurnForSession(sessionId: string | undefined) {
 function renderSavedConversationTurn(turn: ConversationTurn) {
   return `
     <div class="conversation-turn-pair">
-      <div class="conversation-turn conversation-turn-user">
-        <div class="conversation-turn-head">
-          <span>${escapeHtml(archiveUiText.userTurn)}</span>
+      <div class="conversation-turn-row conversation-turn-row-user">
+        <div class="conversation-turn conversation-turn-user">
           ${
             currentState.conversationId
               ? `
-                <button
-                  type="button"
-                  class="button-secondary action-button action-button-small"
-                  data-rollback-turn-id="${turn.turnId}"
-                  ${currentState.status === "running" ? "disabled" : ""}
-                >
-                  ${escapeHtml(archiveUiText.rollbackTurn)}
-                </button>
+                <div class="conversation-turn-user-actions">
+                  <button
+                    type="button"
+                    class="action-icon-button"
+                    title="${escapeHtml(archiveUiText.rollbackTurn)}"
+                    data-rollback-turn-id="${turn.turnId}"
+                    ${currentState.status === "running" ? "disabled" : ""}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                  </button>
+                </div>
               `
               : ""
           }
+          <div class="conversation-turn-body">${escapeHtml(turn.goal)}</div>
         </div>
-        <div class="conversation-turn-body">${escapeHtml(turn.goal)}</div>
       </div>
-      <div class="conversation-turn conversation-turn-assistant">
-        <div class="conversation-turn-head">
-          <span>${escapeHtml(archiveUiText.assistantTurn)}</span>
-          <span class="conversation-turn-actions">
+      <div class="conversation-turn-row conversation-turn-row-assistant">
+        <div class="conversation-turn conversation-turn-assistant">
+          <div class="conversation-turn-body">
+            ${renderConversationTurnTimeline(turn.timeline, false, false)}
+            ${renderMarkdownBlock(turn.answerMarkdown)}
+          </div>
+          <div class="conversation-turn-assistant-footer">
             <button
               type="button"
-              class="button-secondary action-button action-button-small"
+              class="action-icon-button"
+              title="${escapeHtml(messages.resultCopyButton)}"
               data-copy-turn-id="${turn.turnId}"
             >
-              ${escapeHtml(messages.resultCopyButton)}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
             </button>
-          </span>
-        </div>
-        <div class="conversation-turn-body">
-          ${renderMarkdownBlock(turn.answerMarkdown)}
-          ${renderConversationTurnTimeline(turn.timeline)}
+          </div>
         </div>
       </div>
     </div>
@@ -487,7 +625,10 @@ function renderSavedConversationTurn(turn: ConversationTurn) {
 }
 
 function renderLiveConversationTurn() {
-  if (!currentState.goal || currentState.status === "idle" || hasSavedTurnForSession(currentState.sessionId)) {
+  const liveGoal = currentState.goal ?? pendingSessionSubmission?.goal;
+  const hasOptimisticTurn = Boolean(pendingSessionSubmission) && currentState.status === "idle";
+
+  if (!liveGoal || (!hasOptimisticTurn && currentState.status === "idle") || hasSavedTurnForSession(currentState.sessionId)) {
     return "";
   }
 
@@ -498,34 +639,36 @@ function renderLiveConversationTurn() {
 
   return `
     <div class="conversation-turn-pair conversation-turn-pair-live">
-      <div class="conversation-turn conversation-turn-user">
-        <div class="conversation-turn-head">
-          <span>${escapeHtml(archiveUiText.userTurn)}</span>
+      <div class="conversation-turn-row conversation-turn-row-user">
+        <div class="conversation-turn conversation-turn-user">
+          <div class="conversation-turn-body">${escapeHtml(liveGoal)}</div>
         </div>
-        <div class="conversation-turn-body">${escapeHtml(currentState.goal)}</div>
       </div>
-      <div class="conversation-turn conversation-turn-assistant">
-        <div class="conversation-turn-head">
-          <span>${escapeHtml(archiveUiText.assistantTurn)}</span>
+      <div class="conversation-turn-row conversation-turn-row-assistant">
+        <div class="conversation-turn conversation-turn-assistant">
+          <div class="conversation-turn-body">
+            ${
+              currentState.finalResult
+                ? `${currentState.status === "running" ? renderConversationTurnTimeline(currentState.timeline, true, true) : renderConversationTurnTimeline(currentState.timeline, false, false)}${assistantBody}`
+                : `<div class="conversation-turn-body-pending">${renderConversationTurnTimeline(currentState.timeline, true, true)}${assistantBody}</div>`
+            }
+          </div>
           ${
             liveCopyText
               ? `
-                <span class="conversation-turn-actions">
+                <div class="conversation-turn-assistant-footer">
                   <button
                     type="button"
-                    class="button-secondary action-button action-button-small"
+                    class="action-icon-button"
+                    title="${escapeHtml(messages.resultCopyButton)}"
                     data-copy-live-result="true"
                   >
-                    ${escapeHtml(messages.resultCopyButton)}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                   </button>
-                </span>
+                </div>
               `
               : ""
           }
-        </div>
-        <div class="conversation-turn-body">
-          ${assistantBody}
-          ${currentState.status === "running" ? "" : renderConversationTurnTimeline(currentState.timeline)}
         </div>
       </div>
     </div>
@@ -549,12 +692,12 @@ function renderConversationThread() {
 }
 
 function renderConversationSection() {
-  const conversationActionsDisabled = currentState.status === "running";
+  const conversationActionsDisabled = currentState.status === "running" || Boolean(pendingSessionSubmission);
   const activeSearchPreference = getActiveSearchPreference();
   const actionButton =
     currentState.status === "running"
       ? `<button id="stop-button" type="button" class="goal-input-action-button goal-input-stop-button" title="${escapeHtml(messages.stop)}">⏹</button>`
-      : `<button id="start-button" type="button" class="goal-input-action-button goal-input-start-button" title="${escapeHtml(messages.start)}">↑</button>`;
+      : `<button id="start-button" type="button" class="goal-input-action-button goal-input-start-button" title="${escapeHtml(messages.start)}" ${pendingSessionSubmission ? "disabled" : ""}>↑</button>`;
   const currentConversationTitle = currentState.conversationTitle ?? archiveUiText.untitledConversation;
   const conversationHistory =
     (currentState.availableConversations ?? []).length > 0
@@ -682,7 +825,12 @@ function renderExecutionTrace(open: boolean) {
     return "";
   }
 
-  return renderNestedDetails(messages.timelineTitle, buildTimelineMarkup(), open);
+  return renderNestedDetails(
+    messages.timelineTitle,
+    buildTimelineMarkup(),
+    open,
+    formatTimelineElapsedLabel(getDisplayedElapsedMs(), currentState.status === "done"),
+  );
 }
 
 function hasFailureState() {
@@ -954,10 +1102,11 @@ function renderResultsSection() {
 }
 
 function render() {
+  syncLiveElapsedTicker();
+
   const showResultsSection =
     Boolean(currentState.finalResult) &&
     (currentState.finalResult?.outputMode === "artifact" || getDocumentArtifacts().length > 0);
-  const showTimelineSection = currentState.status === "running";
   const showRuntimeSection = hasFailureState();
 
   app.innerHTML = `
@@ -978,7 +1127,6 @@ function render() {
           `
           : ""
       }
-      ${showTimelineSection ? renderTopLevelSection(messages.timelineTitle, buildTimelineMarkup(), true) : ""}
       ${showRuntimeSection ? renderTopLevelSection(messages.runtimeStatusTitle, renderRuntimeSection(), true) : ""}
     </div>
   `;
@@ -998,7 +1146,13 @@ function render() {
   goalInput?.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (currentState.status !== "running") {
+      if (pendingSessionSubmission) {
+        return;
+      }
+
+      if (currentState.status === "running") {
+        stopButton?.click();
+      } else {
         startButton?.click();
       }
     }
@@ -1016,13 +1170,34 @@ function render() {
       return;
     }
 
-    draftGoal = "";
-    render();
-    await chrome.runtime.sendMessage({
-      type: "START_SESSION",
+    pendingSessionSubmission = {
       goal,
       searchPreference: draftSearchPreference,
-    });
+      startedAt: Date.now(),
+    };
+    draftGoal = "";
+    render();
+
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        type: "START_SESSION",
+        goal,
+        searchPreference: draftSearchPreference,
+      })) as StartSessionResponse;
+
+      if (!response.ok) {
+        throw new Error(response.error || "启动会话失败");
+      }
+
+      if (response.payload) {
+        applyState(response.payload);
+      }
+    } catch (error) {
+      pendingSessionSubmission = undefined;
+      draftGoal = goal;
+      render();
+      setUiNotice(error instanceof Error ? error.message : "启动会话失败", "error");
+    }
   });
 
   stopButton?.addEventListener("click", async () => {
@@ -1253,6 +1428,13 @@ function render() {
 function applyState(next: SessionPublicState | undefined) {
   if (!next) {
     return;
+  }
+
+  if (
+    pendingSessionSubmission &&
+    (next.status !== "idle" || Boolean(next.goal) || Boolean(next.sessionId) || Boolean(next.finalResult) || Boolean(next.error))
+  ) {
+    pendingSessionSubmission = undefined;
   }
 
   const hasConversationId = Object.prototype.hasOwnProperty.call(next, "conversationId");

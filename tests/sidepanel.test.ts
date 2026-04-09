@@ -64,6 +64,7 @@ function createRunningState(): SessionPublicState {
     currentStepId: "collectResearchCandidates",
     currentTool: "collectResearchCandidates",
     stepSummary: "Collecting source candidates.",
+    elapsedMs: 4_000,
     plan: [],
     items: [],
     logs: [],
@@ -234,7 +235,13 @@ describe("sidepanel result actions", () => {
 
   let requestStatePayload: SessionPublicState | undefined;
   const clipboardWriteText = vi.fn<(...args: [string]) => Promise<void>>();
-  const sendMessage = vi.fn(async (message: { type: string; conversationId?: string; turnId?: number; goal?: string; searchPreference?: string }) => {
+  const defaultSendMessageImplementation = async (message: {
+    type: string;
+    conversationId?: string;
+    turnId?: number;
+    goal?: string;
+    searchPreference?: string;
+  }) => {
     if (message.type === "REQUEST_SESSION_STATE") {
       return requestStatePayload ? { ok: true, payload: requestStatePayload } : { ok: false };
     }
@@ -282,7 +289,8 @@ describe("sidepanel result actions", () => {
     }
 
     return { ok: true };
-  });
+  };
+  const sendMessage = vi.fn(defaultSendMessageImplementation);
 
   const addListener = vi.fn((listener: (message: RuntimeMessage) => void) => {
     onRuntimeMessage = listener;
@@ -297,7 +305,8 @@ describe("sidepanel result actions", () => {
     onRuntimeMessage = undefined;
     requestStatePayload = undefined;
     clipboardWriteText.mockReset();
-    sendMessage.mockClear();
+    sendMessage.mockReset();
+    sendMessage.mockImplementation(defaultSendMessageImplementation);
     addListener.mockClear();
     createObjectURL.mockClear();
     revokeObjectURL.mockClear();
@@ -372,6 +381,51 @@ describe("sidepanel result actions", () => {
     });
   });
 
+  it("echoes the submitted goal immediately before the runtime session state returns", async () => {
+    let resolveStartSession:
+      | ((value: { ok: boolean; payload?: SessionPublicState; error?: string }) => void)
+      | undefined;
+
+    sendMessage.mockImplementation(async (message: { type: string; goal?: string; searchPreference?: string }) => {
+      if (message.type === "REQUEST_SESSION_STATE") {
+        return { ok: false };
+      }
+
+      if (message.type === "START_SESSION") {
+        return await new Promise<{ ok: boolean; payload?: SessionPublicState; error?: string }>((resolve) => {
+          resolveStartSession = resolve;
+        });
+      }
+
+      return { ok: true };
+    });
+
+    await loadSidepanel();
+
+    const goalInput = document.getElementById("goal-input") as HTMLTextAreaElement | null;
+    const startButton = document.getElementById("start-button") as HTMLButtonElement | null;
+
+    expect(goalInput).not.toBeNull();
+    expect(startButton).not.toBeNull();
+
+    goalInput!.value = "为什么南京叫南京";
+    goalInput!.dispatchEvent(new Event("input"));
+    startButton!.click();
+
+    expect(document.body.textContent).toContain("为什么南京叫南京");
+    expect(document.body.textContent).toMatch(/正在理解问题并启动会话|Understanding the question and starting the session/);
+    expect((document.getElementById("start-button") as HTMLButtonElement | null)?.disabled).toBe(true);
+
+    resolveStartSession?.({
+      ok: true,
+      payload: createRunningState(),
+    });
+
+    await vi.waitFor(() => {
+      expect(document.body.textContent).toContain("Collecting source candidates.");
+    });
+  });
+
   it("shows timeline instead of runtime status while running", async () => {
     await loadSidepanel();
     onRuntimeMessage?.({
@@ -387,6 +441,27 @@ describe("sidepanel result actions", () => {
     expect(document.querySelectorAll("section.section")).toHaveLength(2);
     expect((document.getElementById("create-conversation-button") as HTMLButtonElement | null)?.disabled).toBe(true);
     expect(document.querySelector(".status-grid")).toBeNull();
+    const elapsedLabels = Array.from(document.querySelectorAll("[data-timeline-elapsed]")).map((node) => node.textContent ?? "");
+    expect(elapsedLabels.some((label) => label.includes(":"))).toBe(true);
+  });
+
+  it("submits stop when Enter is pressed during a running session", async () => {
+    await loadSidepanel();
+    onRuntimeMessage?.({
+      type: "SESSION_UPDATE",
+      payload: createRunningState(),
+    });
+
+    const goalInput = document.getElementById("goal-input") as HTMLTextAreaElement | null;
+    expect(goalInput).not.toBeNull();
+
+    goalInput!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+
+    await vi.waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith({
+        type: "STOP_SESSION",
+      });
+    });
   });
 
   it("keeps inline success in the conversation stream without a duplicate results panel", async () => {
@@ -402,6 +477,12 @@ describe("sidepanel result actions", () => {
     expect(document.querySelectorAll("details.section-details")).toHaveLength(1);
     expect(document.querySelectorAll("section.section")).toHaveLength(1);
     expect(document.querySelector("[data-copy-turn-id='2']")).not.toBeNull();
+    expect(
+      Array.from(document.querySelectorAll("[data-timeline-elapsed]")).some((node) => {
+        const label = node.textContent ?? "";
+        return label.includes("完成") || label.startsWith("Done in ");
+      }),
+    ).toBe(true);
   });
 
   it("shows runtime status when the session fails", async () => {
