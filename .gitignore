@@ -5,3 +5,4 @@ dist/
 coverage/
 .playwright-cli/
 output/
+doc/.obsidian
