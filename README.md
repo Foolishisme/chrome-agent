@@ -12,8 +12,10 @@
 
 ## 当前能力
 
-当前已支持两个任务模块：
+当前已支持三个任务模块：
 
+- `direct_answer`
+  - 面向简单稳定知识问答、已搜索且证据充足后的追问，以及无需再开浏览器的直接回答
 - `commerce_search`
   - 面向京东站内商品搜索、提取、过滤和推荐输出
 - `public_research`
@@ -22,15 +24,14 @@
 当前系统已经具备：
 
 - Side Panel 发起和停止会话
-- Lite model 参与任务分类、查询词生成和下一步 tool 选择
+- Lite model 参与任务分类、是否需要搜索判断、查询词生成和下一步 tool 选择
+- 搜索偏好开关：`智能回答 / 优先搜索`
 - `PlanStep + allowedTools` 驱动的高层执行循环
 - 最小运行护栏
   - 软提示：`15 steps` 或 `120s`
   - 硬停止：`20 steps` 或 `180s`
-- 三段式 UI
-  - `对话`
-  - `运行状态`
-  - `结果`
+- 会话区已收口为当前与历史共用的 turn 流
+- `inline` 成功结果不再重复占用独立结果面板
 
 ## 当前不应假设
 
@@ -50,6 +51,7 @@
 
 - 任务理解
 - 初始 plan 编译
+- 判断当前问题是否需要搜索，还是可以直接回答
 - 在当前 `allowedTools` 内选择下一步 tool
 - 最终结果汇总
 
@@ -63,12 +65,14 @@
 
 当前高层工具位于 [src/background/tools.ts](./src/background/tools.ts)：
 
-- `compileTask`
-- `searchInSite`
-- `extractStructuredResults`
-- `filterCandidates`
-- `readPageFacts`
-- `aggregateTaskResults`
+- `compileTaskSpec`
+- `finalizeDirectAnswer`
+- `openSearchResults`
+- `collectCommerceCandidates`
+- `collectResearchCandidates`
+- `readResearchSourceFacts`
+- `finalizeCommerceResult`
+- `finalizeResearchResult`
 
 它们负责稳定语义能力、局部恢复和结构化结果返回。
 
@@ -77,13 +81,15 @@
 保留结构化工作记忆，例如：
 
 - `taskType`
+- `searchPreference`
 - `taskSpec`
 - `plan`
 - `toolHistory`
+- `conversationTurns`
 - `extractedItems`
 - `researchCandidates`
 - `researchSources`
-- `finalOutput`
+- `finalResult`
 
 ### Runtime
 
@@ -97,14 +103,13 @@
 
 ## UI
 
-当前 Side Panel 展示结构：
+当前 Side Panel 以对话区为主：
 
-1. `对话`
+1. `对话流`
 2. `运行状态`
-   运行状态下可折叠查看：
-   - `执行时间线`
-   - `调试日志`
-3. `结果`
+   - 仅服务当前正在执行的 session
+3. `结果操作`
+   - 仅保留复制、文档产物等当前轮操作
 
 ## 当前验证状态
 
@@ -115,19 +120,19 @@
 
 实机侧：
 
-- 当前线程已通过用户实机验证
+- `commerce_search / public_research` 当前线程已通过用户实机验证，记录为 `user-reported`
 - 具体模块级验收状态以 [doc/acceptance.md](D:/code/browser-agent-mvp/doc/acceptance.md) 为准
 
 ## 下一步计划
 
 这一块只用于提醒当前主线还没收口的事情，避免后续遗忘：
 
-1. 补 `no progress / 连续失败` 护栏。
-2. 补 `commerce_search` 的实机闭环记录。
-3. 专门验证 `stop / error` 路径下结果区的最终展示。
+1. 记录 `stop / error / budget` 护栏的真机表现。
+2. 记录 `direct_answer / prefer_search` 的真机连续追问样本与误判样本。
+3. 记录 `public_research` 第一页重排前后的成功来源命中率。
 4. 做 Gemini / DeepSeek provider 的联调确认。
-5. 继续收口高层 tool 返回契约，逐步减少 `currentPhase` 兼容依赖。
-6. 根据后续真机反馈，再决定是否继续细拆 tool，而不是提前拆分。
+5. 打通自动化真机扩展验证链路。
+6. 根据后续真实失败模式，再决定是否继续细拆 tool 或扩展 PDF artifact。
 
 ## 开发命令
 
@@ -190,7 +195,7 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 - [writing_rules.md](./doc/writing_rules.md)
 - [pitfalls.md](./doc/pitfalls.md)
 
-Updated: 2026-04-03
+Updated: 2026-04-09
 
 ## 更新说明
 
@@ -203,7 +208,7 @@ Updated: 2026-04-03
   - one-shot 规范化搜索页重新打开
   - 针对 `public_research` 的单个信息源跳过策略
 - 当前自动化验证状态：
-  - `npm.cmd test`: `9` 个测试文件, `56` 个测试通过
+  - `npm.cmd test`: `12` 个测试文件, `84` 个测试通过
   - `npm.cmd run build`: 通过
 
 Updated: 2026-04-07

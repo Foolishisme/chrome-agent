@@ -6,16 +6,18 @@
 
 ## 2. Current Focus
 
-当前主线已经从“过渡层迁移”切到“canonical v1 收口完成后的稳定化”，当前重点先转为 Side Panel 交互收口，再继续做结果质量验证：
+当前主线已经从“canonical v1 收口”进入“路由质量与真机验证”阶段，当前重点是把已落地能力和真实使用表现对齐：
 
 - Runtime 已是 canonical plan loop
 - Tools 已按 `src/background/tools/` 拆分
 - 状态模型、tool 契约、最终输出契约已统一
-- Side Panel 已改为读取 `finalResult`
+- `direct_answer / commerce_search / public_research` 三类路由已打通
+- `searchPreference = auto | prefer_search` 已接入前后端链路
+- Side Panel 已改为读取 `finalResult`，并使用统一 turn 流承载当前与历史会话
 - `commerce_search / public_research` 真机闭环已通过，当前记录为 `user-reported`
 - 结果输出已收口为 `inline | artifact`
 - `public_research` 已在第一页过滤后增加轻量 research 候选重排序
-- 下一步优先做初始态隐藏、按钮收口和时间线折叠
+- 下一步优先做真机护栏验证、provider 联调和路由体验验证
 
 ## 3. Done
 
@@ -23,12 +25,15 @@
 
 - `src/shared/types.ts`
   - canonical `ToolName` 已收口
+  - `TaskType` 已扩为 `direct_answer / commerce_search / public_research`
+  - `searchPreference = auto | prefer_search` 已进入主链状态
   - `ActionResult` / 高层 `ToolResult` 已分离
   - `FinalResult` 已统一并增加 `outputMode`
   - `currentPhase / taskPlan / subtaskResults / finalSummary / finalOutput` 已退出主链
 
 - `src/shared/schema.ts`
   - `nextToolSelectionSchema` 只允许 canonical tool
+  - task route schema 已允许 `direct_answer / commerce_search / public_research`
   - `finalResultSynthesisSchema` 已对齐新 `FinalResult`
   - `actionResultSchema` 已替代旧 action-level `ToolResult`
   - research 候选重排序 schema 已新增
@@ -40,9 +45,11 @@
   - 单工具 step 不调用 LLM
   - 多工具 step 才调用 `chooseNextTool`
   - 已落地重复失败和无进展护栏
+  - 路由判断已显式注入当前绝对时间、用户时区、近期对话摘要与 `searchPreference`
 
 - `src/background/tools/`
-  - 已拆为共享 helper、registry 和 7 个 canonical tool 文件
+  - 已拆为共享 helper、registry 和 8 个 canonical tool 文件
+  - 已新增 `finalize-direct-answer.ts`
 
 - `src/background/tools.ts`
   - 已退化为 barrel export
@@ -50,17 +57,21 @@
   - 已在第一页 research 候选过滤后增加轻量重排序
 - `src/background/llm-client.ts`
   - 已新增 research 候选重排序调用与严格回退
+  - 已新增 direct-answer 路由与最终回答调用
 
 ### 3.3 UI
 
 - `src/sidepanel/index.ts`
-  - 结果区已按 `inline | artifact` 分流
+  - 会话区已统一为 turn 流展示
+  - 结果区已按 `inline | artifact` 分流，且不再重复渲染 inline 成功正文
   - 运行细节已回收到 runtime 区
   - 文档产物仅在显式文档请求下展示复制 / 下载
+  - 输入框右上角已新增 `智能回答 / 优先搜索` 开关
   - 不再依赖 `currentPhase`
 
 - `src/sidepanel/i18n.ts`
   - runtime 状态已收口为 `idle | running | done | error`
+  - 已新增 `direct_answer` 与搜索偏好相关文案
 
 ### 3.4 文档
 
@@ -72,9 +83,11 @@
 最新验证检查点：
 
 - `npm.cmd test`
-  - 11 个测试文件，71 个测试通过
+  - 12 个测试文件，84 个测试通过
 - `npm.cmd run build`
   - 通过
+- `npx.cmd vitest run tests/query-compiler.test.ts tests/runtime-tools.test.ts tests/schema.test.ts`
+  - `direct_answer / prefer_search / schema` 相关专项验证通过
 - `npx.cmd vitest run tests/research-search-quality.test.ts`
   - research 搜索候选重排与信息提取专项测试通过
 - Chrome 真机手测
@@ -84,20 +97,18 @@
   - 已尝试附着现有浏览器与新拉起 Chrome
   - 当前未能稳定拿到项目扩展上下文，记录为 blocker
 
-时间：`2026-04-07`
+时间：`2026-04-09`
 
 ## 5. Remaining Risks
 
 当前主要剩余风险：
 
-- Side Panel 初始态仍展示空的运行区与结果区，首屏噪音偏高
-- `retry` 仍在初始态暴露，按钮语义不够收敛
-- 结果仍为一次性最终显示，运行中缺少更自然的过程感呈现
 - stop / error / budget guardrails 仍缺真机可视化验证记录
 - provider live request 仍缺真实环境验证
 - 目前仍不支持执行中动态改 plan
 - research 第一页候选重排序已落地，但尚缺“重排前后成功来源命中率”记录
 - 自动化真机扩展会话验证仍被浏览器扩展附着条件阻塞
+- `direct_answer / prefer_search` 已落地，但仍缺真机连续追问样本与误判样本记录
 
 ## 6. Rejected Paths
 
@@ -110,13 +121,12 @@
 
 ## 7. Next Actions
 
-1. 落地 Side Panel 初始态隐藏空的运行区与结果区
-2. 将主按钮改为状态驱动的 `开始 / 停止 / 再次运行`
-3. 将时间线改为运行中展开、完成后自动折叠
-4. 记录 stop / error / budget guardrails 真机表现
-5. 记录 research 第一页重排前后的成功来源命中率
-6. 打通自动化真机扩展验证链路
-7. 根据新增真实失败模式决定是否继续细拆 tool 或扩展 PDF artifact
+1. 记录 stop / error / budget guardrails 真机表现
+2. 记录 `direct_answer / prefer_search` 的真机连续追问样本与误判样本
+3. 记录 research 第一页重排前后的成功来源命中率
+4. 做 Gemini / DeepSeek provider live request 联调确认
+5. 打通自动化真机扩展验证链路
+6. 根据新增真实失败模式决定是否继续细拆 tool 或扩展 PDF artifact
 
 ## 8. 2026-04-08 补充
 
@@ -253,17 +263,14 @@ Updated: 2026-04-08
 - `npm.cmd run build`
   - 通过
 
-### 8.15 2026-04-08 Direct Answer 设计拍板
+### 8.15 2026-04-08 Direct Answer 设计拍板（历史记录，已被 8.16 覆盖）
 
 - `doc/spec.md / constraints.md / plan.md / acceptance.md / thread_bootstrap.md`
   - 已将 `direct_answer` 收口为正式 task module
   - 已拍板是否需要搜索由 `LLM` 在规划阶段判断
   - 已拍板路由判断输入需显式包含当前绝对时间、用户时区、近期证据摘要与证据获取时间
   - 已拍板简单稳定知识、或当前 conversation 已有充分证据时应优先直接回答
-- 当前代码仍未落地：
-  - `src/shared/types.ts` 仍只定义 `commerce_search / public_research`
-  - `src/background/query-compiler.ts` 仍默认把非购物问题路由到 `public_research`
-  - 当前路由链路尚未显式注入当前时间与证据时间
+- 该小节记录拍板当时状态；实现已在 8.16 落地
 
 ### 8.16 2026-04-08 Direct Answer 已落地
 
@@ -294,7 +301,7 @@ Updated: 2026-04-08
 - `npx.cmd vitest run tests/public-research.test.ts`
   - 1 个测试文件，9 个测试通过
 - `npm.cmd test`
-  - 12 个测试文件，83 个测试通过
+  - 12 个测试文件，84 个测试通过
 
 ### 8.18 2026-04-08 搜索偏好开关
 
@@ -311,6 +318,6 @@ Updated: 2026-04-08
 ### 8.19 本轮最小验证
 
 - `npx.cmd vitest run tests/query-compiler.test.ts tests/sidepanel.test.ts`
-  - 2 个测试文件，23 个测试通过
+  - 2 个测试文件，20 个测试通过
 - `npm.cmd run build`
   - 通过

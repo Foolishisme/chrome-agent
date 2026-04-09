@@ -20,7 +20,7 @@
 
 已完成：
 
-- `ToolName` 收口为 7 个 canonical tool
+- `ToolName` 收口为 8 个 canonical tool
 - `ActionResult` 与高层 `ToolResult` 分离
 - `FinalResult` 收口为单一最终输出协议
 - `currentPhase / taskPlan / subtaskResults / finalSummary / finalOutput` 退出主链
@@ -31,7 +31,7 @@
 
 - `src/background/tools.ts` 拆为 `src/background/tools/`
 - 拆出共享 helper / shared / registry
-- 7 个 canonical tool 全部落地
+- 8 个 canonical tool 全部落地
 
 ### 3.3 Runtime 层
 
@@ -55,26 +55,27 @@
 
 ## 4. 当前后续路径
 
-本轮之后的优先级是：
+当前之后的优先级是：
 
-1. 先补 `direct_answer` 路由
-2. 再完成 Side Panel 交互收口 v1
-3. 然后补齐真机护栏验证
-4. 再验证 `public_research` 第一页候选质量提升是否真实有效
-5. 打通自动化真机扩展验证链路
+1. 先补齐真机护栏验证
+2. 再验证 `public_research` 第一页候选质量提升是否真实有效
+3. 确认 `direct_answer / prefer_search` 的真机体验是否符合预期
+4. 打通自动化真机扩展验证链路
+5. 再做 provider live request 联调确认
 6. 最后才考虑是否继续细拆 tool 或扩展 PDF artifact
 
 ## 5. 当前建议顺序
 
 ### 5.1 直接回答路由
 
-优先落地：
+已落地：
 
-- 新增 `direct_answer` task module，固定序列为 `compileTaskSpec -> finalizeDirectAnswer`
-- 在 `compileTaskSpec` 阶段由 `LLM` 判断当前目标应进入 `direct_answer / public_research / commerce_search`
-- 路由判断输入显式带上当前绝对时间、用户时区、最近几轮证据摘要，以及这些证据的获取时间
-- 当问题属于简单稳定知识，或当前 conversation 已有足够证据时，优先直接回答
-- 当问题依赖最新事实、现势状态，或用户显式要求“今天 / 当前 / 最新 / 本周 / 今年”等信息时，进入搜索链路
+- 已新增 `direct_answer` task module，固定序列为 `compileTaskSpec -> finalizeDirectAnswer`
+- 已在 `compileTaskSpec` 阶段由 `LLM` 判断当前目标应进入 `direct_answer / public_research / commerce_search`
+- 路由判断已显式带上当前绝对时间、用户时区、最近几轮证据摘要，以及这些证据的获取时间
+- 简单稳定知识、或当前 conversation 已有足够证据时，优先直接回答
+- 问题依赖最新事实、现势状态，或用户显式要求“今天 / 当前 / 最新 / 本周 / 今年”等信息时，进入搜索链路
+- 已新增 `searchPreference = auto | prefer_search`，仅在边界不清时影响路由，不覆盖明确可直接回答的问题
 
 当前不建议：
 
@@ -85,15 +86,16 @@
 
 ### 5.2 Side Panel 交互收口 v1
 
-优先落地：
+已落地：
 
 - 初始态不展示空的“运行状态 / 结果”区
 - 按会话状态切换主按钮：
   - 初始态只显示 `开始`
   - 运行中只显示 `停止`
-  - 完成或失败后再显示“再次运行”或复用 `开始`
+  - 完成或失败后复用 `开始`
 - 运行中时间线默认展开
 - 最终结果出现后，时间线自动缩略为折叠态
+- 已补输入框右上角 `智能回答 / 优先搜索` 开关
 
 当前不建议：
 
@@ -226,7 +228,7 @@
 - 回退语义固定为“回退到此轮并删除后续 turn”，不做任意单轮删除
 - 删除语义固定为删除整条 conversation，不再保留其中任意 turn
 
-Updated: 2026-04-08
+Updated: 2026-04-09
 
 ## 7.5 2026-04-08 Conversation UI Follow-up
 

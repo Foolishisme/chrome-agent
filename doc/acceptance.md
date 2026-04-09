@@ -17,8 +17,8 @@
 
 | 编号 | 验收项 | 验证方式 | 当前状态 | 备注 |
 |---|---|---|---|---|
-| B1 | 项目可构建 | `npm.cmd run build` | PASS | 2026-04-07 已验证 |
-| B2 | 自动化测试通过 | `npm.cmd test` | PASS | 2026-04-07 已验证，71 tests |
+| B1 | 项目可构建 | `npm.cmd run build` | PASS | 2026-04-09 已验证 |
+| B2 | 自动化测试通过 | `npm.cmd test` | PASS | 2026-04-09 已验证，84 tests |
 | B3 | `commerce_search` 单测基线通过 | `tests/runtime-tools.test.ts` | PASS | canonical tool 断言已更新 |
 | B4 | `public_research` 单测基线通过 | `tests/public-research.test.ts` | PASS | canonical tool 断言已更新 |
 | B5 | research 搜索候选重排与信息提取专项测试通过 | `tests/research-search-quality.test.ts` | PASS | 5 个专项测试通过 |
@@ -41,10 +41,10 @@
 | N12 | Side Panel 已对齐新结果协议 | 检查 `src/sidepanel/index.ts` | PASS | 结果区只展示最终交付物，运行细节回收到 runtime 区 |
 | N13 | 最终输出已收口为 `inline | artifact` | 检查 `src/shared/types.ts` / `src/background/tools/helpers.ts` | PASS | 默认 `inline`，仅显式文档请求才生成 markdown artifact |
 | N14 | research 候选重排序有严格回退 | `tests/llm-client.test.ts` | PASS | 非法重排会回退到过滤后原顺序 |
-| N15 | Side Panel 初始态不展示空的运行区与结果区 | `tests/sidepanel.test.ts` | NOT_RUN | 本轮拍板，待实现 |
-| N16 | Side Panel 主按钮按状态收口为 `开始 / 停止 / 再次运行` | `tests/sidepanel.test.ts` | NOT_RUN | 初始态不再直接展示 `重试` |
-| N17 | 时间线运行中默认展开，结果完成后自动折叠 | `tests/sidepanel.test.ts` | NOT_RUN | 作为“执行过程”轻量呈现，不改最终结果协议 |
-| N18 | 最终结果仍保持一次性交付，不引入 token 级流式协议 | 检查 `src/sidepanel/index.ts` / `src/shared/types.ts` | NOT_RUN | 当前决策是先不做真正流式输出 |
+| N15 | Side Panel 初始态不展示空的运行区与结果区 | `tests/sidepanel.test.ts` | PASS | 已覆盖首屏隐藏空区与输入框初始态 |
+| N16 | Side Panel 主按钮按状态收口为 `开始 / 停止 / 再次运行` | `tests/sidepanel.test.ts` | PASS | 已覆盖初始态 `开始`、运行中 `停止`、完成后复用 `开始` |
+| N17 | 时间线运行中默认展开，结果完成后自动折叠 | `tests/sidepanel.test.ts` | PASS | 已覆盖运行中显示 timeline、成功后回收到 turn 内 |
+| N18 | 最终结果仍保持一次性交付，不引入 token 级流式协议 | 检查 `src/sidepanel/index.ts` / `src/shared/types.ts` | PASS | 当前仅做半流式前端呈现，未引入 token 级协议 |
 | N19 | `direct_answer` 主链已收口为 canonical 2 步 | 检查 `src/shared/types.ts` / `src/background/query-compiler.ts` | PASS | 已固定为 `compileTaskSpec -> finalizeDirectAnswer` |
 | N20 | 已搜索且证据充足的问题可直接回答，不再强制打开搜索页 | `tests/query-compiler.test.ts` / `tests/runtime-tools.test.ts` | PASS | 已支持 conversation 内追问复用已有证据 |
 | N21 | 明显时效敏感或显式要求最新信息的问题不会仅凭内置知识直接回答 | `tests/query-compiler.test.ts` | PASS | 已覆盖“今天金价是多少”这类时效敏感问题 |
@@ -61,6 +61,7 @@
 | M3 | `readResearchSourceFacts` 可重复执行直到目标或耗尽 | `tests/public-research.test.ts` | PASS | 已覆盖 |
 | M4 | `collectCommerceCandidates` 内部处理 scroll recovery | `tests/runtime-tools.test.ts` | PASS | 已覆盖 |
 | M5 | `collectResearchCandidates` 内部处理第一页提取、过滤与重排序 | `tests/public-research.test.ts` / `tests/research-search-quality.test.ts` | PASS | 已覆盖 |
+| M6 | `direct_answer` 主链为 canonical 2 步 | 检查 `src/background/query-compiler.ts` / `tests/query-compiler.test.ts` | PASS | `compileTaskSpec -> finalizeDirectAnswer` |
 
 ## 5. 真机与联调验收
 
@@ -81,15 +82,15 @@
 2. provider live request 仍缺真实环境验证。
 3. research 第一页重排序虽已落地，但缺少命中率量化记录。
 4. 自动化真机扩展会话验证仍未打通。
-5. Side Panel 交互收口 v1 尚未实现，当前首屏与按钮语义仍偏 MVP。
+5. `direct_answer / prefer_search` 已落地，但仍缺真机连续追问样本与误判样本记录。
 
 ## 7. 推荐验收顺序
 
 1. `B1`
 2. `B2`
 3. `B3 / B4 / B5`
-4. `N1 - N14`
-5. `M1 - M5`
+4. `N1 - N24`
+5. `M1 - M6`
 6. `L1 - L8`
 
-Updated: 2026-04-07
+Updated: 2026-04-09

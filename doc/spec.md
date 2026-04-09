@@ -99,6 +99,7 @@ Memory 只保留结构化工作记忆。
 
 - `goal`
 - `taskType`
+- `searchPreference`
 - `plan`
 - `taskSpec`
 - `toolHistory`
@@ -304,6 +305,7 @@ Runtime 不负责：
 Side Panel 当前只读取：
 
 - runtime 顶层状态：`idle | running | done | error`
+- `searchPreference`
 - 当前 step / 当前 tool / elapsed / budget
 - 运行细节：goal / 当前进展 / timeline / logs / source detail
 - `finalResult.outputMode`
@@ -318,4 +320,4 @@ UI 不再展示 `currentPhase`，结果区只展示最终交付物：
 
 文档产物不是默认输出，只有在用户明确要求文档交付时才生成。
 
-Updated: 2026-04-07
+Updated: 2026-04-09

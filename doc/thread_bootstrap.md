@@ -10,20 +10,23 @@
 
 `LLM plan-driven tool orchestration`
 
-当前代码已跑通的模块仍是：
+当前代码已跑通的模块是：
 
+- `direct_answer`
 - `commerce_search`
 - `public_research`
 
-当前已拍板待落地的新增能力：
+当前已落地的新能力：
 
 - `direct_answer`
   - 面向简单稳定知识问答、已搜索且证据充足后的追问，以及无需再开浏览器的直接回答
+- `searchPreference = auto | prefer_search`
+  - 只在边界不清时影响路由，不覆盖明确可直接回答的问题
 
 ## 2. 必须先记住的规则
 
 - `LLM` 负责生成静态初始 plan、选择下一步 tool、更新 step 状态和最终汇总
-- 是否需要搜索由 `LLM` 在规划阶段结合当前绝对时间、用户目标和近期证据判断
+- 是否需要搜索由 `LLM` 在规划阶段结合当前绝对时间、用户目标、近期证据和 `searchPreference` 判断
 - `Tools` 负责提供可复用能力，并把脏活、局部恢复和 fallback 封装在内部
 - `Memory` 只保留结构化 plan、tool result、artifacts 和事实
 - `Runtime` 负责护栏、执行、持久化、停止与恢复，不再硬编码每个任务模块的固定 workflow
@@ -76,4 +79,4 @@ LLM plan-driven tool orchestration
 3. 最小必要改动是什么
 ```
 
-Updated: 2026-04-03
+Updated: 2026-04-09
