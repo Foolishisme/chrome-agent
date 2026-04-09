@@ -101,9 +101,9 @@ type MessageBundle = {
 
 const messages: Record<Locale, MessageBundle> = {
   "zh-CN": {
-    appTitle: "Browser Agent MVP",
-    heroTitle: "Browser Agent MVP",
-    heroDescription: "当前界面聚焦对话、运行状态和结果。",
+    appTitle: "智能浏览助手",
+    heroTitle: "智能浏览助手",
+    heroDescription: "告诉我你的目标，我来替你检索网页、阅读内容并汇总结果。",
     conversationTitle: "对话",
     runtimeStatusTitle: "运行状态",
     resultsTitle: "结果",
@@ -211,9 +211,9 @@ const messages: Record<Locale, MessageBundle> = {
     },
   },
   "en-US": {
-    appTitle: "Browser Agent MVP",
-    heroTitle: "Browser Agent MVP",
-    heroDescription: "The side panel focuses on conversation, runtime state, and results.",
+    appTitle: "Browser Agent",
+    heroTitle: "Browser Agent",
+    heroDescription: "Tell me your goal, and I'll search, read, and summarize the web for you.",
     conversationTitle: "Conversation",
     runtimeStatusTitle: "Runtime State",
     resultsTitle: "Results",

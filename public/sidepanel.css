@@ -224,6 +224,7 @@ body {
   width: 100%;
   min-height: 96px;
   padding: 12px;
+  padding-bottom: 48px;
   border: 1px solid rgba(125, 84, 45, 0.18);
   border-radius: 12px;
   resize: vertical;
@@ -232,51 +233,81 @@ body {
   line-height: 1.5;
 }
 
-.goal-input-with-toggle {
-  padding-right: 56px;
+.goal-input:focus {
+  outline: none;
+  border-color: rgba(31, 111, 120, 0.4);
+  box-shadow: 0 0 0 2px rgba(31, 111, 120, 0.08);
 }
 
-.goal-input-search-toggle {
+.goal-input-actions {
   position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 36px;
-  height: 36px;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.goal-input-search-toggle,
+.goal-input-action-button {
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(120, 93, 66, 0.16);
-  border-radius: 10px;
-  background: rgba(234, 223, 202, 0.72);
-  color: #5f421f;
-  font: inherit;
-  font-size: 15px;
+  border: none;
+  border-radius: 8px;
   cursor: pointer;
-  transition:
-    background 120ms ease,
-    color 120ms ease,
-    border-color 120ms ease,
-    transform 120ms ease;
+  font-weight: bold;
+  font-size: 16px;
+  transition: all 120ms ease;
+}
+
+.goal-input-action-button {
+  width: 32px;
+}
+
+.goal-input-search-toggle {
+  background: transparent;
+  color: #a3998f;
+  width: auto;
+  padding: 0 10px;
 }
 
 .goal-input-search-toggle:hover:not(:disabled) {
-  transform: translateY(-1px);
+  background: rgba(120, 93, 66, 0.08);
 }
 
 .goal-input-search-toggle-active {
+  background: rgba(31, 111, 120, 0.12);
+  color: #1f6f78;
+}
+
+.goal-input-start-button {
   background: linear-gradient(135deg, #1f6f78 0%, #174d54 100%);
-  border-color: rgba(31, 111, 120, 0.36);
   color: #fff;
 }
 
-.goal-input-search-toggle:disabled {
+.goal-input-start-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(31, 111, 120, 0.3);
+}
+
+.goal-input-stop-button {
+  background: #f7d6d6;
+  color: #8f2d2d;
+}
+
+.goal-input-search-toggle:disabled,
+.goal-input-action-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 .button-row {
-  display: flex;
-  gap: 8px;
+  display: none;
 }
 
 .button-row-secondary button {
@@ -299,8 +330,13 @@ body {
 }
 
 .button-secondary {
-  background: #eadfca;
+  background: rgba(120, 93, 66, 0.08);
   color: #5f421f;
+  border: 1px solid rgba(120, 93, 66, 0.12);
+}
+
+.button-secondary:hover:not(:disabled) {
+  background: rgba(120, 93, 66, 0.12);
 }
 
 .button-danger {

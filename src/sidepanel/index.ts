@@ -553,8 +553,8 @@ function renderConversationSection() {
   const activeSearchPreference = getActiveSearchPreference();
   const actionButton =
     currentState.status === "running"
-      ? `<button id="stop-button" class="button-danger">${escapeHtml(messages.stop)}</button>`
-      : `<button id="start-button" class="button-primary">${escapeHtml(messages.start)}</button>`;
+      ? `<button id="stop-button" type="button" class="goal-input-action-button goal-input-stop-button" title="${escapeHtml(messages.stop)}">⏹</button>`
+      : `<button id="start-button" type="button" class="goal-input-action-button goal-input-start-button" title="${escapeHtml(messages.start)}">↑</button>`;
   const currentConversationTitle = currentState.conversationTitle ?? archiveUiText.untitledConversation;
   const conversationHistory =
     (currentState.availableConversations ?? []).length > 0
@@ -613,21 +613,24 @@ function renderConversationSection() {
       }
       ${renderConversationThread()}
       <div class="goal-input-shell">
-        <textarea id="goal-input" class="goal-input goal-input-with-toggle" placeholder="${escapeHtml(conversationInputPlaceholder)}">${escapeHtml(draftGoal)}</textarea>
-        <button
-          id="search-preference-toggle"
-          type="button"
-          class="goal-input-search-toggle${activeSearchPreference === "prefer_search" ? " goal-input-search-toggle-active" : ""}"
-          aria-pressed="${activeSearchPreference === "prefer_search"}"
-          aria-label="${escapeHtml(messages.searchToggleLabel)}"
-          title="${escapeHtml(activeSearchPreference === "prefer_search" ? messages.searchToggleHintPreferSearch : messages.searchToggleHintAuto)}"
-          ${conversationActionsDisabled ? "disabled" : ""}
-        >
-          <span aria-hidden="true">🔎</span>
-        </button>
-      </div>
-      <div class="button-row">
-        ${actionButton}
+        <textarea id="goal-input" class="goal-input" placeholder="${escapeHtml(conversationInputPlaceholder)}">${escapeHtml(draftGoal)}</textarea>
+        <div class="goal-input-actions">
+          <button
+            id="search-preference-toggle"
+            type="button"
+            class="goal-input-search-toggle${activeSearchPreference === "prefer_search" ? " goal-input-search-toggle-active" : ""}"
+            aria-pressed="${activeSearchPreference === "prefer_search"}"
+            aria-label="${escapeHtml(messages.searchToggleLabel)}"
+            title="${escapeHtml(activeSearchPreference === "prefer_search" ? messages.searchToggleHintPreferSearch : messages.searchToggleHintAuto)}"
+            ${conversationActionsDisabled ? "disabled" : ""}
+          >
+            <span style="display: flex; align-items: center; gap: 4px; font-size: 13px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path><path d="M2 12h20"></path></svg>
+              <span>联网检索</span>
+            </span>
+          </button>
+          ${actionButton}
+        </div>
       </div>
     </div>
   `;
@@ -990,6 +993,15 @@ function render() {
 
   goalInput?.addEventListener("input", () => {
     draftGoal = goalInput.value;
+  });
+
+  goalInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (currentState.status !== "running") {
+        startButton?.click();
+      }
+    }
   });
 
   searchPreferenceToggle?.addEventListener("click", () => {
