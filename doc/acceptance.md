@@ -51,6 +51,9 @@
 | N22 | 搜索判断显式接收当前绝对时间、用户时区和近期证据获取时间 | 检查 `src/background/prompting.ts` / `src/background/query-compiler.ts` / `src/background/runtime-core.ts` | PASS | 已显式注入 `currentTimeIso / timezone / conversationTurns.savedAt` |
 | N23 | 输入框可切换 `智能回答 / 优先搜索` 偏好，且该偏好会作为启动参数传入 runtime | `tests/sidepanel.test.ts` | PASS | 已覆盖放大镜开关与 `START_SESSION.searchPreference` |
 | N24 | `prefer_search` 只影响边界问题，不覆盖明确可直接回答的问题 | `tests/query-compiler.test.ts` | PASS | 已覆盖“解释一下事件循环是什么”仍走 `direct_answer` |
+| N25 | optimistic startup 期间仍提供显式 `停止` 入口，而不是只显示禁用的开始按钮 | `tests/sidepanel.test.ts` | PASS | 已覆盖 pending 启动可取消 |
+| N26 | 运行中在 Draft 输入框按普通 `Enter` 不会误触发 `STOP_SESSION` | `tests/sidepanel.test.ts` | PASS | 已覆盖运行中输入仍可编辑但不会变成隐藏中断热键 |
+| N27 | runtime 状态区只在明确失败/阻塞时展示；用户停止和 tool 内部瞬时重试不展示该区 | `tests/sidepanel.test.ts` | PASS | 已覆盖 failed 显示、stopped 与 transient error 不显示 |
 
 ## 4. 模块主链验收
 
@@ -71,7 +74,7 @@
 | L2 | Side Panel 可启动 session | Chrome 手动验证 | PASS | user-reported |
 | L3 | `public_research` 真机闭环可完成 | 手动输入调研目标并完成输出 | PASS | user-reported |
 | L4 | `commerce_search` 真机闭环可完成 | 手动输入购物目标并完成输出 | PASS | user-reported |
-| L5 | stop / error / budget 护栏在 UI 中可见 | 真机制造对应路径 | NOT_RUN | 代码已落地，未专门手测 |
+| L5 | stop / error / budget 护栏在 UI 中可见，且 runtime 区只在明确失败/阻塞时展开 | 真机制造对应路径 | NOT_RUN | 单测已覆盖展示边界，真机表现仍未专门手测 |
 | L6 | Gemini live request 可用 | 配置 key 后验证 | NOT_RUN | 本轮未做 |
 | L7 | DeepSeek live request 可用 | 配置 key 后验证 | NOT_RUN | 本轮未做 |
 | L8 | 自动化方式可附着项目扩展并驱动真机会话 | 现有浏览器附着 / 新拉起 Chrome + 扩展 | NOT_RUN | 本轮尝试未稳定拿到项目扩展上下文，仍是 blocker |

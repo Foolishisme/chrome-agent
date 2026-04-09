@@ -69,7 +69,14 @@
   - 结果区已按 `inline | artifact` 分流，且不再重复渲染 inline 成功正文
   - 运行细节已回收到 runtime 区
   - 文档产物仅在显式文档请求下展示复制 / 下载
-  - 输入框右上角已新增 `智能回答 / 优先搜索` 开关
+  - 输入框右上角已新增放大镜 icon 形式的 `智能回答 / 优先搜索` 开关
+  - 历史 turn 的回退入口已收口为用户提问块内的 icon 操作
+  - 历史与当前回答的复制入口已收口为回答块尾部的 icon 操作
+  - 时间线标题已收口为更轻的 `思考中 / 已思考` 表达，并显示累计耗时
+  - 提问与回答块的视觉层级已重新整理，减少“调试面板”感，收束主阅读路径
+  - optimistic startup 已保留显式停止入口，不再出现“启动中只能看到禁用开始按钮”的假空闲态
+  - 运行中的 Draft 输入不再把普通 `Enter` 解释成 `STOP_SESSION`
+  - runtime 区只在明确 `failed / blocked / error` 时展开；用户停止与 tool 内部重试不再被当作错误详情展示
   - 不再依赖 `currentPhase`
 
 - `src/sidepanel/i18n.ts`
@@ -93,6 +100,8 @@
   - `direct_answer / prefer_search / schema` 相关专项验证通过
 - `npx.cmd vitest run tests/research-search-quality.test.ts`
   - research 搜索候选重排与信息提取专项测试通过
+- `npx.cmd vitest run tests/sidepanel.test.ts`
+  - 13 个 sidepanel 交互测试通过，已覆盖搜索偏好 icon、pending 启动可停止、运行中 Enter 不误停、失败态才展示 runtime 区
 - Chrome 真机手测
   - `public_research` 闭环通过，`user-reported`
   - `commerce_search` 闭环通过，`user-reported`
@@ -107,6 +116,7 @@
 当前主要剩余风险：
 
 - stop / error / budget guardrails 仍缺真机可视化验证记录
+- 失败态 runtime 区虽然已收紧为只在明确失败时展示，但仍缺 stop / blocked / transient retry 的真机样本截图与交互记录
 - provider live request 仍缺真实环境验证
 - 目前仍不支持执行中动态改 plan
 - research 第一页候选重排序已落地，但尚缺“重排前后成功来源命中率”记录
@@ -354,5 +364,15 @@
   - 达到 `pageReadLimit` 即停
   - 候选耗尽即停
   - 登录墙 / 验证码 / 入口不可读时返回 `partial / blocked`
+
+### 8.22 2026-04-09 Side Panel 轻交互收口
+
+- `src/sidepanel/index.ts / public/sidepanel.css`
+  - 回退动作已从文字按钮收口为用户提问块内的 icon
+  - 复制动作已从显式文字按钮收口为回答块尾部的 icon
+  - 时间线折叠标题已换成更轻的“思考中 / 已思考”表达，并附带累计耗时
+  - 提问与回答块的视觉层级已重新整理，减少“调试面板”感，收束主阅读路径
+- `tests/sidepanel.test.ts`
+  - 已覆盖历史 turn 复制入口、回退入口，以及运行中/完成后时间线标题显示
 
 Updated: 2026-04-09
