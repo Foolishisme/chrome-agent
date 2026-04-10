@@ -321,6 +321,7 @@ Runtime 不负责：
 - 不因为通用调研方向而立即新增一批 runtime-visible tool 名称
 - 当前优先复用 `collectResearchCandidates / readResearchSourceFacts / finalizeResearchResult`
 - 站内多级跳转、附件跟进、文档下载与解析优先放在 tool 内部，不暴露成 plan-visible 原子动作
+- 站点型 mode 允许在候选发现前插入一个可复用的 `resolveEntryPoint` step，用于显式 URL 直达与有限入口修复
 
 #### 8.4.1 `site_overview` MVP
 
@@ -334,7 +335,9 @@ Runtime 不负责：
 
 - `taskType = browser_research`
 - `researchMode = site_overview`
-- `entryUrl`
+- `entryMode = explicit_url | resolve_official_home`
+- `entryUrl?`
+- `siteName?`
 - `targetDomain`
 - `pageReadLimit`
 - `candidateLimit`
@@ -346,30 +349,38 @@ Runtime 不负责：
 - `pageReadLimit` 默认控制在 `3-5`
 - `candidateLimit` 只覆盖主页直达的一跳候选
 - 只读站内 `http/https` 页面
+- 用户显式提供 `URL` 时优先直达，不先走搜索
+- 显式 `URL` 失效时只允许一次有界入口修复，例如回退站点根路径或解析官网主页
+- 未提供 `URL` 时才解析官网入口，目标是拿到一个可信主入口，不是先搜内容页
 - 当前不承诺 PDF / Word / Excel / 下载型资料进入主链
 
 最小 `PlanStep` 模板为：
 
 1. `compileTaskSpec`
-2. `acquireCandidates`
-3. `readSourceFacts`
-4. `validateOrAggregate`
-5. `finalizeResult`
+2. `resolveEntryPoint`
+3. `acquireCandidates`
+4. `readSourceFacts`
+5. `validateOrAggregate`
+6. `finalizeResult`
 
 各步完成标准：
 
 1. `compileTaskSpec`
    - 已确认当前目标属于 `site_overview`
-   - 已拿到入口、域名范围、页数预算和输出意图
-2. `acquireCandidates`
+   - 已拿到入口模式、域名范围、页数预算和输出意图
+2. `resolveEntryPoint`
+   - 若用户提供显式 `URL`，已完成直达与站点校验
+   - 若显式 `URL` 无效，已在一次有界修复内尝试根路径或官网主页解析
+   - 若用户未提供 `URL`，已定位到可信官网主入口
+3. `acquireCandidates`
    - 已读取主页
    - 已从主页直达链接中筛出前 `N` 个高价值页面候选
-3. `readSourceFacts`
+4. `readSourceFacts`
    - 已读取主页与若干候选页面正文
    - 达到 `pageReadLimit` 或候选耗尽即结束
-4. `validateOrAggregate`
+5. `validateOrAggregate`
    - 已形成可用于最终输出的主题摘要、来源列表和覆盖边界
-5. `finalizeResult`
+6. `finalizeResult`
    - 已输出站点概况
    - 已明确标出读取范围、未覆盖区域与不确定性
 
@@ -378,16 +389,17 @@ Runtime 不负责：
 - `success`
   - 已成功读取主页，且至少读取 `2` 个高价值页面，能够产出带来源的概况
 - `partial`
-  - 主页可读，但高价值页面不足、部分页面不可读，仍可产出有限概况
+  - 主页可读，但高价值页面不足、部分页面不可读，或入口修复后只拿到有限内容，仍可产出有限概况
 - `blocked`
   - 站点入口被登录、验证码、权限墙或非网页资源阻断，无法进入最小读取范围
 - `failed`
-  - 入口无效、同域候选为空，或在页数预算内没有拿到任何可读正文
+  - 入口无效且一次有界修复后仍失败、同域候选为空，或在页数预算内没有拿到任何可读正文
 
 当前不允许把以下情况伪装成 `success`：
 
 - 只读了主页就输出“完整站点画像”
 - 只读到了导航标题，没有拿到正文
+- 只拿到一组原始 URL，没有结合标题/区域信号筛过高价值页面
 - 页面明显被登录墙、验证码或下载型入口阻断
 
 ## 9. 最小护栏

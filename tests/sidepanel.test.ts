@@ -682,4 +682,21 @@ describe("sidepanel result actions", () => {
       expect(revokeObjectURL).toHaveBeenCalledWith("blob:artifact");
     });
   });
+
+  it("delegates repeated click actions without duplicating handlers after multiple rerenders", async () => {
+    requestStatePayload = createInlineState();
+    await loadSidepanel();
+
+    onRuntimeMessage?.({ type: "SESSION_UPDATE", payload: createInlineState() });
+    onRuntimeMessage?.({ type: "SESSION_UPDATE", payload: createInlineState() });
+
+    const turnCopyButton = document.querySelector("[data-copy-turn-id='1']");
+    expect(turnCopyButton).not.toBeNull();
+
+    (turnCopyButton as HTMLButtonElement).click();
+
+    await vi.waitFor(() => {
+      expect(clipboardWriteText).toHaveBeenCalledTimes(1);
+    });
+  });
 });

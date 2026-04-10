@@ -1,7 +1,8 @@
 import { RuntimeError } from "../../shared/errors";
 import { generateFinalResult } from "../llm-client";
 import { createToolResult, type AgentToolDefinition } from "./shared";
-import { buildCommerceFinalMarkdown, buildRuleBasedSummary, createFinalResult, isCommerceTask } from "./helpers";
+import { buildCommerceFinalMarkdown, buildRuleBasedSummary, createFinalResult } from "./result-builders";
+import { isCommerceTask } from "./task-guards";
 
 export const finalizeCommerceResultTool: AgentToolDefinition = {
   name: "finalizeCommerceResult",

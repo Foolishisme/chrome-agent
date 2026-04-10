@@ -7,8 +7,8 @@ import {
   createFinalResult,
   dedupeIssues,
   getFinalStatusForResearch,
-  isResearchTask,
-} from "./helpers";
+} from "./result-builders";
+import { isResearchTask } from "./task-guards";
 
 export const finalizeResearchResultTool: AgentToolDefinition = {
   name: "finalizeResearchResult",

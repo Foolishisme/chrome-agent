@@ -20,7 +20,7 @@
 - 下一步优先做真机护栏验证、provider 联调和路由体验验证
 - 下一阶段的大方向已收口为：保留 `direct_answer / commerce_search`，并把广义网页调研收口为 `browser_research` 家族
 - `browser_research` 当前先只计划两个概况型 mode：`site_overview / multi_source_overview`
-- 下一步准备把 `site_overview MVP` 落成最小可执行主链：主页 + 一跳高价值页面 + 覆盖边界输出
+- 下一步准备把 `site_overview MVP` 落成最小可执行主链：入口解析 + 主页 + 一跳高价值页面 + 覆盖边界输出
 
 ## 3. Done
 
@@ -141,7 +141,7 @@
 3. 记录 research 第一页重排前后的成功来源命中率
 4. 做 Gemini / DeepSeek provider live request 联调确认
 5. 打通自动化真机扩展验证链路
-6. 起草并落地 `site_overview MVP` 的最小 task spec / plan template / stop condition
+6. 起草并落地 `site_overview MVP` 的最小 task spec / 入口解析 step / plan template / stop condition
 7. 根据新增真实失败模式决定是否继续细拆 tool、扩展精准型 research 或补 PDF artifact
 
 ## 8. 2026-04-08 补充
@@ -352,6 +352,7 @@
 ### 8.21 2026-04-09 `site_overview MVP` 最小范围
 
 - 当前 `site_overview MVP` 只承诺：
+  - 先解析可信入口
   - 读取主页
   - 读取主页直达的一跳高价值页面
   - 输出粗粒度概况、来源列表和覆盖边界
@@ -375,4 +376,16 @@
 - `tests/sidepanel.test.ts`
   - 已覆盖历史 turn 复制入口、回退入口，以及运行中/完成后时间线标题显示
 
-Updated: 2026-04-09
+### 8.23 2026-04-10 `site_overview` 入口解析补充
+
+- `site_overview` 的第一步不再表述为固定“搜索”，而是可复用的 `resolveEntryPoint`
+- 入口优先级已收口为：
+  - 用户显式提供 `URL` 时先直达并校验
+  - 显式 `URL` 无效时只做一次有界修复
+  - 用户未提供 `URL` 时才解析官网主入口
+- 当前不建议：
+  - 一开始就搜索前 `5` 个内容页
+  - 只把原始 URL 列表交给 LLM，不附带标题和区域信号
+  - 把入口修复做成开放式多轮重试
+
+Updated: 2026-04-10

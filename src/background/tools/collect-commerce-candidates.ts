@@ -1,7 +1,8 @@
 import { RuntimeError } from "../../shared/errors";
 import { filterExtractedItems } from "../result-filter";
 import { createToolResult, type AgentToolDefinition } from "./shared";
-import { ensureUsableSnapshotWithDialogRecovery, isCommerceTask, scrollForMoreCandidates } from "./helpers";
+import { ensureUsableSnapshotWithDialogRecovery, scrollForMoreCandidates } from "./search-flow";
+import { isCommerceTask } from "./task-guards";
 
 export const collectCommerceCandidatesTool: AgentToolDefinition = {
   name: "collectCommerceCandidates",

@@ -106,5 +106,6 @@
 | G4 | 通用调研方向下，文档附件跟进、下载与解析仍保留在读取 tool 内部，不新增独立 `download` runtime-visible tool | 检查 `src/background/tools/` / `src/shared/types.ts` | NOT_RUN | 当前设计约束 |
 | G5 | `site_overview` 只在主页与一跳站内高价值页面范围内工作，不做深层递归 | `tests/site-overview.test.ts` | NOT_RUN | MVP 范围约束 |
 | G6 | `site_overview` 达到 `pageReadLimit`、候选耗尽或入口受阻时会停止，并返回正确的 `success / partial / blocked / failed` | `tests/site-overview.test.ts` / 真机手测 | NOT_RUN | 对齐已拍板 stop condition |
+| G7 | `site_overview` 的入口解析可复用：显式 `URL` 优先直达、无效时只做一次有界修复、未提供 `URL` 时才解析官网入口 | `tests/site-overview.test.ts` / 真机手测 | NOT_RUN | 不把第一步写死成固定搜索 |
 
-Updated: 2026-04-09
+Updated: 2026-04-10

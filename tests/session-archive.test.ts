@@ -121,4 +121,44 @@ describe("session archive", () => {
     expect(deleted.conversationTurns).toEqual([]);
     expect(deleted.availableConversations).toEqual([]);
   });
+
+  it("ignores legacy V1 archive keys after the V2 storage upgrade", async () => {
+    const { loadConversationBackfillState } = await import("../src/background/session-archive");
+
+    storageState["conversationArchiveIndexV1"] = ["legacy-conversation"];
+    storageState["activeConversationIdV1"] = "legacy-conversation";
+    storageState["conversationArchive:legacy-conversation"] = {
+      conversationId: "legacy-conversation",
+      title: "legacy",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      nextTurnId: 2,
+      turns: [
+        {
+          turnId: 1,
+          sessionId: "legacy-session",
+          goal: "legacy goal",
+          answerSummary: "legacy answer",
+          answerMarkdown: "legacy answer",
+          timeline: [],
+          savedAt: Date.now(),
+          state: createStoredState("legacy-session", "legacy goal", "legacy answer"),
+        },
+      ],
+    };
+
+    const fallback = await loadConversationBackfillState({
+      status: "idle",
+      currentStep: 0,
+      plan: [],
+      items: [],
+      logs: [],
+      timeline: [],
+      updatedAt: Date.now(),
+    });
+
+    expect(fallback.conversationId).toBeUndefined();
+    expect(fallback.conversationTurns).toEqual([]);
+    expect(fallback.availableConversations).toEqual([]);
+  });
 });

@@ -6,7 +6,7 @@
 - Status: `DOING`
 - Owner: `Codex + user`
 - Related taskModule: `direct_answer / commerce_search / public_research / browser_research`
-- Updated: `2026-04-09`
+- Updated: `2026-04-10`
 
 ## 2. 本轮结论
 
@@ -198,6 +198,7 @@
 ### 8.4 `site_overview MVP` 范围
 
 - 最小目标：
+  - 先解析可信入口
   - 读取站点主页
   - 读取主页直达的一跳高价值页面
   - 输出粗粒度概况、来源列表和覆盖边界
@@ -209,3 +210,15 @@
   - 达到 `pageReadLimit`
   - 高价值候选耗尽
   - 入口被登录墙 / 验证码 / 非网页资源阻断
+
+### 8.5 `site_overview` 入口解析约束
+
+- 第一阶段不把第一步写死成固定“搜索”，而是复用一个 `resolveEntryPoint`
+- 入口优先级：
+  - 用户提供显式 `URL` 时，先直达并校验
+  - 显式 `URL` 无效时，只允许一次有界修复
+  - 用户未提供 `URL` 时，才解析官网主入口
+- 当前不建议：
+  - 一开始就搜索前 `5` 个内容页
+  - 只把原始 URL 编号交给 LLM，不附带标题与区域信号
+  - 把入口修复做成开放式多轮重试

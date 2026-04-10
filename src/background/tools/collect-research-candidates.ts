@@ -2,7 +2,9 @@ import { RuntimeError } from "../../shared/errors";
 import { reorderResearchCandidates } from "../llm-client";
 import { filterResearchCandidates } from "../result-filter";
 import { createToolResult, type AgentToolDefinition } from "./shared";
-import { dedupeIssues, ensureUsableSnapshotWithDialogRecovery, isResearchTask } from "./helpers";
+import { dedupeIssues } from "./result-builders";
+import { ensureUsableSnapshotWithDialogRecovery } from "./search-flow";
+import { isResearchTask } from "./task-guards";
 
 export const collectResearchCandidatesTool: AgentToolDefinition = {
   name: "collectResearchCandidates",

@@ -5,11 +5,10 @@ import {
   detectSearchBlocker,
   ensureUsableSnapshotWithDialogRecovery,
   hasMatchingQuery,
-  isCommerceTask,
-  isResearchTask,
   needsSearchReopen,
   reopenSearchResults,
-} from "./helpers";
+} from "./search-flow";
+import { isCommerceTask, isResearchTask } from "./task-guards";
 
 export const openSearchResultsTool: AgentToolDefinition = {
   name: "openSearchResults",

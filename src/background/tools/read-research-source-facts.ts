@@ -1,7 +1,9 @@
 import { RuntimeError } from "../../shared/errors";
 import type { ResearchSourceResult } from "../../shared/types";
 import { createToolResult, type AgentToolDefinition } from "./shared";
-import { classifySourceFailure, countSuccessfulResearchSources, dedupeIssues, isResearchTask } from "./helpers";
+import { countSuccessfulResearchSources, dedupeIssues } from "./result-builders";
+import { classifySourceFailure } from "./source-failure";
+import { isResearchTask } from "./task-guards";
 
 export const readResearchSourceFactsTool: AgentToolDefinition = {
   name: "readResearchSourceFacts",

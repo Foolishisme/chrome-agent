@@ -5,8 +5,8 @@ import {
   buildDirectAnswerFallbackSummary,
   buildDirectAnswerFinalMarkdown,
   createFinalResult,
-  isDirectAnswerTask,
-} from "./helpers";
+} from "./result-builders";
+import { isDirectAnswerTask } from "./task-guards";
 
 export const finalizeDirectAnswerTool: AgentToolDefinition = {
   name: "finalizeDirectAnswer",
