@@ -17,6 +17,9 @@ export const researchCandidateSchema = z.object({
   displayUrl: z.string().optional(),
   rank: z.number().int().positive(),
   isAd: z.boolean().optional(),
+  linkText: z.string().optional(),
+  linkLocation: z.union([z.literal("header"), z.literal("nav"), z.literal("main"), z.literal("footer"), z.literal("unknown")]).optional(),
+  score: z.number().optional(),
 });
 
 export const pageFactExtractionSchema = z.object({
@@ -65,6 +68,12 @@ export const extractSearchResultsActionSchema = z.object({
   limit: z.number().int().positive().optional(),
 });
 
+export const extractSiteNavLinksActionSchema = z.object({
+  type: z.literal("EXTRACT_SITE_NAV_LINKS"),
+  limit: z.number().int().positive().optional(),
+  baseUrl: z.string().url().optional(),
+});
+
 export const extractPageFactsActionSchema = z.object({
   type: z.literal("EXTRACT_PAGE_FACTS"),
 });
@@ -83,6 +92,7 @@ export const agentActionSchema = z.discriminatedUnion("type", [
   recoverCloseDialogActionSchema,
   extractListActionSchema,
   extractSearchResultsActionSchema,
+  extractSiteNavLinksActionSchema,
   extractPageFactsActionSchema,
   doneActionSchema,
 ]);
@@ -93,7 +103,7 @@ export const queryRefinementSchema = z.object({
 });
 
 export const taskRouteSchema = z.object({
-  taskType: z.union([z.literal("direct_answer"), z.literal("commerce_search"), z.literal("public_research")]),
+  taskType: z.union([z.literal("direct_answer"), z.literal("commerce_search"), z.literal("public_research"), z.literal("site_overview")]),
   reason: z.string().min(1),
 });
 
@@ -101,6 +111,7 @@ export const nextToolSelectionSchema = z.object({
   toolName: z.union([
     z.literal("compileTaskSpec"),
     z.literal("finalizeDirectAnswer"),
+    z.literal("resolveEntryPoint"),
     z.literal("openSearchResults"),
     z.literal("collectCommerceCandidates"),
     z.literal("collectResearchCandidates"),
@@ -133,6 +144,7 @@ export const actionResultSchema = z.object({
     z.literal("RECOVER_CLOSE_DIALOG"),
     z.literal("EXTRACT_LIST"),
     z.literal("EXTRACT_SEARCH_RESULTS"),
+    z.literal("EXTRACT_SITE_NAV_LINKS"),
     z.literal("EXTRACT_PAGE_FACTS"),
     z.literal("DONE"),
   ]),

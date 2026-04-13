@@ -11,6 +11,7 @@ import type {
   ResearchCandidate,
   ResearchSourceResult,
   SearchTaskSpec,
+  SiteOverviewTaskSpec,
   TaskType,
   ToolName,
 } from "../shared/types";
@@ -21,6 +22,7 @@ import {
   buildNextToolPrompt,
   buildResearchCandidateReorderPrompt,
   buildResearchQueryRefinementPrompt,
+  buildSiteCandidateReorderPrompt,
   buildTaskRoutePromptWithContext,
 } from "./prompting";
 
@@ -444,7 +446,7 @@ export async function generateFinalResult(
   input: {
     goal: string;
     taskType: TaskType;
-    taskSpec: SearchTaskSpec | PublicResearchTaskSpec;
+    taskSpec: SearchTaskSpec | PublicResearchTaskSpec | SiteOverviewTaskSpec;
     items?: ExtractedItem[];
     sources?: ResearchSourceResult[];
     unresolvedIssues?: string[];
@@ -601,6 +603,74 @@ export async function reorderResearchCandidates(
     return {
       candidates: options.candidates,
       reason: error instanceof Error ? `fallback to filtered order: ${error.message}` : "fallback to filtered order",
+      source: "rule",
+    };
+  }
+}
+
+export async function reorderSiteCandidates(
+  options: {
+    goal: string;
+    targetDomain?: string;
+    candidates: ResearchCandidate[];
+  },
+  requestOptions: RequestOptions = {},
+): Promise<{
+  candidates: ResearchCandidate[];
+  reason: string;
+  source: "llm-lite" | "rule";
+  model?: string;
+  provider?: ProviderName;
+}> {
+  if (options.candidates.length <= 1) {
+    return {
+      candidates: options.candidates,
+      reason: "skip reorder because there are not enough site candidates",
+      source: "rule",
+    };
+  }
+
+  try {
+    const response = await requestProviderJson(
+      buildSiteCandidateReorderPrompt({
+        goal: options.goal,
+        targetDomain: options.targetDomain,
+        candidates: options.candidates.map((candidate, index) => ({
+          index,
+          title: candidate.title,
+          url: candidate.url,
+          linkText: candidate.linkText,
+          linkLocation: candidate.linkLocation,
+          score: candidate.score,
+          rank: candidate.rank,
+        })),
+      }),
+      researchCandidateReorderSchema,
+      "simple",
+      requestOptions,
+    );
+
+    const orderedIndexes = response.data.orderedIndexes;
+    const expectedIndexes = new Set(options.candidates.map((_, index) => index));
+    if (
+      orderedIndexes.length !== options.candidates.length ||
+      orderedIndexes.some((index) => !expectedIndexes.has(index)) ||
+      new Set(orderedIndexes).size !== options.candidates.length
+    ) {
+      throw new RuntimeError("The model returned an invalid site candidate reorder.", "INVALID_SITE_CANDIDATE_REORDER");
+    }
+
+    return {
+      candidates: orderedIndexes.map((index) => options.candidates[index]!),
+      reason: response.data.reason ?? "reordered same-site navigation candidates",
+      source: "llm-lite",
+      model: response.model,
+      provider: response.provider,
+    };
+  } catch (error) {
+    return {
+      candidates: options.candidates,
+      reason: error instanceof Error ? `fallback to rule-ranked order: ${error.message}` : "fallback to rule-ranked order",
       source: "rule",
     };
   }

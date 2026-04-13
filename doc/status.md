@@ -389,3 +389,27 @@
   - 把入口修复做成开放式多轮重试
 
 Updated: 2026-04-10
+
+## 9. 2026-04-13 `site_overview` 落地状态
+
+- `site_overview` 已新增为独立 task type，保留 `public_research` 多站链路不改名。
+- 新增 `resolveEntryPoint` runtime-visible tool，用于显式 URL 直达或一次有界官网入口解析。
+- `collectResearchCandidates` 已支持单站分支：抽取主页导航候选，规则过滤/打分后交给 LLM 做有界重排，非法或不可用时回退规则顺序。
+- 新增 action-level `EXTRACT_SITE_NAV_LINKS`，仅用于内容脚本返回主页导航候选，不开放 raw DOM 给 LLM 编排。
+- `readResearchSourceFacts` 已支持单站替补策略：次页正文少于 200 字、404、登录墙、导航失败或不可读时记录问题并继续读后续候选。
+- `finalizeResearchResult` 已支持单站概况结果，输出时要求标注来源、读取范围和未覆盖区域。
+
+### 本轮验证
+
+- `npx.cmd vitest run tests/query-compiler.test.ts tests/schema.test.ts tests/public-research.test.ts tests/research-search-quality.test.ts tests/site-overview.test.ts tests/llm-client.test.ts`
+  - 6 个测试文件，58 个测试通过
+- `npm.cmd run build`
+  - 通过
+
+### 剩余风险
+
+- 尚未做 Chrome 真机样例验证。
+- 未实现字段级 `site_precise`。
+- 未实现下载型附件、PDF/Word/Excel 主链读取。
+
+Updated: 2026-04-13

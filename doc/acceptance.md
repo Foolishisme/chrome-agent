@@ -109,3 +109,19 @@
 | G7 | `site_overview` 的入口解析可复用：显式 `URL` 优先直达、无效时只做一次有界修复、未提供 `URL` 时才解析官网入口 | `tests/site-overview.test.ts` / 真机手测 | NOT_RUN | 不把第一步写死成固定搜索 |
 
 Updated: 2026-04-10
+
+## 9. 2026-04-13 `site_overview` 验收补充
+
+| 编号 | 验收项 | 验证方式 | 当前状态 | 备注 |
+|---|---|---|---|---|
+| S1 | URL 或官网产品/平台/文档/价格意图可路由到 `site_overview` | `tests/query-compiler.test.ts` | PASS | 已覆盖显式 URL 与 `OpenAI 的产品` |
+| S2 | 口碑、新闻、竞品、市场观点仍走 `public_research` | `tests/query-compiler.test.ts` | PASS | 已覆盖多源意图反例 |
+| S3 | `resolveEntryPoint` 进入 canonical tool 集合 | `tests/schema.test.ts` / `npm.cmd run build` | PASS | 已更新 schema 与 registry |
+| S4 | 内容脚本可返回站内导航候选 | `tests/schema.test.ts` / `tests/site-overview.test.ts` | PASS | 新增 `EXTRACT_SITE_NAV_LINKS` |
+| S5 | 站内候选先规则过滤/打分，再允许 LLM 有界重排 | `tests/site-overview.test.ts` / `tests/llm-client.test.ts` | PASS | 已覆盖成功重排与规则回退 |
+| S6 | 次页正文少于 200 字时读取替补候选 | `tests/site-overview.test.ts` | PASS | 不计入成功来源 |
+| S7 | 次页疑似 404 时读取替补候选 | `tests/site-overview.test.ts` | PASS | 不计入成功来源 |
+| S8 | 候选耗尽但来源不足时返回部分结果边界 | `tests/site-overview.test.ts` | PASS | 记录 unresolved issue |
+| S9 | 项目可构建 | `npm.cmd run build` | PASS | 2026-04-13 已验证 |
+
+Updated: 2026-04-13

@@ -83,6 +83,8 @@ export async function createInitialSession(
           ? "Detected a non-JD page and opened jd.com automatically."
           : navigatedToHome && taskType === "public_research"
             ? "Detected a non-scriptable page and opened Google automatically."
+            : navigatedToHome && taskType === "site_overview"
+              ? "Detected a non-scriptable page and opened Google automatically."
             : "Ready to start the session.",
     runtimeMeta: {
       sessionId,

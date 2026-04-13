@@ -7,6 +7,7 @@ import type {
   ResearchSourceResult,
   ResultArtifact,
   SessionMemory,
+  SiteOverviewTaskSpec,
   TaskSpec,
 } from "../../shared/types";
 
@@ -126,7 +127,7 @@ export function buildResearchFinalMarkdown(summary: string, sources: ResearchSou
 }
 
 export function getFinalStatusForResearch(
-  taskSpec: PublicResearchTaskSpec,
+  taskSpec: PublicResearchTaskSpec | SiteOverviewTaskSpec,
   sources: ResearchSourceResult[],
   unresolvedIssues: string[],
 ) {
@@ -134,6 +135,13 @@ export function getFinalStatusForResearch(
 
   if (successfulSourceCount === 0) {
     return "failed" as const;
+  }
+
+  if (taskSpec.taskType === "site_overview") {
+    const homepage = sources[0];
+    if (!homepage || homepage.status !== "success") {
+      return "partial" as const;
+    }
   }
 
   if (
@@ -152,6 +160,8 @@ function createMarkdownArtifact(memory: SessionMemory, markdown: string, summary
     id:
       memory.taskType === "commerce_search"
         ? "commerce-result-markdown"
+        : memory.taskType === "site_overview"
+          ? "site-overview-result-markdown"
         : memory.taskType === "public_research"
           ? "research-result-markdown"
           : "direct-answer-markdown",
@@ -159,12 +169,16 @@ function createMarkdownArtifact(memory: SessionMemory, markdown: string, summary
     title:
       memory.taskType === "commerce_search"
         ? "Commerce Result Report"
+        : memory.taskType === "site_overview"
+          ? "Site Overview Report"
         : memory.taskType === "public_research"
           ? "Research Result Report"
           : "Direct Answer",
     fileName:
       memory.taskType === "commerce_search"
         ? "commerce-result.md"
+        : memory.taskType === "site_overview"
+          ? "site-overview-result.md"
         : memory.taskType === "public_research"
           ? "research-result.md"
           : "direct-answer.md",

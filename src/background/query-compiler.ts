@@ -1,4 +1,4 @@
-import { KNOWN_CATEGORY_KEYWORDS, RESEARCH_INTENT_KEYWORDS } from "../shared/constants";
+import { KNOWN_CATEGORY_KEYWORDS, LIMITS, RESEARCH_INTENT_KEYWORDS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
 import type {
   CommerceTaskSpec,
@@ -8,6 +8,7 @@ import type {
   PlanStep,
   PublicResearchTaskSpec,
   SearchPreference,
+  SiteOverviewTaskSpec,
   TaskSpec,
   TaskType,
 } from "../shared/types";
@@ -53,6 +54,31 @@ function hasCommerceCategory(goal: string) {
 
 function hasResearchSignal(goal: string) {
   return RESEARCH_INTENT_KEYWORDS.some((keyword) => goal.includes(keyword));
+}
+
+function extractExplicitUrl(goal: string) {
+  const matched = goal.match(/https?:\/\/[^\s"'，。！？、；：)）]+/i);
+  if (!matched) {
+    return undefined;
+  }
+
+  try {
+    return new URL(matched[0]).toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function hasSiteOverviewSignal(goal: string) {
+  if (extractExplicitUrl(goal)) {
+    return true;
+  }
+
+  return /官网|官方网站|官方站点|站点|网站|产品|平台|功能|文档|价格|pricing|docs|documentation|product|products|platform/i.test(goal);
+}
+
+function hasMultiSourceSignal(goal: string) {
+  return /口碑|评价|评测|新闻|报道|竞品|对比|市场|观点|是否靠谱|靠谱吗|争议|舆情|用户反馈|第三方|媒体|news|review|compare|competitor/i.test(goal);
 }
 
 function hasFreshnessSignal(goal: string) {
@@ -117,6 +143,14 @@ export function detectTaskTypeWithContext(
     searchPreference?: SearchPreference;
   } = {},
 ): TaskType {
+  if (hasMultiSourceSignal(goal) && !hasCommerceCategory(goal)) {
+    return "public_research";
+  }
+
+  if (hasSiteOverviewSignal(goal) && !hasMultiSourceSignal(goal) && !hasCommerceCategory(goal)) {
+    return "site_overview";
+  }
+
   if (hasResearchSignal(goal) && !hasCommerceCategory(goal)) {
     return "public_research";
   }
@@ -240,6 +274,46 @@ export function buildPlanSteps(taskType: TaskType): PlanStep[] {
     ];
   }
 
+  if (taskType === "site_overview") {
+    return [
+      {
+        stepId: "compile-task-spec",
+        goal: "识别单站概况目标并整理站点入口信息",
+        allowedTools: ["compileTaskSpec"],
+        successCriteria: ["确定 site_overview 路由", "确定入口模式和读取预算"],
+        status: "pending",
+      },
+      {
+        stepId: "resolve-entry-point",
+        goal: "解析并打开可信站点入口",
+        allowedTools: ["resolveEntryPoint"],
+        successCriteria: ["进入可信主页或确认入口受阻"],
+        status: "pending",
+      },
+      {
+        stepId: "collect-research-candidates",
+        goal: "从主页导航中筛选高价值次页候选",
+        allowedTools: ["collectResearchCandidates"],
+        successCriteria: ["得到主页和一跳高价值候选列表"],
+        status: "pending",
+      },
+      {
+        stepId: "read-research-source-facts",
+        goal: "读取主页与高价值次页正文",
+        allowedTools: ["readResearchSourceFacts"],
+        successCriteria: ["读到主页与目标数量次页，或确认候选耗尽"],
+        status: "pending",
+      },
+      {
+        stepId: "finalize-research-result",
+        goal: "统一汇总站点概况和覆盖边界",
+        allowedTools: ["finalizeResearchResult"],
+        successCriteria: ["输出站点概况、来源和未覆盖区域"],
+        status: "pending",
+      },
+    ];
+  }
+
   return [
     {
       stepId: "compile-task-spec",
@@ -277,6 +351,49 @@ export function buildPlanSteps(taskType: TaskType): PlanStep[] {
       status: "pending",
     },
   ];
+}
+
+function normalizeDomainFromUrl(url: string | undefined) {
+  if (!url) {
+    return undefined;
+  }
+
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
+}
+
+function extractSiteName(goal: string) {
+  const withoutUrl = goal.replace(/https?:\/\/[^\s"'，。！？、；：)）]+/gi, " ");
+  const matched =
+    withoutUrl.match(/(?:看一下|了解一下|介绍一下|调研一下|研究一下)?\s*([A-Za-z0-9][A-Za-z0-9 ._-]{1,40})\s*(?:的)?(?:官网|产品|平台|功能|文档|价格|pricing|docs|product|products|platform)/i) ??
+    withoutUrl.match(/([A-Za-z0-9][A-Za-z0-9 ._-]{1,40})/);
+  return matched?.[1]?.trim().replace(/\s+/g, " ");
+}
+
+export function compileSiteOverviewTask(goal: string): SiteOverviewTaskSpec {
+  const entryUrl = extractExplicitUrl(goal);
+  const siteName = normalizeDomainFromUrl(entryUrl) ?? extractSiteName(goal);
+  const officialSearchQuery = siteName ? `${siteName} official website` : buildFallbackResearchQuery(goal);
+
+  return {
+    taskType: "site_overview",
+    originalGoal: goal,
+    outputMode: detectOutputMode(goal),
+    entryMode: entryUrl ? "explicit_url" : "resolve_official_home",
+    entryUrl,
+    siteName,
+    targetDomain: normalizeDomainFromUrl(entryUrl),
+    officialSearchQuery,
+    candidateLimit: 6,
+    sourceTargetCount: 3,
+    pageReadLimit: 5,
+    maxLinkDepth: 1,
+    minReadableTextLength: LIMITS.PAGE_TEXT_MIN_LENGTH,
+    notes: [entryUrl ? "用户提供明确 URL，优先直达站点入口" : "用户未提供 URL，需有界解析官网入口"],
+  };
 }
 
 export function compileDirectAnswerTask(
@@ -441,6 +558,15 @@ export async function compileTaskSpec(
     const taskSpec = await compileCommerceTask(goal, {
       refineWithLiteModel: options.refineCommerceWithLiteModel,
     });
+    return {
+      taskType,
+      taskSpec,
+      plan: buildPlanSteps(taskType),
+    };
+  }
+
+  if (taskType === "site_overview") {
+    const taskSpec = compileSiteOverviewTask(goal);
     return {
       taskType,
       taskSpec,

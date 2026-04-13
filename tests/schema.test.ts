@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionResultSchema, agentActionSchema, finalResultSynthesisSchema, nextToolSelectionSchema } from "../src/shared/schema";
+import { actionResultSchema, agentActionSchema, finalResultSynthesisSchema, nextToolSelectionSchema, taskRouteSchema } from "../src/shared/schema";
 
 describe("schema contracts", () => {
   it("accepts a valid NAVIGATE action", () => {
@@ -37,6 +37,20 @@ describe("schema contracts", () => {
     expect(parsed.toolName).toBe("finalizeDirectAnswer");
   });
 
+  it("accepts the site overview route and entry resolver tool", () => {
+    expect(taskRouteSchema.parse({
+      taskType: "site_overview",
+      reason: "The user asked for a specific official website overview.",
+    }).taskType).toBe("site_overview");
+
+    const parsed = nextToolSelectionSchema.parse({
+      toolName: "resolveEntryPoint",
+      reason: "The current step resolves the site entry point.",
+    });
+
+    expect(parsed.toolName).toBe("resolveEntryPoint");
+  });
+
   it("accepts the final-result synthesis payload", () => {
     const parsed = finalResultSynthesisSchema.parse({
       summary: "Collected enough results.",
@@ -61,5 +75,27 @@ describe("schema contracts", () => {
     });
 
     expect(parsed.researchCandidates).toHaveLength(3);
+  });
+
+  it("accepts site navigation extraction actions and results", () => {
+    const action = agentActionSchema.parse({
+      type: "EXTRACT_SITE_NAV_LINKS",
+      limit: 6,
+      baseUrl: "https://openai.com/",
+    });
+
+    expect(action.type).toBe("EXTRACT_SITE_NAV_LINKS");
+
+    const result = actionResultSchema.parse({
+      success: true,
+      actionType: "EXTRACT_SITE_NAV_LINKS",
+      message: "Extracted 2 site candidates.",
+      researchCandidates: [
+        { title: "Products", url: "https://openai.com/products", rank: 1, linkLocation: "nav", linkText: "Products", score: 80 },
+        { title: "Pricing", url: "https://openai.com/pricing", rank: 2, linkLocation: "header", linkText: "Pricing", score: 76 },
+      ],
+    });
+
+    expect(result.researchCandidates).toHaveLength(2);
   });
 });

@@ -1,6 +1,6 @@
 import type { ActionResult, AgentAction } from "../shared/types";
 import { extractStructuredProducts } from "./extractor";
-import { extractGoogleSearchResults, extractPageFacts } from "./research";
+import { extractGoogleSearchResults, extractPageFacts, extractSiteNavLinks } from "./research";
 import { resolveAgentElement } from "./scanner";
 import { highlightRect, showToast } from "./overlay";
 
@@ -297,6 +297,38 @@ async function performExtractSearchResults(limit?: number): Promise<ActionResult
   };
 }
 
+async function performExtractSiteNavLinks(limit?: number, baseUrl?: string): Promise<ActionResult> {
+  const { candidates, diagnostics } = extractSiteNavLinks(document, { limit, baseUrl });
+  if (candidates.length === 0) {
+    showToast("未提取到站内导航候选", true);
+    return {
+      success: false,
+      actionType: "EXTRACT_SITE_NAV_LINKS",
+      message: "未提取到站内导航候选",
+      errorCode: "NO_SITE_NAV_LINKS",
+      researchCandidates: [],
+      observation: {
+        url: window.location.href,
+        title: document.title,
+        diagnostics,
+      },
+    };
+  }
+
+  showToast(`已提取 ${candidates.length} 个站内候选`);
+  return {
+    success: true,
+    actionType: "EXTRACT_SITE_NAV_LINKS",
+    message: `已提取 ${candidates.length} 个站内候选`,
+    researchCandidates: candidates,
+    observation: {
+      url: window.location.href,
+      title: document.title,
+      diagnostics,
+    },
+  };
+}
+
 async function performExtractPageFacts(): Promise<ActionResult> {
   const pageFacts = extractPageFacts();
   showToast(pageFacts.status === "success" ? "已提取页面事实" : "页面仅得到部分事实", pageFacts.status !== "success");
@@ -331,6 +363,8 @@ export async function executeAction(action: AgentAction): Promise<ActionResult> 
       return performExtractList(action.limit);
     case "EXTRACT_SEARCH_RESULTS":
       return performExtractSearchResults(action.limit);
+    case "EXTRACT_SITE_NAV_LINKS":
+      return performExtractSiteNavLinks(action.limit, action.baseUrl);
     case "EXTRACT_PAGE_FACTS":
       return performExtractPageFacts();
     case "DONE":

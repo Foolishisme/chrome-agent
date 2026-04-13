@@ -90,11 +90,15 @@ export const compileTaskSpecTool: AgentToolDefinition = {
         ? "Open the JD search results page."
         : compiled.taskType === "public_research"
           ? "Open the Google search results page."
-          : "Generate the direct answer.";
+          : compiled.taskType === "site_overview"
+            ? "Resolve the official site entry page."
+            : "Generate the direct answer.";
 
     const taskSummary =
       compiled.taskType === "direct_answer"
         ? compiled.taskSpec.routeReason
+        : compiled.taskType === "site_overview"
+          ? compiled.taskSpec.entryUrl ?? compiled.taskSpec.officialSearchQuery ?? compiled.taskSpec.originalGoal
         : compiled.taskSpec.searchQuery;
 
     context.recordStep({
@@ -113,7 +117,8 @@ export const compileTaskSpecTool: AgentToolDefinition = {
           }
         : {
             taskType: compiled.taskType,
-            searchQuery: compiled.taskSpec.searchQuery,
+            searchQuery:
+              compiled.taskType === "site_overview" ? compiled.taskSpec.officialSearchQuery : compiled.taskSpec.searchQuery,
           };
 
     return createToolResult({

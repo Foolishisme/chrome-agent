@@ -8,13 +8,13 @@ import {
   dedupeIssues,
   getFinalStatusForResearch,
 } from "./result-builders";
-import { isResearchTask } from "./task-guards";
+import { isReadableResearchTask } from "./task-guards";
 
 export const finalizeResearchResultTool: AgentToolDefinition = {
   name: "finalizeResearchResult",
   async run(context) {
-    if (!isResearchTask(context.memory.taskSpec)) {
-      throw new RuntimeError("Research finalization requires a public research task spec.", "INVALID_RESEARCH_TASK");
+    if (!isReadableResearchTask(context.memory.taskSpec)) {
+      throw new RuntimeError("Research finalization requires a public or site research task spec.", "INVALID_RESEARCH_TASK");
     }
 
     await context.pushState("Aggregate the structured task results into the final output.");

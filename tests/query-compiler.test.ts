@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   compileDirectAnswerTask,
   compilePublicResearchTask,
+  compileSiteOverviewTask,
   compileSearchTask,
   compileTaskSpec,
   detectOutputMode,
@@ -50,6 +51,27 @@ describe("query compiler", () => {
 
   it("routes time-sensitive questions to public_research", () => {
     expect(detectTaskType("今天金价是多少")).toBe("public_research");
+  });
+
+  it("routes explicit URLs and official-site product goals to site_overview", () => {
+    expect(detectTaskType("帮我看一下 https://openai.com/ 的产品概况")).toBe("site_overview");
+    expect(detectTaskType("OpenAI 的产品有哪些")).toBe("site_overview");
+  });
+
+  it("keeps reputation and news goals on public_research instead of site_overview", () => {
+    expect(detectTaskType("OpenAI 最近新闻和市场观点")).toBe("public_research");
+    expect(detectTaskType("OpenAI 口碑怎么样，第三方评价如何")).toBe("public_research");
+  });
+
+  it("builds a site overview task spec from an explicit URL", () => {
+    const task = compileSiteOverviewTask("帮我看一下 https://openai.com/ 的产品概况");
+
+    expect(task.taskType).toBe("site_overview");
+    expect(task.entryMode).toBe("explicit_url");
+    expect(task.entryUrl).toBe("https://openai.com/");
+    expect(task.targetDomain).toBe("openai.com");
+    expect(task.candidateLimit).toBe(6);
+    expect(task.minReadableTextLength).toBe(200);
   });
 
   it("keeps clear direct answers even when prefer_search is enabled", async () => {
@@ -180,5 +202,20 @@ describe("query compiler", () => {
     expect(compiled.taskType).toBe("direct_answer");
     expect(compiled.plan).toHaveLength(2);
     expect(compiled.plan[1]?.allowedTools).toEqual(["finalizeDirectAnswer"]);
+  });
+
+  it("builds a site overview plan with entry resolution", async () => {
+    const compiled = await compileTaskSpec("OpenAI 的产品有哪些", {
+      taskType: "site_overview",
+    });
+
+    expect(compiled.taskType).toBe("site_overview");
+    expect(compiled.plan.map((step) => step.allowedTools[0])).toEqual([
+      "compileTaskSpec",
+      "resolveEntryPoint",
+      "collectResearchCandidates",
+      "readResearchSourceFacts",
+      "finalizeResearchResult",
+    ]);
   });
 });

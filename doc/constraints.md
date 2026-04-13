@@ -75,6 +75,7 @@
 
 - `compileTaskSpec`
 - `finalizeDirectAnswer`
+- `resolveEntryPoint`
 - `openSearchResults`
 - `collectCommerceCandidates`
 - `collectResearchCandidates`
@@ -130,3 +131,13 @@
 - 是否将当前 v1 升级为执行中动态改 plan
 
 Updated: 2026-04-09
+
+## 9. 2026-04-13 `site_overview` 约束
+
+- `site_overview` 只覆盖可信入口主页和主页一跳导航中的高价值页面。
+- 主页导航候选必须先做同域/可信子域过滤、低价值链接排除和规则打分；LLM 只能对候选重排，不能新增 URL。
+- 次页正文少于 200 字、404、登录墙、导航失败或不可读时，不计入成功来源，必须继续尝试替补候选，直到达到目标、候选耗尽或读页预算耗尽。
+- 结果必须说明已读页面、跳过或部分读取页面、覆盖边界和未覆盖区域。
+- 当前不把下载、附件解析或深层 crawl 抽成新的 runtime-visible tool。
+
+Updated: 2026-04-13

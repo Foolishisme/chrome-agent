@@ -45,6 +45,89 @@ function normalizeGoogleHref(rawHref: string) {
   }
 }
 
+function normalizeHref(rawHref: string, baseUrl = window.location.href) {
+  try {
+    const parsed = new URL(rawHref, baseUrl);
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      return "";
+    }
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+function getLinkLocation(anchor: HTMLAnchorElement): ResearchCandidate["linkLocation"] {
+  if (anchor.closest("header")) {
+    return "header";
+  }
+  if (anchor.closest("nav, [role='navigation']")) {
+    return "nav";
+  }
+  if (anchor.closest("main, article, [role='main']")) {
+    return "main";
+  }
+  if (anchor.closest("footer")) {
+    return "footer";
+  }
+  return "unknown";
+}
+
+function titleFromAnchor(anchor: HTMLAnchorElement) {
+  return (
+    textOf(anchor) ||
+    anchor.getAttribute("aria-label") ||
+    anchor.getAttribute("title") ||
+    anchor.href
+  ).trim();
+}
+
+export function extractSiteNavLinks(root: Document | HTMLElement = document, options: { limit?: number; baseUrl?: string } = {}) {
+  const limit = options.limit ?? 40;
+  const baseUrl = options.baseUrl ?? window.location.href;
+  const candidates: ResearchCandidate[] = [];
+  const seen = new Set<string>();
+  const anchors = Array.from(root.querySelectorAll<HTMLAnchorElement>("header a[href], nav a[href], [role='navigation'] a[href], main a[href], footer a[href], a[href]"));
+
+  for (const anchor of anchors) {
+    const url = normalizeHref(anchor.getAttribute("href") ?? anchor.href, baseUrl);
+    if (!url || seen.has(url)) {
+      continue;
+    }
+
+    seen.add(url);
+    const linkText = titleFromAnchor(anchor);
+    candidates.push({
+      title: linkText,
+      url,
+      linkText,
+      linkLocation: getLinkLocation(anchor),
+      rank: candidates.length + 1,
+      source: (() => {
+        try {
+          return new URL(url).hostname.replace(/^www\./, "");
+        } catch {
+          return undefined;
+        }
+      })(),
+    });
+
+    if (candidates.length >= limit) {
+      break;
+    }
+  }
+
+  return {
+    candidates,
+    diagnostics: {
+      linkCount: anchors.length,
+      dedupedCount: seen.size,
+      finalCount: candidates.length,
+    },
+  };
+}
+
 function getGoogleResultContainers(root: Document | HTMLElement) {
   const selectors = ["div[data-snc]", ".MjjYud", ".g", ".ezO2md", ".hlcw0c"];
   for (const selector of selectors) {

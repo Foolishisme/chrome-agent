@@ -441,3 +441,14 @@ UI 不再展示 `currentPhase`，结果区只展示最终交付物：
 文档产物不是默认输出，只有在用户明确要求文档交付时才生成。
 
 Updated: 2026-04-09
+
+## 11. 2026-04-13 `site_overview` 单站概况模式
+
+- 新增 `site_overview` task module，面向用户给出明确 URL、明确站点名，或询问某公司官网产品/平台/文档/价格等官方信息的单站概况任务。
+- 当前单站读取范围固定为：可信入口主页 + 主页一跳导航中的高价值页面；不做深层整站 crawl，不读取下载型附件，不输出“完整站点确认”。
+- `site_overview` 主链为：`compileTaskSpec -> resolveEntryPoint -> collectResearchCandidates -> readResearchSourceFacts -> finalizeResearchResult`。
+- `resolveEntryPoint` 负责显式 URL 直达校验，或在未给 URL 时做一次有界官网入口解析。
+- 主页导航候选先由规则过滤和打分，再由 LLM 对已过滤候选做有界重排；LLM 不允许新增 URL，非法重排回退规则顺序。
+- 次要页面正文少于 `LIMITS.PAGE_TEXT_MIN_LENGTH`、404、登录墙、导航失败或正文不可读时，记录为未解决问题并继续读取替补候选。
+
+Updated: 2026-04-13

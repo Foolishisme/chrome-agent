@@ -1,5 +1,5 @@
 import { DEFAULT_LOCALE } from "../shared/constants";
-import type { PlanStepStatus, RuntimeStatus } from "../shared/types";
+import type { PlanStepStatus, RuntimeStatus, TaskType } from "../shared/types";
 
 export type Locale = "zh-CN" | "en-US";
 
@@ -94,7 +94,7 @@ type MessageBundle = {
   emptyValue: string;
   budgetLow: string;
   budgetHealthy: string;
-  taskTypeLabels: Record<"direct_answer" | "commerce_search" | "public_research", string>;
+  taskTypeLabels: Record<TaskType, string>;
   statusLabels: Record<RuntimeStatus, string>;
   stepStatusLabels: Record<PlanStepStatus, string>;
 };
@@ -195,6 +195,7 @@ const messages: Record<Locale, MessageBundle> = {
       direct_answer: "直接回答",
       commerce_search: "商城调研",
       public_research: "公网调研",
+      site_overview: "单站概况",
     },
     statusLabels: {
       idle: "空闲",
@@ -305,6 +306,7 @@ const messages: Record<Locale, MessageBundle> = {
       direct_answer: "Direct Answer",
       commerce_search: "Commerce Research",
       public_research: "Public Research",
+      site_overview: "Site Overview",
     },
     statusLabels: {
       idle: "Idle",

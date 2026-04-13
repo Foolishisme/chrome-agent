@@ -7,11 +7,13 @@ import { finalizeDirectAnswerTool } from "./finalize-direct-answer";
 import { finalizeResearchResultTool } from "./finalize-research-result";
 import { openSearchResultsTool } from "./open-search-results";
 import { readResearchSourceFactsTool } from "./read-research-source-facts";
+import { resolveEntryPointTool } from "./resolve-entry-point";
 import type { AgentToolDefinition } from "./shared";
 
 const TOOL_REGISTRY: Record<ToolName, AgentToolDefinition> = {
   compileTaskSpec: compileTaskSpecTool,
   finalizeDirectAnswer: finalizeDirectAnswerTool,
+  resolveEntryPoint: resolveEntryPointTool,
   openSearchResults: openSearchResultsTool,
   collectCommerceCandidates: collectCommerceCandidatesTool,
   collectResearchCandidates: collectResearchCandidatesTool,

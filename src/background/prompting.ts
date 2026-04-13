@@ -7,6 +7,7 @@ import type {
   ResearchSourceResult,
   SearchPreference,
   SearchTaskSpec,
+  SiteOverviewTaskSpec,
   TaskType,
 } from "../shared/types";
 
@@ -45,13 +46,14 @@ export function buildTaskRoutePromptWithContext(
   return [
     "You classify browser-agent tasks.",
     "Return JSON only.",
-    'Schema: {"taskType":"direct_answer|commerce_search|public_research","reason":"..."}',
+    'Schema: {"taskType":"direct_answer|commerce_search|public_research|site_overview","reason":"..."}',
     `Current absolute time: ${options.currentTimeIso ?? new Date().toISOString()}`,
     `User timezone: ${options.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC"}`,
     `Search preference: ${options.searchPreference ?? "auto"}`,
     "Rules:",
     "- commerce_search is for shopping, product recommendation, budgeted product search, or clear purchase intent.",
     "- public_research is for web-search tasks, source-based investigation, or questions that likely depend on current external facts.",
+    "- site_overview is for reading one official/target website when the user gives a URL, asks about a specific website, or asks for a specific company's official products, platform, docs, features, or pricing.",
     "- direct_answer is for simple stable knowledge, explanations, or follow-up questions that can be answered from recent conversation evidence without opening search pages.",
     "- If recent conversation already contains enough evidence for the user's follow-up, choose direct_answer.",
     "- If the user explicitly asks for current, latest, recent, live, today, price, news, official, sourced, or time-sensitive facts, choose public_research.",
@@ -59,6 +61,8 @@ export function buildTaskRoutePromptWithContext(
     "- Even when search preference is prefer_search, keep direct_answer for clearly stable knowledge or clearly sufficient recent conversation evidence.",
     "- If the user asks for products to buy, recommend, compare by budget, or shortlist items, choose commerce_search.",
     "- If the user asks to research a topic, gather sources, verify facts, or search public information, choose public_research.",
+    "- If the user asks for reputation, reviews, news coverage, market views, controversy, third-party comparison, or whether something is trustworthy, choose public_research instead of site_overview.",
+    "- If the user provides a URL and asks to summarize or inspect that site, choose site_overview.",
     "- Choose exactly one taskType.",
     `Recent conversation turns: ${formatConversationTurns(options.conversationTurns)}`,
     ...(options.conversationContext ? [`Recent conversation context:\n${options.conversationContext}`] : []),
@@ -163,10 +167,39 @@ export function buildResearchCandidateReorderPrompt(options: {
   ].join("\n");
 }
 
+export function buildSiteCandidateReorderPrompt(options: {
+  goal: string;
+  targetDomain?: string;
+  candidates: Array<{
+    index: number;
+    title: string;
+    url: string;
+    linkText?: string;
+    linkLocation?: string;
+    score?: number;
+    rank: number;
+  }>;
+}) {
+  return [
+    "You reorder same-site navigation candidates for a browser agent.",
+    "Return JSON only.",
+    'Schema: {"orderedIndexes":[0,1,2],"reason":"..."}',
+    "Rules:",
+    "- Reorder only the provided candidates. Do not add or remove any candidate.",
+    "- Prefer pages that help summarize the target site's official products, platform, docs, pricing, features, or core positioning for the user goal.",
+    "- Prefer high-signal navigation pages over legal, account, social, careers, cookie, login, or shallow utility pages.",
+    "- Keep the full set of indexes exactly once each.",
+    "- Favor pages that are most useful to read first, not just pages with the shortest title.",
+    `User goal: ${options.goal}`,
+    `Target domain: ${options.targetDomain ?? "unknown"}`,
+    `Candidates: ${JSON.stringify(options.candidates, null, 2)}`,
+  ].join("\n");
+}
+
 export function buildFinalResultPrompt(options: {
   goal: string;
   taskType: TaskType;
-  taskSpec: SearchTaskSpec | PublicResearchTaskSpec;
+  taskSpec: SearchTaskSpec | PublicResearchTaskSpec | SiteOverviewTaskSpec;
   items?: ExtractedItem[];
   sources?: ResearchSourceResult[];
   unresolvedIssues?: string[];
@@ -187,6 +220,7 @@ export function buildFinalResultPrompt(options: {
     "3. If there are multiple candidates / options / sources worth comparing, prefer a markdown table early in the answer.",
     "4. The final section MUST be information sources, using standard markdown links [Title](URL).",
     "5. Remove SEO fluff, platform marketing words, and repetitive noise.",
+    "6. For site_overview tasks, explicitly state the pages read, skipped/partial pages, and coverage limits; never imply full-site coverage.",
     "",
     "## Writing Guidance",
     "- Do NOT force a rigid template when the material does not support it.",

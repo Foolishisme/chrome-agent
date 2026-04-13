@@ -9,6 +9,7 @@ import {
   getModelCandidates,
   parseModelJson,
   reorderResearchCandidates,
+  reorderSiteCandidates,
 } from "../src/background/llm-client";
 
 afterEach(() => {
@@ -149,5 +150,35 @@ describe("llm client helpers", () => {
 
     expect(result.source).toBe("rule");
     expect(result.candidates.map((candidate) => candidate.title)).toEqual(["Commentary", "Official docs"]);
+  });
+
+  it("reorders site candidates when the model returns a valid index order", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: '{"orderedIndexes":[1,0],"reason":"prefer docs first"}',
+              },
+            },
+          ],
+        }),
+      }),
+    );
+
+    const result = await reorderSiteCandidates({
+      goal: "OpenAI 的产品有哪些",
+      targetDomain: "openai.com",
+      candidates: [
+        { title: "Products", url: "https://openai.com/products", rank: 1, linkLocation: "nav" },
+        { title: "Docs", url: "https://platform.openai.com/docs", rank: 2, linkLocation: "header" },
+      ],
+    });
+
+    expect(result.source).toBe("llm-lite");
+    expect(result.candidates.map((candidate) => candidate.title)).toEqual(["Docs", "Products"]);
   });
 });

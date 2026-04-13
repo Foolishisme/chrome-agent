@@ -1,6 +1,6 @@
 export type PageType = "home" | "search" | "google_search" | "content" | "pdf" | "unknown";
 
-export type TaskType = "direct_answer" | "commerce_search" | "public_research";
+export type TaskType = "direct_answer" | "commerce_search" | "public_research" | "site_overview";
 export type OutputMode = "inline" | "artifact";
 export type SearchPreference = "auto" | "prefer_search";
 
@@ -9,6 +9,7 @@ export type PlanStepStatus = "pending" | "running" | "succeeded" | "failed" | "b
 export type ToolName =
   | "compileTaskSpec"
   | "finalizeDirectAnswer"
+  | "resolveEntryPoint"
   | "openSearchResults"
   | "collectCommerceCandidates"
   | "collectResearchCandidates"
@@ -109,6 +110,9 @@ export interface ResearchCandidate {
   displayUrl?: string;
   rank: number;
   isAd?: boolean;
+  linkText?: string;
+  linkLocation?: "header" | "nav" | "main" | "footer" | "unknown";
+  score?: number;
 }
 
 export interface PageReadyState {
@@ -225,6 +229,23 @@ export interface PublicResearchTaskSpec {
   sourceTargetCount: number;
 }
 
+export interface SiteOverviewTaskSpec {
+  taskType: "site_overview";
+  originalGoal: string;
+  outputMode?: OutputMode;
+  entryMode: "explicit_url" | "resolve_official_home";
+  entryUrl?: string;
+  siteName?: string;
+  targetDomain?: string;
+  officialSearchQuery?: string;
+  candidateLimit: number;
+  sourceTargetCount: number;
+  pageReadLimit: number;
+  maxLinkDepth: 1;
+  minReadableTextLength: number;
+  notes: string[];
+}
+
 export interface DirectAnswerTaskSpec {
   taskType: "direct_answer";
   originalGoal: string;
@@ -235,7 +256,7 @@ export interface DirectAnswerTaskSpec {
   evidenceTurnCount: number;
 }
 
-export type TaskSpec = CommerceTaskSpec | PublicResearchTaskSpec | DirectAnswerTaskSpec;
+export type TaskSpec = CommerceTaskSpec | PublicResearchTaskSpec | SiteOverviewTaskSpec | DirectAnswerTaskSpec;
 
 export interface SnapshotData {
   url: string;
@@ -336,6 +357,7 @@ export type AgentAction =
   | { type: "RECOVER_CLOSE_DIALOG" }
   | { type: "EXTRACT_LIST"; limit?: number }
   | { type: "EXTRACT_SEARCH_RESULTS"; limit?: number }
+  | { type: "EXTRACT_SITE_NAV_LINKS"; limit?: number; baseUrl?: string }
   | { type: "EXTRACT_PAGE_FACTS" }
   | { type: "DONE"; summary: string; items?: ExtractedItem[] };
 
