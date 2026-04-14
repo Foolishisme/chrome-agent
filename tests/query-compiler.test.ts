@@ -53,9 +53,13 @@ describe("query compiler", () => {
     expect(detectTaskType("今天金价是多少")).toBe("public_research");
   });
 
-  it("routes explicit URLs and official-site product goals to site_overview", () => {
+  it("routes explicit URLs and explicit official-site goals to site_overview", () => {
     expect(detectTaskType("帮我看一下 https://openai.com/ 的产品概况")).toBe("site_overview");
-    expect(detectTaskType("OpenAI 的产品有哪些")).toBe("site_overview");
+    expect(detectTaskType("OpenAI 官网的产品有哪些")).toBe("site_overview");
+  });
+
+  it("keeps company product questions on public_research unless site intent is explicit", () => {
+    expect(detectTaskType("OpenAI 的产品有哪些")).toBe("public_research");
   });
 
   it("keeps reputation and news goals on public_research instead of site_overview", () => {
@@ -72,6 +76,11 @@ describe("query compiler", () => {
     expect(task.targetDomain).toBe("openai.com");
     expect(task.candidateLimit).toBe(6);
     expect(task.minReadableTextLength).toBe(200);
+  });
+
+  it("extracts site names from explicit official-site wording", () => {
+    expect(compileSiteOverviewTask("OpenAI official website").siteName).toBe("OpenAI");
+    expect(compileSiteOverviewTask("帮我看一下阿里云官网").siteName).toBe("阿里云");
   });
 
   it("keeps clear direct answers even when prefer_search is enabled", async () => {

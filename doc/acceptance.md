@@ -114,7 +114,7 @@ Updated: 2026-04-10
 
 | 编号 | 验收项 | 验证方式 | 当前状态 | 备注 |
 |---|---|---|---|---|
-| S1 | URL 或官网产品/平台/文档/价格意图可路由到 `site_overview` | `tests/query-compiler.test.ts` | PASS | 已覆盖显式 URL 与 `OpenAI 的产品` |
+| S1 | URL 或明确官网/网站意图可路由到 `site_overview`，普通公司产品问题默认走 `public_research` | `tests/query-compiler.test.ts` | PASS | 已覆盖显式 URL、`OpenAI 官网的产品` 与 `OpenAI 的产品` 反例 |
 | S2 | 口碑、新闻、竞品、市场观点仍走 `public_research` | `tests/query-compiler.test.ts` | PASS | 已覆盖多源意图反例 |
 | S3 | `resolveEntryPoint` 进入 canonical tool 集合 | `tests/schema.test.ts` / `npm.cmd run build` | PASS | 已更新 schema 与 registry |
 | S4 | 内容脚本可返回站内导航候选 | `tests/schema.test.ts` / `tests/site-overview.test.ts` | PASS | 新增 `EXTRACT_SITE_NAV_LINKS` |

@@ -393,7 +393,9 @@ Updated: 2026-04-10
 ## 9. 2026-04-13 `site_overview` 落地状态
 
 - `site_overview` 已新增为独立 task type，保留 `public_research` 多站链路不改名。
+- 路由口径已收紧：只有明确 URL 或明确官网/网站/站点意图才走 `site_overview`，普通公司产品/平台/文档/价格问题默认回到 `public_research`。
 - 新增 `resolveEntryPoint` runtime-visible tool，用于显式 URL 直达或一次有界官网入口解析。
+- `resolveEntryPoint` 已增加官网候选过滤，并在入口不是可读 content 页面时停止，不继续把非内容页当主页读导航。
 - `collectResearchCandidates` 已支持单站分支：抽取主页导航候选，规则过滤/打分后交给 LLM 做有界重排，非法或不可用时回退规则顺序。
 - 新增 action-level `EXTRACT_SITE_NAV_LINKS`，仅用于内容脚本返回主页导航候选，不开放 raw DOM 给 LLM 编排。
 - `readResearchSourceFacts` 已支持单站替补策略：次页正文少于 200 字、404、登录墙、导航失败或不可读时记录问题并继续读后续候选。

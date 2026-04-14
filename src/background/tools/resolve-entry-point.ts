@@ -20,6 +20,35 @@ function buildOfficialSearchUrl(query: string) {
   return url.toString();
 }
 
+function normalizeCandidateText(text: string | undefined) {
+  return (text ?? "").toLowerCase().replace(/[\s._-]+/g, "");
+}
+
+function isKnownNonOfficialHost(hostname: string | undefined) {
+  const normalized = normalizeCandidateText(hostname);
+  return /(?:wikipedia|baike|zhihu|medium|reddit|youtube|facebook|linkedin|crunchbase|bloomberg|forbes|github|appadvice|twitter|x\.com)/i.test(normalized);
+}
+
+function findLikelyOfficialCandidate(candidates: ResearchCandidate[], siteName: string | undefined) {
+  if (!siteName) {
+    return candidates.find((candidate) => !isKnownNonOfficialHost(candidate.source));
+  }
+
+  const normalizedSiteName = normalizeCandidateText(siteName);
+  return candidates.find((candidate) => {
+    if (isKnownNonOfficialHost(candidate.source)) {
+      return false;
+    }
+
+    const title = normalizeCandidateText(candidate.title);
+    const source = normalizeCandidateText(candidate.source);
+    const url = normalizeCandidateText(candidate.url);
+    const hostMatches = source.includes(normalizedSiteName) || url.includes(`//${normalizedSiteName}`);
+    const titleMatches = title.includes(normalizedSiteName) && /official|官网|官方网站|首页|home/.test(`${candidate.title} ${candidate.snippet ?? ""}`);
+    return hostMatches || titleMatches;
+  });
+}
+
 export const resolveEntryPointTool: AgentToolDefinition = {
   name: "resolveEntryPoint",
   async run(context) {
@@ -62,13 +91,14 @@ export const resolveEntryPointTool: AgentToolDefinition = {
       };
       const extractResult = await context.executeAction(extractAction, "Extract official site entry candidates.");
       const candidates = filterResearchCandidates(extractResult.researchCandidates ?? [], 3).candidates;
-      const firstCandidate: ResearchCandidate | undefined = candidates[0];
-      if (!firstCandidate) {
+      const officialCandidate = findLikelyOfficialCandidate(candidates, taskSpec.siteName);
+      if (!officialCandidate) {
         return createToolResult({
           status: "fatal_error",
-          summary: "No usable official site entry candidate was found.",
+          summary: "No likely official site entry candidate was found.",
           outputs: {
             extractedCount: extractResult.researchCandidates?.length ?? 0,
+            candidates,
           },
           facts: {
             resolvedEntryPoint: false,
@@ -78,7 +108,7 @@ export const resolveEntryPointTool: AgentToolDefinition = {
         });
       }
 
-      entryUrl = firstCandidate.url;
+      entryUrl = officialCandidate.url;
       resolvedFromSearch = true;
     }
 
@@ -108,7 +138,10 @@ export const resolveEntryPointTool: AgentToolDefinition = {
       siteEntryUrl: snapshot.url,
       targetDomain,
     };
-    context.memory.nextIntent = "Collect high-value navigation pages from the site homepage.";
+    context.memory.nextIntent =
+      result.success && snapshot.pageType === "content"
+        ? "Collect high-value navigation pages from the site homepage."
+        : "Stop because the site entry was not a readable content page.";
     context.memory.recoveryHint = undefined;
     context.memory.lastError = result.success ? undefined : result.message;
 
@@ -123,8 +156,8 @@ export const resolveEntryPointTool: AgentToolDefinition = {
 
     if (!result.success || snapshot.pageType !== "content") {
       return createToolResult({
-        status: "partial",
-        summary: `Site entry opened with limited confidence: ${snapshot.title || snapshot.url}`,
+        status: "fatal_error",
+        summary: `Site entry is not a readable content page: ${snapshot.title || snapshot.url}`,
         outputs: {
           entryUrl: snapshot.url,
           targetDomain,
@@ -135,7 +168,8 @@ export const resolveEntryPointTool: AgentToolDefinition = {
           siteEntryUrl: snapshot.url,
           targetDomain,
         },
-        stepStatus: "succeeded",
+        stepStatus: "failed",
+        errorCode: result.success ? "SITE_ENTRY_NOT_CONTENT" : result.errorCode ?? "SITE_ENTRY_NAVIGATION_FAILED",
       });
     }
 

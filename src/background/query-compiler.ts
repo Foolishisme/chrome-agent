@@ -74,11 +74,15 @@ function hasSiteOverviewSignal(goal: string) {
     return true;
   }
 
-  return /官网|官方网站|官方站点|站点|网站|产品|平台|功能|文档|价格|pricing|docs|documentation|product|products|platform/i.test(goal);
+  return /官网|官方网站|官方站点|站点|网站|这个站|这个网站|该站点|该网站|site overview|website overview/i.test(goal);
 }
 
 function hasMultiSourceSignal(goal: string) {
   return /口碑|评价|评测|新闻|报道|竞品|对比|市场|观点|是否靠谱|靠谱吗|争议|舆情|用户反馈|第三方|媒体|news|review|compare|competitor/i.test(goal);
+}
+
+function hasCompanyInfoSignal(goal: string) {
+  return /产品|平台|功能|文档|价格|pricing|docs|documentation|product|products|platform|features?/i.test(goal);
 }
 
 function hasFreshnessSignal(goal: string) {
@@ -149,6 +153,10 @@ export function detectTaskTypeWithContext(
 
   if (hasSiteOverviewSignal(goal) && !hasMultiSourceSignal(goal) && !hasCommerceCategory(goal)) {
     return "site_overview";
+  }
+
+  if (hasCompanyInfoSignal(goal) && !hasCommerceCategory(goal)) {
+    return "public_research";
   }
 
   if (hasResearchSignal(goal) && !hasCommerceCategory(goal)) {
@@ -367,9 +375,10 @@ function normalizeDomainFromUrl(url: string | undefined) {
 
 function extractSiteName(goal: string) {
   const withoutUrl = goal.replace(/https?:\/\/[^\s"'，。！？、；：)）]+/gi, " ");
+  const normalizedGoal = withoutUrl.replace(/^\s*(?:帮我|请|麻烦你)?\s*(?:看一下|了解一下|介绍一下|调研一下|研究一下)?\s*/u, "");
   const matched =
-    withoutUrl.match(/(?:看一下|了解一下|介绍一下|调研一下|研究一下)?\s*([A-Za-z0-9][A-Za-z0-9 ._-]{1,40})\s*(?:的)?(?:官网|产品|平台|功能|文档|价格|pricing|docs|product|products|platform)/i) ??
-    withoutUrl.match(/([A-Za-z0-9][A-Za-z0-9 ._-]{1,40})/);
+    normalizedGoal.match(/([A-Za-z0-9\u4e00-\u9fff][A-Za-z0-9\u4e00-\u9fff ._-]{1,40}?)\s*(?:的)?(?:官网|官方网站|官方站点|站点|网站|official website|official site|website|site|产品|平台|功能|文档|价格|pricing|docs|product|products|platform)/i) ??
+    normalizedGoal.match(/([A-Za-z0-9\u4e00-\u9fff][A-Za-z0-9\u4e00-\u9fff ._-]{1,40})/);
   return matched?.[1]?.trim().replace(/\s+/g, " ");
 }
 

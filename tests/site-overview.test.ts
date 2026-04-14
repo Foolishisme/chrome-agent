@@ -37,10 +37,11 @@ function createSiteTaskSpec(overrides: Partial<SiteOverviewTaskSpec> = {}): Site
 }
 
 function createSiteMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
-  return {
+  const memory: SessionMemory = {
     goal: "OpenAI 的产品有哪些",
     taskType: "site_overview",
     searchPreference: "auto",
+    conversationTurns: [],
     plan: [],
     toolHistory: [],
     currentFacts: {},
@@ -73,8 +74,14 @@ function createSiteMemory(overrides: Partial<SessionMemory> = {}): SessionMemory
       consecutiveNoProgressCount: 0,
       startedAt: Date.now(),
     },
-    ...overrides,
   };
+
+  return {
+    ...memory,
+    ...overrides,
+    searchPreference: overrides.searchPreference ?? memory.searchPreference,
+    conversationTurns: overrides.conversationTurns ?? memory.conversationTurns,
+  } as SessionMemory;
 }
 
 function createContentSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
@@ -225,6 +232,78 @@ describe("site overview navigation candidates", () => {
     });
 
     expect(memory.researchCandidates.map((candidate) => candidate.title)).toEqual(["OpenAI", "Products", "Docs"]);
+  });
+});
+
+describe("site overview entry resolution", () => {
+  it("rejects search candidates that do not look like the official site", async () => {
+    const tool = getToolDefinition("resolveEntryPoint");
+    const memory = createSiteMemory({
+      taskSpec: createSiteTaskSpec({
+        entryMode: "resolve_official_home",
+        entryUrl: undefined,
+        siteName: "OpenAI",
+        targetDomain: undefined,
+      }),
+    });
+    const searchSnapshot = createContentSnapshot({
+      url: "https://www.google.com/search?q=OpenAI+official+website",
+      title: "OpenAI official website - Google Search",
+      pageType: "google_search",
+    });
+    const executeAction = vi
+      .fn()
+      .mockResolvedValueOnce({ success: true, actionType: "NAVIGATE", message: "opened google" })
+      .mockResolvedValueOnce({
+        success: true,
+        actionType: "EXTRACT_SEARCH_RESULTS",
+        message: "extracted",
+        researchCandidates: [
+          { title: "OpenAI - Wikipedia", url: "https://en.wikipedia.org/wiki/OpenAI", source: "wikipedia.org", rank: 1 },
+        ],
+      });
+
+    const result = await tool.run({
+      memory,
+      signal: new AbortController().signal,
+      scanPage: vi.fn().mockResolvedValue(searchSnapshot),
+      ensureUsableSnapshot: vi.fn().mockResolvedValue(searchSnapshot),
+      executeAction,
+      settleAfterAction: vi.fn(),
+      appendLog: vi.fn(),
+      recordStep: vi.fn(),
+      pushState: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(result.status).toBe("fatal_error");
+    expect(result.errorCode).toBe("SITE_ENTRY_NOT_FOUND");
+    expect(executeAction).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops when an explicit entry URL opens a non-content page", async () => {
+    const tool = getToolDefinition("resolveEntryPoint");
+    const memory = createSiteMemory();
+    const pdfSnapshot = createContentSnapshot({
+      url: "https://openai.com/report.pdf",
+      title: "OpenAI PDF",
+      pageType: "pdf",
+    });
+
+    const result = await tool.run({
+      memory,
+      signal: new AbortController().signal,
+      scanPage: vi.fn().mockResolvedValue(pdfSnapshot),
+      ensureUsableSnapshot: vi.fn().mockResolvedValue(pdfSnapshot),
+      executeAction: vi.fn().mockResolvedValue({ success: true, actionType: "NAVIGATE", message: "opened pdf" }),
+      settleAfterAction: vi.fn(),
+      appendLog: vi.fn(),
+      recordStep: vi.fn(),
+      pushState: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(result.status).toBe("fatal_error");
+    expect(result.stepStatus).toBe("failed");
+    expect(result.errorCode).toBe("SITE_ENTRY_NOT_CONTENT");
   });
 });
 

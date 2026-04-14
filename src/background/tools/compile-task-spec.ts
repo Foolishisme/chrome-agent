@@ -94,12 +94,13 @@ export const compileTaskSpecTool: AgentToolDefinition = {
             ? "Resolve the official site entry page."
             : "Generate the direct answer.";
 
+    const taskSpec = compiled.taskSpec;
     const taskSummary =
-      compiled.taskType === "direct_answer"
-        ? compiled.taskSpec.routeReason
-        : compiled.taskType === "site_overview"
-          ? compiled.taskSpec.entryUrl ?? compiled.taskSpec.officialSearchQuery ?? compiled.taskSpec.originalGoal
-        : compiled.taskSpec.searchQuery;
+      taskSpec.taskType === "direct_answer"
+        ? taskSpec.routeReason
+        : taskSpec.taskType === "site_overview"
+          ? taskSpec.entryUrl ?? taskSpec.officialSearchQuery ?? taskSpec.originalGoal
+        : taskSpec.searchQuery;
 
     context.recordStep({
       stepSummary: "Structured task compiled.",
@@ -109,24 +110,32 @@ export const compileTaskSpecTool: AgentToolDefinition = {
     });
 
     const facts =
-      compiled.taskType === "direct_answer"
+      taskSpec.taskType === "direct_answer"
         ? {
-            taskType: compiled.taskType,
-            routeReason: compiled.taskSpec.routeReason,
-            evidenceTurnCount: compiled.taskSpec.evidenceTurnCount,
+            taskType: taskSpec.taskType,
+            routeReason: taskSpec.routeReason,
+            evidenceTurnCount: taskSpec.evidenceTurnCount,
           }
+        : taskSpec.taskType === "site_overview"
+          ? {
+              taskType: taskSpec.taskType,
+              searchQuery: taskSpec.officialSearchQuery,
+              entryUrl: taskSpec.entryUrl,
+              targetDomain: taskSpec.targetDomain,
+            }
         : {
-            taskType: compiled.taskType,
-            searchQuery:
-              compiled.taskType === "site_overview" ? compiled.taskSpec.officialSearchQuery : compiled.taskSpec.searchQuery,
+            taskType: taskSpec.taskType,
+            searchQuery: taskSpec.searchQuery,
           };
 
     return createToolResult({
       status: "success",
       summary:
-        compiled.taskType === "direct_answer"
-          ? `Task spec ready: ${compiled.taskSpec.routeReason}`
-          : `Task spec ready: ${compiled.taskSpec.searchQuery}`,
+        taskSpec.taskType === "direct_answer"
+          ? `Task spec ready: ${taskSpec.routeReason}`
+          : taskSpec.taskType === "site_overview"
+            ? `Task spec ready: ${taskSummary}`
+          : `Task spec ready: ${taskSpec.searchQuery}`,
       outputs: {
         taskSpec: compiled.taskSpec,
       },

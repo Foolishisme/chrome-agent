@@ -20,17 +20,18 @@ export const readResearchSourceFactsTool: AgentToolDefinition = {
       throw new RuntimeError("Research source reading requires a public or site research task.", "INVALID_RESEARCH_READ");
     }
 
+    const taskSpec = context.memory.taskSpec;
     const successfulSourceCount = countSuccessfulResearchSources(context.memory.researchSources);
     const exhausted = context.memory.activeSourceIndex >= context.memory.researchCandidates.length;
-    const limitReached = isSiteOverviewTask(context.memory.taskSpec) && reachedReadLimit(context.memory.taskSpec, context.memory.researchSources.length);
-    if (successfulSourceCount >= context.memory.taskSpec.sourceTargetCount || exhausted || limitReached) {
-      if (exhausted && successfulSourceCount < context.memory.taskSpec.sourceTargetCount) {
+    const limitReached = isSiteOverviewTask(taskSpec) && reachedReadLimit(taskSpec, context.memory.researchSources.length);
+    if (successfulSourceCount >= taskSpec.sourceTargetCount || exhausted || limitReached) {
+      if (exhausted && successfulSourceCount < taskSpec.sourceTargetCount) {
         context.memory.unresolvedIssues = dedupeIssues([
           ...context.memory.unresolvedIssues,
           "Research candidates were exhausted before reaching the source target.",
         ]);
       }
-      if (limitReached && successfulSourceCount < context.memory.taskSpec.sourceTargetCount) {
+      if (limitReached && successfulSourceCount < taskSpec.sourceTargetCount) {
         context.memory.unresolvedIssues = dedupeIssues([
           ...context.memory.unresolvedIssues,
           "The site overview page read limit was reached before enough readable pages were collected.",
@@ -109,14 +110,14 @@ export const readResearchSourceFactsTool: AgentToolDefinition = {
       }
 
       const unresolvedIssues: string[] = [];
-      const isSiteOverview = isSiteOverviewTask(context.memory.taskSpec);
+      const minReadableTextLength = isSiteOverviewTask(taskSpec) ? taskSpec.minReadableTextLength : undefined;
       const notFound = isLikelyNotFound(snapshotSummary, candidate.url);
-      const tooShort = isSiteOverview && pageFacts.textLength < context.memory.taskSpec.minReadableTextLength;
+      const tooShort = minReadableTextLength !== undefined && pageFacts.textLength < minReadableTextLength;
       if (notFound) {
         unresolvedIssues.push("The page looked like a 404 or not-found page.");
       }
       if (tooShort) {
-        unresolvedIssues.push(`The page readable text was shorter than ${context.memory.taskSpec.minReadableTextLength} characters.`);
+        unresolvedIssues.push(`The page readable text was shorter than ${minReadableTextLength} characters.`);
       }
       if (pageFacts.reason) {
         unresolvedIssues.push(pageFacts.reason);
@@ -158,13 +159,12 @@ export const readResearchSourceFactsTool: AgentToolDefinition = {
 
     const nextSuccessfulSourceCount = countSuccessfulResearchSources(context.memory.researchSources);
     const nextExhausted = context.memory.activeSourceIndex >= context.memory.researchCandidates.length;
-    const nextLimitReached =
-      isSiteOverviewTask(context.memory.taskSpec) && reachedReadLimit(context.memory.taskSpec, context.memory.researchSources.length);
+    const nextLimitReached = isSiteOverviewTask(taskSpec) && reachedReadLimit(taskSpec, context.memory.researchSources.length);
 
     context.recordStep({
       stepSummary: `Source processed: ${sourceResult.pageTitle || candidate.title}`,
       nextIntent:
-        nextSuccessfulSourceCount >= context.memory.taskSpec.sourceTargetCount || nextExhausted || nextLimitReached
+        nextSuccessfulSourceCount >= taskSpec.sourceTargetCount || nextExhausted || nextLimitReached
           ? "Generate the final research result."
           : "Open the next source candidate.",
       expectedOutcome: "A structured source summary is recorded.",
@@ -187,7 +187,7 @@ export const readResearchSourceFactsTool: AgentToolDefinition = {
         successfulSourceCount: nextSuccessfulSourceCount,
       },
       stepStatus:
-        nextSuccessfulSourceCount >= context.memory.taskSpec.sourceTargetCount || nextExhausted || nextLimitReached ? "succeeded" : "running",
+        nextSuccessfulSourceCount >= taskSpec.sourceTargetCount || nextExhausted || nextLimitReached ? "succeeded" : "running",
     });
   },
 };
