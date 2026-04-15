@@ -40,8 +40,15 @@ describe("schema contracts", () => {
   it("accepts the site overview route and entry resolver tool", () => {
     expect(taskRouteSchema.parse({
       taskType: "site_overview",
+      confidence: 0.82,
+      decisionSignals: ["explicit_site_scope"],
       reason: "The user asked for a specific official website overview.",
     }).taskType).toBe("site_overview");
+
+    expect(taskRouteSchema.parse({
+      taskType: "direct_answer",
+      reason: "The user asked for stable knowledge.",
+    }).decisionSignals).toEqual([]);
 
     const parsed = nextToolSelectionSchema.parse({
       toolName: "resolveEntryPoint",

@@ -105,6 +105,8 @@ export const queryRefinementSchema = z.object({
 export const taskRouteSchema = z.object({
   taskType: z.union([z.literal("direct_answer"), z.literal("commerce_search"), z.literal("public_research"), z.literal("site_overview")]),
   reason: z.string().min(1),
+  confidence: z.number().min(0).max(1).optional(),
+  decisionSignals: z.array(z.string().min(1)).default([]),
 });
 
 export const nextToolSelectionSchema = z.object({

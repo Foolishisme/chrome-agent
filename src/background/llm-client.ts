@@ -399,6 +399,8 @@ export async function classifyTaskType(
 ): Promise<{
   taskType: TaskType;
   reason: string;
+  confidence?: number;
+  decisionSignals?: string[];
   model: string;
   provider: ProviderName;
 }> {
@@ -442,6 +444,16 @@ export async function refineResearchQuery(
   };
 }
 
+function trimFinalResultSources(sources: ResearchSourceResult[] | undefined, maxExcerptChars = 1_000) {
+  return (sources ?? []).map((source) => ({
+    ...source,
+    bodyExcerpt:
+      source.bodyExcerpt.length > maxExcerptChars
+        ? `${source.bodyExcerpt.slice(0, maxExcerptChars - 1)}…`
+        : source.bodyExcerpt,
+  }));
+}
+
 export async function generateFinalResult(
   input: {
     goal: string;
@@ -455,7 +467,10 @@ export async function generateFinalResult(
   options: RequestOptions = {},
 ) {
   const response = await requestProviderJson(
-    buildFinalResultPrompt(input),
+    buildFinalResultPrompt({
+      ...input,
+      sources: trimFinalResultSources(input.sources),
+    }),
     finalResultSynthesisSchema,
     "default",
     options,

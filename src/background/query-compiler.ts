@@ -18,7 +18,7 @@ interface RefineSearchQuery {
 }
 
 interface ClassifyTaskType {
-  (goal: string): Promise<{ taskType: TaskType; reason: string } | undefined>;
+  (goal: string): Promise<{ taskType: TaskType; reason: string; confidence?: number; decisionSignals?: string[] } | undefined>;
 }
 
 function buildLlmInputLimit(topK: number) {
@@ -193,7 +193,7 @@ export async function detectTaskTypeWithLiteModel(
     conversationTurns?: ConversationTurn[];
     searchPreference?: SearchPreference;
   } = {},
-): Promise<{ taskType: TaskType; reason: string; source: "llm-lite" | "rule" }> {
+): Promise<{ taskType: TaskType; reason: string; confidence?: number; decisionSignals?: string[]; source: "llm-lite" | "rule" }> {
   if (options.classifyWithLiteModel) {
     try {
       const classified = await options.classifyWithLiteModel(goal);
@@ -201,6 +201,8 @@ export async function detectTaskTypeWithLiteModel(
         return {
           taskType: classified.taskType,
           reason: classified.reason,
+          confidence: classified.confidence,
+          decisionSignals: classified.decisionSignals,
           source: "llm-lite",
         };
       }

@@ -441,10 +441,56 @@ describe("public research aggregation", () => {
 
     expect(memory.finalResult?.status).toBe("partial");
     expect(memory.finalResult?.outputMode).toBe("inline");
-    expect(memory.finalResult?.markdown).toContain("## Summary");
-    expect(memory.finalResult?.markdown).toContain("## Source Links");
-    expect(memory.finalResult?.markdown).toContain("## Open Issues");
+    expect(memory.finalResult?.markdown).toContain("## 有限结果");
+    expect(memory.finalResult?.markdown).toContain("## 已读来源");
+    expect(memory.finalResult?.markdown).toContain("## 未解决问题");
+    expect(memory.finalResult?.markdown).not.toContain("## Source Excerpts");
     expect(memory.finalResult?.artifacts).toHaveLength(0);
+  });
+
+  it("does not dump full source excerpts in deterministic fallback output", async () => {
+    const tool = getToolDefinition("finalizeResearchResult");
+    const repeatedOriginal = "This sentence is extracted from the source page and should not be dumped in full. ".repeat(30);
+    const memory = createResearchMemory({
+      taskSpec: {
+        taskType: "public_research",
+        originalGoal: "Research browser automation",
+        searchQuery: "browser automation",
+        querySource: "llm-lite",
+        notes: [],
+        searchEngine: "google",
+        candidateLimit: 5,
+        sourceTargetCount: 1,
+      },
+      researchSources: [
+        {
+          candidate: { title: "Long source", url: "https://example.com/long", rank: 1 },
+          status: "success",
+          pageTitle: "Long source",
+          bodyExcerpt: repeatedOriginal,
+          sourceUrl: "https://example.com/long",
+          unresolvedIssues: [],
+          textLength: repeatedOriginal.length,
+        },
+      ],
+    });
+
+    await tool.run({
+      memory,
+      signal: new AbortController().signal,
+      scanPage: vi.fn(),
+      ensureUsableSnapshot: vi.fn(),
+      executeAction: vi.fn(),
+      settleAfterAction: vi.fn(),
+      appendLog: vi.fn(),
+      recordStep: vi.fn(),
+      pushState: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(memory.finalResult?.markdown).toContain("## 已读来源");
+    expect(memory.finalResult?.markdown).not.toContain("## Source Excerpts");
+    expect(memory.finalResult?.markdown.length ?? 0).toBeLessThan(repeatedOriginal.length);
+    expect(memory.finalResult?.markdown).not.toContain(repeatedOriginal);
   });
 
   it("returns no reliable information when no sources are available", async () => {
@@ -479,12 +525,12 @@ describe("public research aggregation", () => {
 
     expect(memory.finalResult?.status).toBe("failed");
     expect(memory.finalResult?.outputMode).toBe("artifact");
-    expect(memory.finalResult?.summary.toLowerCase()).toContain("no reliable sources");
+    expect(memory.finalResult?.summary).toContain("未收集到");
     expect(memory.finalResult?.markdown).toBe("");
     expect(memory.finalResult?.artifacts[0]).toMatchObject({
       kind: "markdown",
       fileName: "research-result.md",
     });
-    expect(memory.finalResult?.artifacts[0]?.content).toContain("## Summary");
+    expect(memory.finalResult?.artifacts[0]?.content).toContain("## 有限结果");
   });
 });

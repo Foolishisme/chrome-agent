@@ -43,6 +43,8 @@ export async function createInitialSession(
       return {
         taskType: classified.taskType,
         reason: classified.reason,
+        confidence: classified.confidence,
+        decisionSignals: classified.decisionSignals,
       };
     },
   });
@@ -63,6 +65,8 @@ export async function createInitialSession(
     toolHistory: [],
     currentFacts: {
       routeReason: route.reason,
+      routeConfidence: route.confidence,
+      routeDecisionSignals: route.decisionSignals ?? [],
       routeSource: route.source,
       routeEvaluatedAt: currentTimeIso,
       routeTimezone: timezone,
@@ -121,6 +125,8 @@ export async function createInitialSession(
     taskType,
     routeSource: route.source,
     routeReason: route.reason,
+    routeConfidence: route.confidence,
+    routeDecisionSignals: route.decisionSignals ?? [],
     tabId: tab.id,
     currentUrl: tab.url,
   });

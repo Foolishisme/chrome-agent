@@ -86,42 +86,57 @@ export function countSuccessfulResearchSources(sources: ResearchSourceResult[]) 
 
 export function buildResearchFallbackSummary(goal: string, sources: ResearchSourceResult[], unresolvedIssues: string[]) {
   if (countSuccessfulResearchSources(sources) === 0) {
-    return `No reliable sources were collected for "${goal}".`;
+    return `未收集到可用于回答“${goal}”的可靠来源。`;
   }
 
-  const titles = sources.slice(0, 3).map((source) => source.pageTitle || source.candidate.title).join(", ");
   if (unresolvedIssues.length > 0) {
-    return `Completed a partial research summary for "${goal}" based on ${sources.length} sources. Key references: ${titles}. ${unresolvedIssues.length} open issues remain.`;
+    return `已基于 ${countSuccessfulResearchSources(sources)} 个可读来源生成有限结果，仍有 ${unresolvedIssues.length} 个未解决问题。`;
   }
 
-  return `Completed the research summary for "${goal}" based on ${sources.length} sources. Key references: ${titles}.`;
+  return `已基于 ${countSuccessfulResearchSources(sources)} 个可读来源生成有限结果。`;
+}
+
+function compactEvidence(text: string | undefined, maxLength = 80) {
+  const normalized = (text ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}...` : normalized;
+}
+
+function buildFallbackSourceNote(source: ResearchSourceResult, index: number) {
+  const title = source.pageTitle || source.candidate.title;
+  const statusText = source.status === "success" ? "可读" : "部分可读";
+  const evidence = compactEvidence(source.bodyExcerpt);
+  const issueText = source.unresolvedIssues.length > 0 ? `；问题：${source.unresolvedIssues[0]}` : "";
+
+  if (!evidence) {
+    return `- ${index + 1}. [${title}](${source.sourceUrl})：${statusText}${issueText}`;
+  }
+
+  return `- ${index + 1}. [${title}](${source.sourceUrl})：${statusText}；线索：${evidence}${issueText}`;
 }
 
 export function buildResearchFinalMarkdown(summary: string, sources: ResearchSourceResult[], unresolvedIssues: string[]) {
   const lines = [
-    "## Summary",
+    "## 有限结果",
     summary,
     "",
-    "## Source Excerpts",
-    ...(sources.length > 0
-      ? sources.map((source, index) => {
-          const title = source.pageTitle || source.candidate.title;
-          const detail =
-            source.status === "success"
-              ? source.bodyExcerpt || "No excerpt was captured."
-              : `${source.bodyExcerpt || "Only partial facts were extracted."}${source.unresolvedIssues.length > 0 ? ` (${source.unresolvedIssues.join("; ")})` : ""}`;
-          return `- ${index + 1}. ${title}: ${detail}`;
-        })
-      : ["- No reliable sources"]),
-    "",
-    "## Source Links",
-    ...(sources.length > 0
-      ? sources.map((source, index) => `- ${index + 1}. [${source.pageTitle || source.candidate.title}](${source.sourceUrl})`)
-      : ["- No reliable sources"]),
-    "",
-    "## Open Issues",
-    ...(unresolvedIssues.length > 0 ? unresolvedIssues.map((issue) => `- ${issue}`) : ["- None"]),
+    "## 已读来源",
+    ...(sources.length > 0 ? sources.slice(0, 3).map(buildFallbackSourceNote) : ["- 未收集到可靠来源。"]),
   ];
+
+  if (sources.length > 3) {
+    lines.push(`- 另有 ${sources.length - 3} 个来源已省略。`);
+  }
+
+  if (unresolvedIssues.length > 0) {
+    lines.push("", "## 未解决问题", ...unresolvedIssues.slice(0, 3).map((issue) => `- ${issue}`));
+    if (unresolvedIssues.length > 3) {
+      lines.push(`- 另有 ${unresolvedIssues.length - 3} 个问题已省略。`);
+    }
+  }
 
   return lines.join("\n");
 }
