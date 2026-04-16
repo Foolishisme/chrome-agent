@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { filterResearchCandidates } from "../src/background/result-filter";
 import { getToolDefinition } from "../src/background/tools";
 import { extractGoogleSearchResults, extractPageFacts } from "../src/content/research";
 import type { SessionMemory } from "../src/shared/types";
 
-const { reorderResearchCandidatesMock } = vi.hoisted(() => ({
+const { generateSourceFactCardMock, reorderResearchCandidatesMock } = vi.hoisted(() => ({
+  generateSourceFactCardMock: vi.fn(),
   reorderResearchCandidatesMock: vi.fn(),
 }));
 
@@ -12,8 +13,14 @@ vi.mock("../src/background/llm-client", async () => {
   const actual = await vi.importActual<typeof import("../src/background/llm-client")>("../src/background/llm-client");
   return {
     ...actual,
+    generateSourceFactCard: generateSourceFactCardMock,
     reorderResearchCandidates: reorderResearchCandidatesMock,
   };
+});
+
+beforeEach(() => {
+  generateSourceFactCardMock.mockReset();
+  reorderResearchCandidatesMock.mockReset();
 });
 
 function createResearchMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {

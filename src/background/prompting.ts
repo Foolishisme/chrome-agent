@@ -4,10 +4,10 @@ import type {
   ExtractedItem,
   PlanStep,
   PublicResearchTaskSpec,
-  ResearchSourceResult,
   SearchPreference,
   SearchTaskSpec,
   SiteOverviewTaskSpec,
+  SourceFactCard,
   TaskType,
 } from "../shared/types";
 
@@ -193,43 +193,72 @@ export function buildSiteCandidateReorderPrompt(options: {
   ].join("\n");
 }
 
+export function buildSourceFactCardPrompt(options: {
+  goal: string;
+  title: string;
+  url: string;
+  text: string;
+  unresolvedIssues?: string[];
+}) {
+  return [
+    "Task: dehydrate one web source into a small evidence card for later synthesis.",
+    "",
+    "Output:",
+    "Return JSON only.",
+    'Schema: {"title":"source title","url":"source url","summary":"1 short source-level summary","facts":[{"text":"short factual claim from this source only","evidenceUrl":"source url","evidenceTitle":"optional title"}],"caveats":["source-specific caveat"],"status":"success|partial"}',
+    "",
+    "Hard rules:",
+    "1. Use only the provided source text and unresolved issues.",
+    "2. Do not add external facts, assumptions, prices, claims, or links.",
+    "3. Keep 1-5 facts. Each fact must be short, concrete, and useful for the user goal.",
+    "4. Set evidenceUrl to the provided source URL for every fact.",
+    "5. If the source text is weak or partial, return fewer facts and include caveats.",
+    "6. Write summary, facts, and caveats in concise Chinese.",
+    "",
+    `User goal: ${options.goal}`,
+    `Source title: ${options.title}`,
+    `Source URL: ${options.url}`,
+    `Unresolved issues: ${JSON.stringify(options.unresolvedIssues ?? [], null, 2)}`,
+    `Source text:\n${options.text}`,
+  ].join("\n");
+}
+
 export function buildFinalResultPrompt(options: {
   goal: string;
   taskType: TaskType;
   taskSpec: SearchTaskSpec | PublicResearchTaskSpec | SiteOverviewTaskSpec;
   items?: ExtractedItem[];
-  sources?: ResearchSourceResult[];
+  sources?: Array<{
+    title: string;
+    url: string;
+    status: string;
+    textLength: number;
+    unresolvedIssues: string[];
+    sourceFactCard: SourceFactCard;
+  }>;
   unresolvedIssues?: string[];
   conversationContext?: string;
 }) {
   return [
-    "## Role",
-    "You are a professional decision-writing assistant.",
-    "Transform raw browser-agent evidence into a concise, decision-useful final answer for the user.",
+    "Task: synthesize the provided structured evidence into the final user-facing answer.",
     "",
-    "## Output Schema",
+    "Output:",
     "Return JSON only.",
-    'Schema: {"summary":"1-sentence compact recap for the UI.","markdown":"The full report content using the structure below.","keyResults":["1-4 short bullets"],"suggestedNextAction":"One concrete next step."}',
+    'Schema: {"summary":"1-sentence UI recap","markdown":"final answer in markdown","keyResults":["1-4 short bullets"],"suggestedNextAction":"one concrete next step"}',
     "",
-    "## Hard Rules",
-    "1. Output professional, concise Chinese.",
-    "2. Start with a short overall conclusion or executive summary.",
-    "3. If there are multiple candidates / options / sources worth comparing, prefer a markdown table early in the answer.",
-    "4. The final section MUST be information sources, using standard markdown links [Title](URL).",
-    "5. Remove SEO fluff, platform marketing words, and repetitive noise.",
-    "6. For site_overview tasks, explicitly state the pages read, skipped/partial pages, and coverage limits; never imply full-site coverage.",
-    "7. Do not copy or lightly rewrite long bodyExcerpt text into the answer.",
-    "8. Do not output a Source Excerpts section. Use short source links and synthesized findings instead.",
-    "9. If you quote or paraphrase evidence, keep each source note to one short sentence.",
+    "Hard rules:",
+    "1. Write in concise Chinese.",
+    "2. Answer the user's goal directly. Start markdown with the main conclusion.",
+    "3. Use only provided items, sourceFactCards, unresolvedIssues, and relevant conversation context.",
+    "4. Do not introduce external facts, assumptions, prices, claims, or links not present in the input.",
+    "5. Attach source links to important factual claims. If evidence is insufficient, say so briefly.",
+    "6. Include caveats only when they affect the answer.",
+    "7. For site_overview, state pages read, failed/partial pages, and coverage limits.",
     "",
-    "## Writing Guidance",
-    "- Do NOT force a rigid template when the material does not support it.",
-    "- Prefer a total-then-breakdown structure: short conclusion first, then comparison or breakdown, then sources.",
-    "- If a table is used, keep cells short and decision-oriented.",
-    "- You may add sections such as recommendations, comparison, caveats, or open issues only when they help.",
-    "- Mention critical unresolved issues only when they affect the user's decision.",
-    "- Treat research source bodyExcerpt as private evidence to synthesize from, not text to reproduce.",
-    "- Prefer conclusions, grouped facts, and compact comparisons over source-by-source excerpts.",
+    "Style guidance:",
+    "- Use a table only when it makes comparison easier.",
+    "- Keep sections flexible and avoid source-by-source dumps.",
+    "- Prefer grouped conclusions over repeating every fact.",
     "",
     ...(options.conversationContext ? [`Recent conversation context:\n${options.conversationContext}`, ""] : []),
     `Input: ${JSON.stringify(
@@ -253,15 +282,14 @@ export function buildDirectAnswerPrompt(options: {
   conversationTurns?: ConversationTurn[];
 }) {
   return [
-    "## Role",
-    "You are a concise assistant that answers directly when browsing is unnecessary.",
+    "Task: answer directly when browsing is unnecessary.",
     "",
-    "## Output Schema",
+    "Output:",
     "Return JSON only.",
-    'Schema: {"summary":"1-sentence compact recap for the UI.","markdown":"The full direct answer in markdown.","keyResults":["1-4 short bullets"],"suggestedNextAction":"One concrete next step."}',
+    'Schema: {"summary":"1-sentence UI recap","markdown":"final answer in markdown","keyResults":["1-4 short bullets"],"suggestedNextAction":"one concrete next step"}',
     "",
-    "## Hard Rules",
-    "1. Output professional, concise Chinese.",
+    "Hard rules:",
+    "1. Write in concise Chinese.",
     "2. Answer the user's current question directly instead of describing agent workflow.",
     "3. Use recent conversation evidence when it is relevant, but do not restate long chat history.",
     "4. Do not invent fresh external facts, citations, or links that are not present in the provided context.",

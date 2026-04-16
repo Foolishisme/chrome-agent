@@ -106,10 +106,12 @@ function compactEvidence(text: string | undefined, maxLength = 80) {
 }
 
 function buildFallbackSourceNote(source: ResearchSourceResult, index: number) {
-  const title = source.pageTitle || source.candidate.title;
+  const card = source.sourceFactCard;
+  const title = card?.title || source.pageTitle || source.candidate.title;
   const statusText = source.status === "success" ? "可读" : "部分可读";
-  const evidence = compactEvidence(source.bodyExcerpt);
-  const issueText = source.unresolvedIssues.length > 0 ? `；问题：${source.unresolvedIssues[0]}` : "";
+  const evidence = compactEvidence(card?.facts[0]?.text || card?.summary || source.bodyExcerpt);
+  const caveat = card?.caveats[0] || source.unresolvedIssues[0];
+  const issueText = caveat ? `；问题：${caveat}` : "";
 
   if (!evidence) {
     return `- ${index + 1}. [${title}](${source.sourceUrl})：${statusText}${issueText}`;

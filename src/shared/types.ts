@@ -340,6 +340,21 @@ export interface ManualExtractionRecord {
   contentState?: PageContentState;
 }
 
+export interface SourceFact {
+  text: string;
+  evidenceUrl: string;
+  evidenceTitle?: string;
+}
+
+export interface SourceFactCard {
+  title: string;
+  url: string;
+  summary: string;
+  facts: SourceFact[];
+  caveats: string[];
+  status: "success" | "partial";
+}
+
 export interface ResearchSourceResult {
   candidate: ResearchCandidate;
   status: "success" | "partial" | "failed";
@@ -348,6 +363,7 @@ export interface ResearchSourceResult {
   sourceUrl: string;
   unresolvedIssues: string[];
   textLength: number;
+  sourceFactCard?: SourceFactCard;
 }
 
 export type AgentAction =

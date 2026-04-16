@@ -1,6 +1,8 @@
 import { RuntimeError } from "../../shared/errors";
-import type { ResearchSourceResult, SiteOverviewTaskSpec } from "../../shared/types";
-import { createToolResult, type AgentToolDefinition } from "./shared";
+import { LIMITS } from "../../shared/constants";
+import type { ResearchSourceResult, SiteOverviewTaskSpec, SourceFactCard } from "../../shared/types";
+import { generateSourceFactCard } from "../llm-client";
+import { createToolResult, type AgentToolDefinition, type ToolExecutionContext } from "./shared";
 import { countSuccessfulResearchSources, dedupeIssues } from "./result-builders";
 import { classifySourceFailure } from "./source-failure";
 import { isReadableResearchTask, isSiteOverviewTask } from "./task-guards";
@@ -11,6 +13,109 @@ function reachedReadLimit(taskSpec: SiteOverviewTaskSpec, processedCount: number
 
 function isLikelyNotFound(snapshotSummary: string | undefined, url: string) {
   return /(^|\s)(404|not found|page not found|页面不存在|找不到页面)(\s|$)/i.test(`${snapshotSummary ?? ""} ${url}`);
+}
+
+function compactEvidence(text: string | undefined, maxLength = 220) {
+  const normalized = (text ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.length > maxLength ? `${normalized.slice(0, Math.max(0, maxLength - 3))}...` : normalized;
+}
+
+function buildRuleBasedSourceFactCard(source: {
+  title: string;
+  url: string;
+  text: string;
+  unresolvedIssues: string[];
+  status: SourceFactCard["status"];
+}): SourceFactCard {
+  const evidence = compactEvidence(source.text);
+  return {
+    title: source.title,
+    url: source.url,
+    summary: evidence || `No readable facts were extracted from ${source.title}.`,
+    facts: evidence
+      ? [
+          {
+            text: evidence,
+            evidenceUrl: source.url,
+            evidenceTitle: source.title,
+          },
+        ]
+      : [],
+    caveats: source.unresolvedIssues,
+    status: source.status,
+  };
+}
+
+async function dehydrateSourceFactCard(options: {
+  goal: string;
+  title: string;
+  url: string;
+  text: string;
+  unresolvedIssues: string[];
+  status: SourceFactCard["status"];
+  signal: AbortSignal;
+  appendLog: ToolExecutionContext["appendLog"];
+}): Promise<SourceFactCard> {
+  const normalizedText = options.text.replace(/\s+/g, " ").trim();
+  if (normalizedText.length <= LIMITS.SOURCE_FACT_LLM_THRESHOLD_CHARS) {
+    return buildRuleBasedSourceFactCard({
+      title: options.title,
+      url: options.url,
+      text: normalizedText,
+      unresolvedIssues: options.unresolvedIssues,
+      status: options.status,
+    });
+  }
+
+  try {
+    const response = await generateSourceFactCard(
+      {
+        goal: options.goal,
+        title: options.title,
+        url: options.url,
+        text: normalizedText,
+        unresolvedIssues: options.unresolvedIssues,
+      },
+      { signal: options.signal },
+    );
+
+    options.appendLog("llm", "info", "Dehydrated a source into a fact card.", {
+      title: options.title,
+      factCount: response.facts.length,
+      provider: response.provider,
+      model: response.model,
+    });
+
+    return {
+      title: response.title,
+      url: response.url,
+      summary: response.summary,
+      facts: response.facts,
+      caveats: response.caveats,
+      status: options.status === "partial" ? "partial" : response.status,
+    };
+  } catch (error) {
+    if (error instanceof RuntimeError && error.code === "SESSION_STOPPED") {
+      throw error;
+    }
+
+    options.appendLog("llm", "warn", "Fell back to rule-based source fact card after LLM dehydration failed.", {
+      title: options.title,
+      message: error instanceof Error ? error.message : "Unknown source dehydration error",
+    });
+
+    return buildRuleBasedSourceFactCard({
+      title: options.title,
+      url: options.url,
+      text: normalizedText,
+      unresolvedIssues: options.unresolvedIssues,
+      status: options.status,
+    });
+  }
 }
 
 export const readResearchSourceFactsTool: AgentToolDefinition = {
@@ -123,17 +228,42 @@ export const readResearchSourceFactsTool: AgentToolDefinition = {
         unresolvedIssues.push(pageFacts.reason);
       }
 
+      const status = pageFacts.status === "success" && !notFound && !tooShort ? "success" : "partial";
+      const pageTitle = pageFacts.pageTitle || candidate.title;
+      const sourceFactCard = await dehydrateSourceFactCard({
+        goal: context.memory.goal,
+        title: pageTitle,
+        url: candidate.url,
+        text: pageFacts.bodyExcerpt,
+        unresolvedIssues,
+        status,
+        signal: context.signal,
+        appendLog: context.appendLog,
+      });
+
       sourceResult = {
         candidate,
-        status: pageFacts.status === "success" && !notFound && !tooShort ? "success" : "partial",
-        pageTitle: pageFacts.pageTitle || candidate.title,
+        status,
+        pageTitle,
         bodyExcerpt: pageFacts.bodyExcerpt,
         sourceUrl: candidate.url,
         unresolvedIssues,
         textLength: pageFacts.textLength,
+        sourceFactCard,
       };
     } catch (error) {
+      if (error instanceof RuntimeError && error.code === "SESSION_STOPPED") {
+        throw error;
+      }
+
       const failure = classifySourceFailure(candidate.url, error);
+      const sourceFactCard = buildRuleBasedSourceFactCard({
+        title: candidate.title,
+        url: candidate.url,
+        text: "",
+        unresolvedIssues: [failure.reason],
+        status: "partial",
+      });
       sourceResult = {
         candidate,
         status: "partial",
@@ -142,6 +272,7 @@ export const readResearchSourceFactsTool: AgentToolDefinition = {
         sourceUrl: candidate.url,
         unresolvedIssues: [failure.reason],
         textLength: 0,
+        sourceFactCard,
       };
       context.appendLog("runtime", "warn", "Research source skipped after a single failure.", {
         title: candidate.title,

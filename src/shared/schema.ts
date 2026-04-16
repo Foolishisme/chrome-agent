@@ -31,6 +31,21 @@ export const pageFactExtractionSchema = z.object({
   reason: z.string().optional(),
 });
 
+export const sourceFactSchema = z.object({
+  text: z.string().min(1),
+  evidenceUrl: z.string().min(1),
+  evidenceTitle: z.string().optional(),
+});
+
+export const sourceFactCardSchema = z.object({
+  title: z.string().min(1),
+  url: z.string().min(1),
+  summary: z.string().min(1),
+  facts: z.array(sourceFactSchema).default([]),
+  caveats: z.array(z.string()).default([]),
+  status: z.union([z.literal("success"), z.literal("partial")]),
+});
+
 export const clickActionSchema = z.object({
   type: z.literal("CLICK"),
   agentId: z.string().min(1),

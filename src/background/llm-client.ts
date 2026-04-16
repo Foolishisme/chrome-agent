@@ -1,7 +1,14 @@
 ﻿import { z } from "zod";
 import { LIMITS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
-import { finalResultSynthesisSchema, nextToolSelectionSchema, queryRefinementSchema, researchCandidateReorderSchema, taskRouteSchema } from "../shared/schema";
+import {
+  finalResultSynthesisSchema,
+  nextToolSelectionSchema,
+  queryRefinementSchema,
+  researchCandidateReorderSchema,
+  sourceFactCardSchema,
+  taskRouteSchema,
+} from "../shared/schema";
 import type {
   ConversationTurn,
   DirectAnswerTaskSpec,
@@ -13,6 +20,7 @@ import type {
   ResearchSourceResult,
   SearchTaskSpec,
   SiteOverviewTaskSpec,
+  SourceFactCard,
   TaskType,
   ToolName,
 } from "../shared/types";
@@ -23,6 +31,7 @@ import {
   buildNextToolPrompt,
   buildResearchCandidateReorderPrompt,
   buildResearchQueryRefinementPrompt,
+  buildSourceFactCardPrompt,
   buildSiteCandidateReorderPrompt,
   buildTaskRoutePromptWithContext,
 } from "./prompting";
@@ -630,14 +639,83 @@ export async function refineResearchQuery(
   };
 }
 
-function trimFinalResultSources(sources: ResearchSourceResult[] | undefined, maxExcerptChars = 1_000) {
+function compactText(text: string | undefined, maxLength: number) {
+  const normalized = (text ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.length > maxLength ? `${normalized.slice(0, Math.max(0, maxLength - 3))}...` : normalized;
+}
+
+function buildPromptFactCard(source: ResearchSourceResult): SourceFactCard {
+  if (source.sourceFactCard) {
+    return source.sourceFactCard;
+  }
+
+  const title = source.pageTitle || source.candidate.title;
+  const compactFact = compactText(source.bodyExcerpt, 220);
+  return {
+    title,
+    url: source.sourceUrl,
+    summary: compactFact || `No readable facts were extracted from ${title}.`,
+    facts: compactFact
+      ? [
+          {
+            text: compactFact,
+            evidenceUrl: source.sourceUrl,
+            evidenceTitle: title,
+          },
+        ]
+      : [],
+    caveats: source.unresolvedIssues,
+    status: source.status === "success" ? "success" : "partial",
+  };
+}
+
+function buildFinalPromptSources(sources: ResearchSourceResult[] | undefined) {
   return (sources ?? []).map((source) => ({
-    ...source,
-    bodyExcerpt:
-      source.bodyExcerpt.length > maxExcerptChars
-        ? `${source.bodyExcerpt.slice(0, Math.max(0, maxExcerptChars - 3))}...`
-        : source.bodyExcerpt,
+    title: source.pageTitle || source.candidate.title,
+    url: source.sourceUrl,
+    status: source.status,
+    textLength: source.textLength,
+    unresolvedIssues: source.unresolvedIssues,
+    sourceFactCard: buildPromptFactCard(source),
   }));
+}
+
+export async function generateSourceFactCard(
+  input: {
+    goal: string;
+    title: string;
+    url: string;
+    text: string;
+    unresolvedIssues?: string[];
+  },
+  options: RequestOptions = {},
+) {
+  const response = await requestProviderJson(
+    buildSourceFactCardPrompt({
+      ...input,
+      text: compactText(input.text, LIMITS.SOURCE_FACT_MAX_INPUT_CHARS),
+    }),
+    sourceFactCardSchema,
+    "simple",
+    options,
+  );
+
+  return {
+    ...response.data,
+    title: response.data.title || input.title,
+    url: input.url,
+    facts: response.data.facts.map((fact) => ({
+      ...fact,
+      evidenceUrl: input.url,
+      evidenceTitle: fact.evidenceTitle || response.data.title || input.title,
+    })),
+    model: response.model,
+    provider: response.provider,
+  };
 }
 
 export async function generateFinalResult(
@@ -655,7 +733,7 @@ export async function generateFinalResult(
   const response = await requestProviderJson(
     buildFinalResultPrompt({
       ...input,
-      sources: trimFinalResultSources(input.sources),
+      sources: buildFinalPromptSources(input.sources),
     }),
     finalResultSynthesisSchema,
     "default",

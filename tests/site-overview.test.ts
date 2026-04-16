@@ -4,7 +4,8 @@ import { getToolDefinition } from "../src/background/tools";
 import { extractSiteNavLinks } from "../src/content/research";
 import type { SessionMemory, SiteOverviewTaskSpec, SnapshotData } from "../src/shared/types";
 
-const { reorderSiteCandidatesMock } = vi.hoisted(() => ({
+const { generateSourceFactCardMock, reorderSiteCandidatesMock } = vi.hoisted(() => ({
+  generateSourceFactCardMock: vi.fn(),
   reorderSiteCandidatesMock: vi.fn(),
 }));
 
@@ -12,8 +13,14 @@ vi.mock("../src/background/llm-client", async () => {
   const actual = await vi.importActual<typeof import("../src/background/llm-client")>("../src/background/llm-client");
   return {
     ...actual,
+    generateSourceFactCard: generateSourceFactCardMock,
     reorderSiteCandidates: reorderSiteCandidatesMock,
   };
+});
+
+beforeEach(() => {
+  generateSourceFactCardMock.mockReset();
+  reorderSiteCandidatesMock.mockReset();
 });
 
 function createSiteTaskSpec(overrides: Partial<SiteOverviewTaskSpec> = {}): SiteOverviewTaskSpec {
@@ -120,6 +127,7 @@ function createContentSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotD
 
 describe("site overview navigation candidates", () => {
   beforeEach(() => {
+    generateSourceFactCardMock.mockReset();
     reorderSiteCandidatesMock.mockReset();
   });
 

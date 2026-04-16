@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { actionResultSchema, agentActionSchema, finalResultSynthesisSchema, nextToolSelectionSchema, taskRouteSchema } from "../src/shared/schema";
+import {
+  actionResultSchema,
+  agentActionSchema,
+  finalResultSynthesisSchema,
+  nextToolSelectionSchema,
+  sourceFactCardSchema,
+  taskRouteSchema,
+} from "../src/shared/schema";
 
 describe("schema contracts", () => {
   it("accepts a valid NAVIGATE action", () => {
@@ -67,6 +74,25 @@ describe("schema contracts", () => {
     });
 
     expect(parsed.keyResults).toHaveLength(2);
+  });
+
+  it("accepts a source fact card payload", () => {
+    const parsed = sourceFactCardSchema.parse({
+      title: "Playwright docs",
+      url: "https://example.com/playwright",
+      summary: "Playwright supports browser automation.",
+      facts: [
+        {
+          text: "Playwright has built-in auto-waiting.",
+          evidenceUrl: "https://example.com/playwright",
+          evidenceTitle: "Playwright docs",
+        },
+      ],
+      caveats: [],
+      status: "success",
+    });
+
+    expect(parsed.facts[0]?.evidenceUrl).toBe("https://example.com/playwright");
   });
 
   it("accepts an action-level extraction result", () => {

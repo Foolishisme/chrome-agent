@@ -416,3 +416,32 @@ Updated: 2026-04-10
 - 未实现下载型附件、PDF/Word/Excel 主链读取。
 
 Updated: 2026-04-13
+
+## 10. 2026-04-16 Research Fact Dehydration
+
+- `src/shared/types.ts / src/shared/schema.ts`
+  - 新增 `SourceFact / SourceFactCard` 与 `sourceFactCardSchema`，用于承载单来源脱水后的可引用事实。
+- `src/background/tools/read-research-source-facts.ts`
+  - 读取来源后立即生成 `sourceFactCard`。
+  - 单来源清洗正文不超过 300 字符时走规则事实卡；超过 300 字符时优先调用 LLM 脱水，失败后回退规则事实卡。
+  - 导航失败、登录墙、404、过短正文等 partial 场景仍会保留链接和 caveat，不阻断后续来源读取。
+- `src/background/prompting.ts / src/background/llm-client.ts`
+  - 新增单来源脱水 prompt。
+  - 最终汇总 prompt 已瘦身为“只综合结构化证据”的输出合同，不再直接接收长 `bodyExcerpt`。
+  - 上一轮 LLM 回答仍只作为 conversation context，不进入 evidence pool。
+- `src/background/tools/result-builders.ts`
+  - 确定性 fallback 优先使用 `sourceFactCard` 输出短线索，避免 dump 长正文。
+
+### 本轮最小验证
+
+- `npm run build`
+  - 通过
+- `npm test -- tests/schema.test.ts tests/llm-client.test.ts tests/public-research.test.ts tests/site-overview.test.ts`
+  - 4 个测试文件，38 个测试通过
+
+### 当前剩余风险
+
+- source fact card 的 LLM 脱水效果仍需真实 provider 样本验证。
+- 当前每个长来源是串行脱水，后续若真实延迟偏高，可再考虑受限并发或缓存 `url + bodyExcerpt hash`。
+
+Updated: 2026-04-16
