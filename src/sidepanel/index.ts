@@ -16,7 +16,6 @@ import {
 } from "./actions";
 import { renderConversationSection } from "./renderers/conversation";
 import { renderTopLevelSection } from "./renderers/common";
-import { renderLlmProfileSelector } from "./renderers/llm-profile";
 import { renderResultsSection } from "./renderers/results";
 import { hasFailureState, renderRuntimeSection } from "./renderers/runtime";
 import {
@@ -75,7 +74,6 @@ function render() {
             <h1>${renderState.messages.heroTitle}</h1>
             <p>${renderState.messages.heroDescription}</p>
           </div>
-          ${renderLlmProfileSelector(renderState)}
         </div>
       </section>
 

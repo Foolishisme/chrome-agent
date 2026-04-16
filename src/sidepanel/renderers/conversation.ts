@@ -7,6 +7,7 @@ import {
   RenderState,
 } from "./common";
 import { getTimelineDurationMs } from "./common";
+import { renderLlmProfileSelector } from "./llm-profile";
 
 function renderPlanStep(step: PlanStep, detailRecords: StepRecord[], renderState: RenderState) {
   const allowedTools = step.allowedTools.length > 0 ? step.allowedTools.join(", ") : renderState.messages.emptyValue;
@@ -279,20 +280,23 @@ export function renderConversationSection(renderState: RenderState) {
       <div class="goal-input-shell">
         <textarea id="goal-input" class="goal-input" placeholder="${escapeHtml(conversationInputPlaceholder)}">${escapeHtml(renderState.draftGoal)}</textarea>
         <div class="goal-input-actions">
-          <button
-            id="search-preference-toggle"
-            type="button"
-            class="goal-input-search-toggle${renderState.activeSearchPreference === "prefer_search" ? " goal-input-search-toggle-active" : ""}"
-            aria-pressed="${renderState.activeSearchPreference === "prefer_search"}"
-            aria-label="${escapeHtml(renderState.messages.searchToggleLabel)}"
-            title="${escapeHtml(renderState.activeSearchPreference === "prefer_search" ? renderState.messages.searchToggleHintPreferSearch : renderState.messages.searchToggleHintAuto)}"
-            ${conversationActionsDisabled ? "disabled" : ""}
-          >
-            <span style="display: flex; align-items: center; gap: 4px; font-size: 13px;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path><path d="M2 12h20"></path></svg>
-              <span>联网搜索</span>
-            </span>
-          </button>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button
+              id="search-preference-toggle"
+              type="button"
+              class="goal-input-search-toggle${renderState.activeSearchPreference === "prefer_search" ? " goal-input-search-toggle-active" : ""}"
+              aria-pressed="${renderState.activeSearchPreference === "prefer_search"}"
+              aria-label="${escapeHtml(renderState.messages.searchToggleLabel)}"
+              title="${escapeHtml(renderState.activeSearchPreference === "prefer_search" ? renderState.messages.searchToggleHintPreferSearch : renderState.messages.searchToggleHintAuto)}"
+              ${conversationActionsDisabled ? "disabled" : ""}
+            >
+              <span style="display: flex; align-items: center; gap: 4px; font-size: 13px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path><path d="M2 12h20"></path></svg>
+                <span>联网搜索</span>
+              </span>
+            </button>
+            ${renderLlmProfileSelector(renderState)}
+          </div>
           ${actionButton}
         </div>
       </div>

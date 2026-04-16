@@ -3,16 +3,15 @@ import type { RenderState } from "./common";
 import { escapeHtml } from "./common";
 
 function getProfileLabel(profile: LlmProfile) {
-  const zh = navigator.language.startsWith("zh");
   if (profile === "local") {
-    return zh ? "本地" : "Local";
+    return "本地推理";
   }
 
-  return zh ? "外部" : "External";
+  return "云端大模型";
 }
 
 function getSelectorHint() {
-  return navigator.language.startsWith("zh") ? "切换后下次启动生效" : "Takes effect on the next run";
+  return "切换将在下次对话生效";
 }
 
 export function renderLlmProfileSelector(renderState: RenderState) {
@@ -20,29 +19,25 @@ export function renderLlmProfileSelector(renderState: RenderState) {
   const selectedProfile = renderState.selectedLlmProfile;
 
   return `
-    <div class="llm-profile-card">
-      <div class="llm-profile-card-label">LLM</div>
-      <div class="llm-profile-card-buttons" role="group" aria-label="LLM profile selector">
-        <button
-          type="button"
-          class="llm-profile-button${selectedProfile === "external" ? " llm-profile-button-active" : ""}"
-          data-llm-profile="external"
-          aria-pressed="${selectedProfile === "external"}"
-          ${conversationRunning ? "disabled" : ""}
-        >
-          ${escapeHtml(getProfileLabel("external"))}
-        </button>
-        <button
-          type="button"
-          class="llm-profile-button${selectedProfile === "local" ? " llm-profile-button-active" : ""}"
-          data-llm-profile="local"
-          aria-pressed="${selectedProfile === "local"}"
-          ${conversationRunning ? "disabled" : ""}
-        >
-          ${escapeHtml(getProfileLabel("local"))}
-        </button>
-      </div>
-      <div class="llm-profile-card-hint">${escapeHtml(getSelectorHint())}</div>
+    <div class="llm-profile-selector" role="group" aria-label="模型切换" title="切换后将在下一次对话生效">
+      <button
+        type="button"
+        class="llm-profile-button${selectedProfile === "external" ? " llm-profile-button-active" : ""}"
+        data-llm-profile="external"
+        aria-pressed="${selectedProfile === "external"}"
+        ${conversationRunning ? "disabled" : ""}
+      >
+        ${escapeHtml(getProfileLabel("external"))}
+      </button>
+      <button
+        type="button"
+        class="llm-profile-button${selectedProfile === "local" ? " llm-profile-button-active" : ""}"
+        data-llm-profile="local"
+        aria-pressed="${selectedProfile === "local"}"
+        ${conversationRunning ? "disabled" : ""}
+      >
+        ${escapeHtml(getProfileLabel("local"))}
+      </button>
     </div>
   `;
 }

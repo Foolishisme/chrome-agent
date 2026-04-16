@@ -59,71 +59,55 @@ body {
   color: #6d6055;
 }
 
-.llm-profile-card {
+
+.llm-profile-selector {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  justify-self: end;
-  width: 100%;
-  max-width: 180px;
-  padding: 12px;
-  border-radius: 14px;
-  background: rgba(251, 247, 239, 0.92);
-  border: 1px solid rgba(125, 84, 45, 0.14);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
-}
-
-.llm-profile-card-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #8d5f29;
-}
-
-.llm-profile-card-buttons {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 0;
+  background: rgba(125, 84, 45, 0.08);
+  border-radius: 999px;
+  padding: 4px;
+  position: relative;
+  box-shadow: inset 0 1px 3px rgba(81, 51, 25, 0.04);
 }
 
 .llm-profile-button {
-  min-height: 34px;
-  padding: 0 10px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 8px;
   border-radius: 999px;
-  border: 1px solid rgba(125, 84, 45, 0.18);
-  background: rgba(255, 255, 255, 0.72);
-  color: #5c4b3c;
+  border: none;
+  background: transparent;
+  color: #7b6e62;
   font: inherit;
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.llm-profile-button:hover:not(:disabled):not(.llm-profile-button-active) {
+  color: #4a3e33;
 }
 
 .llm-profile-button-active {
-  background: linear-gradient(145deg, #2f6c72 0%, #6a9b9f 100%);
-  border-color: rgba(47, 108, 114, 0.3);
-  color: #ffffff;
+  background: #ffffff;
+  color: #1f6f78;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(31, 111, 120, 0.12), 0 1px 2px rgba(81, 51, 25, 0.06);
 }
 
 .llm-profile-button:disabled {
   cursor: not-allowed;
-  opacity: 0.65;
-}
-
-.llm-profile-card-hint {
-  font-size: 11px;
-  line-height: 1.4;
-  color: #8b7a68;
+  opacity: 0.5;
 }
 
 @media (max-width: 420px) {
   .hero-layout {
     grid-template-columns: 1fr;
-  }
-
-  .llm-profile-card {
-    justify-self: stretch;
-    max-width: none;
   }
 }
 
