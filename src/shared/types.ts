@@ -3,6 +3,7 @@ export type PageType = "home" | "search" | "google_search" | "content" | "pdf" |
 export type TaskType = "direct_answer" | "commerce_search" | "public_research" | "site_overview";
 export type OutputMode = "inline" | "artifact";
 export type SearchPreference = "auto" | "prefer_search";
+export type LlmProfile = "external" | "local";
 
 export type PlanStepStatus = "pending" | "running" | "succeeded" | "failed" | "blocked";
 
@@ -460,6 +461,7 @@ export interface SessionMemory {
     tabId: number;
     pageType: PageType;
     status: RuntimeStatus;
+    llmProfile?: LlmProfile;
     currentStepId?: string;
     currentTool?: ToolName;
     currentStep: number;
@@ -482,6 +484,7 @@ export interface SessionPublicState {
   sessionId?: string;
   goal?: string;
   searchPreference?: SearchPreference;
+  llmProfile?: LlmProfile;
   conversationId?: string;
   conversationTitle?: string;
   conversationTurns?: ConversationTurn[];

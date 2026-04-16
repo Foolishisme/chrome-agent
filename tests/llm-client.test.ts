@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  buildDeepSeekRequestBody,
   buildGeminiRequestBody,
+  buildOpenAiCompatibleRequestBody,
   chooseNextTool,
-  extractDeepSeekJsonText,
+  extractOpenAiCompatibleJsonText,
   extractFirstJsonBlock,
   extractJsonText,
   getModelCandidates,
@@ -24,12 +24,12 @@ describe("llm client helpers", () => {
   });
 
   it("prefers the simple task model for lightweight tasks", () => {
-    const candidates = getModelCandidates("simple", "gemini");
-    expect(candidates[0]).toBe("gemini-3.1-flash-lite-preview");
+    const candidates = getModelCandidates("simple", "openai-compatible");
+    expect(candidates[0]).toBe("deepseek-chat");
   });
 
-  it("builds a JSON-mode DeepSeek request", () => {
-    const body = buildDeepSeekRequestBody("hello", "deepseek-chat");
+  it("builds a JSON-mode OpenAI-compatible request", () => {
+    const body = buildOpenAiCompatibleRequestBody("hello", "deepseek-chat");
     expect(body.response_format.type).toBe("json_object");
     expect(body.messages[0]?.content).toBe("hello");
     expect(body.model).toBe("deepseek-chat");
@@ -59,8 +59,8 @@ describe("llm client helpers", () => {
     expect(parseModelJson(raw)).toEqual({ plan: ["step1", "step2"] });
   });
 
-  it("reads JSON content from DeepSeek chat completions", () => {
-    const text = extractDeepSeekJsonText({
+  it("reads JSON content from OpenAI-compatible chat completions", () => {
+    const text = extractOpenAiCompatibleJsonText({
       choices: [
         {
           message: {

@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 import { LIMITS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
 import { finalResultSynthesisSchema, nextToolSelectionSchema, queryRefinementSchema, researchCandidateReorderSchema, taskRouteSchema } from "../shared/schema";
@@ -6,6 +6,7 @@ import type {
   ConversationTurn,
   DirectAnswerTaskSpec,
   ExtractedItem,
+  LlmProfile,
   PlanStep,
   PublicResearchTaskSpec,
   ResearchCandidate,
@@ -26,19 +27,192 @@ import {
   buildTaskRoutePromptWithContext,
 } from "./prompting";
 
-type ProviderName = "gemini" | "deepseek";
+type ProviderName = "gemini" | "openai-compatible";
 
 const env = import.meta.env as Record<string, string | undefined>;
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL || "gemini-2.0-flash";
-const GEMINI_SIMPLE_MODEL = import.meta.env.VITE_GEMINI_SIMPLE_MODEL || "gemini-3.1-flash-lite-preview";
-const GEMINI_SIMPLE_MODEL_FALLBACK = import.meta.env.VITE_GEMINI_SIMPLE_MODEL_FALLBACK || "gemini-2.5-flash-lite";
+const DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+const DEFAULT_OPENAI_COMPATIBLE_BASE_URL = "https://api.deepseek.com";
+const DEFAULT_OPENAI_COMPATIBLE_MODEL = "deepseek-chat";
+const DEFAULT_LLM_PROFILE: LlmProfile = "external";
 
-const DEEPSEEK_API_KEY = import.meta.env.VITE_DEEPSEEK_API_KEY || env["deep-seek-api-key"];
-const DEEPSEEK_MODEL = import.meta.env.VITE_DEEPSEEK_MODEL || "deepseek-chat";
-const DEEPSEEK_SIMPLE_MODEL = import.meta.env.VITE_DEEPSEEK_SIMPLE_MODEL || DEEPSEEK_MODEL;
-const CONFIGURED_PROVIDER = (import.meta.env.VITE_LLM_PROVIDER || "").trim().toLowerCase();
+function readEnv(...keys: string[]) {
+  for (const key of keys) {
+    const value = env[key]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function normalizeLlmProfile(profile: string | undefined): LlmProfile | undefined {
+  const normalized = profile?.trim().toLowerCase();
+  if (normalized === "local") {
+    return "local";
+  }
+
+  if (normalized === "external" || normalized === "remote") {
+    return "external";
+  }
+
+  return undefined;
+}
+
+function normalizeProvider(provider: string | undefined): ProviderName | undefined {
+  const normalized = provider?.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (normalized === "gemini") {
+    return "gemini";
+  }
+
+  if (normalized === "openai-compatible" || normalized === "openai" || normalized === "deepseek" || normalized === "api") {
+    return "openai-compatible";
+  }
+
+  return undefined;
+}
+
+function normalizeBaseUrl(baseUrl: string | undefined, pathSuffix?: string) {
+  if (!baseUrl) {
+    return undefined;
+  }
+
+  const trimmed = baseUrl.trim().replace(/\/+$/, "");
+  if (pathSuffix && trimmed.endsWith(pathSuffix)) {
+    return trimmed.slice(0, -pathSuffix.length);
+  }
+
+  return trimmed;
+}
+
+function resolveInitialLlmProfile(): LlmProfile {
+  return normalizeLlmProfile(readEnv("VITE_LLM_PROFILE", "VITE_LLM_DEFAULT_PROFILE")) ?? DEFAULT_LLM_PROFILE;
+}
+
+let activeLlmProfile: LlmProfile = resolveInitialLlmProfile();
+
+export function setActiveLlmProfile(profile: LlmProfile | undefined) {
+  activeLlmProfile = normalizeLlmProfile(profile) ?? activeLlmProfile;
+}
+
+export function getActiveLlmProfile() {
+  return activeLlmProfile;
+}
+
+interface LlmConfig {
+  provider: ProviderName;
+  apiKey?: string;
+  baseUrl: string;
+  model: string;
+  simpleModel: string;
+  simpleModelFallback?: string;
+}
+
+function resolveLlmConfig(profile: LlmProfile = activeLlmProfile): LlmConfig {
+  if (profile === "local") {
+    const provider = normalizeProvider(readEnv("VITE_LLM_LOCAL_PROVIDER", "LOCAL_MODEL_PROVIDER", "VITE_LLM_PROVIDER")) ?? "openai-compatible";
+    const baseUrl = normalizeBaseUrl(
+      readEnv(
+        "VITE_LLM_LOCAL_BASE_URL",
+        "VITE_LLM_LOCAL_API_URL",
+        "LOCAL_MODEL_API_URL",
+        "VITE_LLM_BASE_URL",
+        "VITE_OPENAI_BASE_URL",
+        "VITE_DEEPSEEK_BASE_URL",
+      ),
+      "/chat/completions",
+    ) || DEFAULT_OPENAI_COMPATIBLE_BASE_URL;
+    const apiKey = readEnv(
+      "VITE_LLM_LOCAL_API_KEY",
+      "LOCAL_MODEL_API_KEY",
+      "VITE_LLM_API_KEY",
+      "VITE_OPENAI_API_KEY",
+      "VITE_DEEPSEEK_API_KEY",
+      "deep-seek-api-key",
+    );
+    const model = readEnv("VITE_LLM_LOCAL_MODEL", "LOCAL_MODEL_NAME", "VITE_LLM_MODEL", "VITE_OPENAI_MODEL", "VITE_DEEPSEEK_MODEL") || DEFAULT_OPENAI_COMPATIBLE_MODEL;
+    const simpleModel = readEnv(
+      "VITE_LLM_LOCAL_SIMPLE_MODEL",
+      "VITE_LLM_SIMPLE_MODEL",
+      "VITE_OPENAI_SIMPLE_MODEL",
+      "VITE_DEEPSEEK_SIMPLE_MODEL",
+    ) || model;
+    const simpleModelFallback = readEnv(
+      "VITE_LLM_LOCAL_SIMPLE_MODEL_FALLBACK",
+      "VITE_LLM_SIMPLE_MODEL_FALLBACK",
+      "VITE_OPENAI_SIMPLE_MODEL_FALLBACK",
+      "VITE_DEEPSEEK_SIMPLE_MODEL_FALLBACK",
+    ) || model;
+    return {
+      provider,
+      apiKey,
+      baseUrl,
+      model,
+      simpleModel,
+      simpleModelFallback,
+    };
+  }
+
+  const provider =
+    normalizeProvider(readEnv("VITE_LLM_EXTERNAL_PROVIDER", "VITE_LLM_PROVIDER")) ??
+    (readEnv("VITE_GEMINI_API_KEY", "VITE_GEMINI_MODEL", "VITE_GEMINI_BASE_URL") ? "gemini" : "openai-compatible");
+
+  if (provider === "gemini") {
+    const baseUrl = normalizeBaseUrl(readEnv("VITE_LLM_EXTERNAL_BASE_URL", "VITE_GEMINI_BASE_URL", "VITE_LLM_BASE_URL"), "/chat/completions") || DEFAULT_GEMINI_BASE_URL;
+    const apiKey = readEnv("VITE_LLM_EXTERNAL_API_KEY", "VITE_GEMINI_API_KEY", "VITE_LLM_API_KEY");
+    const model = readEnv("VITE_LLM_EXTERNAL_MODEL", "VITE_GEMINI_MODEL", "VITE_LLM_MODEL") || "gemini-2.0-flash";
+    const simpleModel = readEnv("VITE_LLM_EXTERNAL_SIMPLE_MODEL", "VITE_GEMINI_SIMPLE_MODEL", "VITE_LLM_SIMPLE_MODEL") || "gemini-3.1-flash-lite-preview";
+    const simpleModelFallback = readEnv(
+      "VITE_LLM_EXTERNAL_SIMPLE_MODEL_FALLBACK",
+      "VITE_GEMINI_SIMPLE_MODEL_FALLBACK",
+      "VITE_LLM_SIMPLE_MODEL_FALLBACK",
+    ) || "gemini-2.5-flash-lite";
+    return {
+      provider,
+      apiKey,
+      baseUrl,
+      model,
+      simpleModel,
+      simpleModelFallback,
+    };
+  }
+
+  const baseUrl =
+    normalizeBaseUrl(readEnv("VITE_LLM_EXTERNAL_BASE_URL", "VITE_LLM_BASE_URL", "VITE_OPENAI_BASE_URL", "VITE_DEEPSEEK_BASE_URL"), "/chat/completions") ||
+    DEFAULT_OPENAI_COMPATIBLE_BASE_URL;
+  const apiKey = readEnv(
+    "VITE_LLM_EXTERNAL_API_KEY",
+    "VITE_LLM_API_KEY",
+    "VITE_OPENAI_API_KEY",
+    "VITE_DEEPSEEK_API_KEY",
+    "deep-seek-api-key",
+  );
+  const model = readEnv("VITE_LLM_EXTERNAL_MODEL", "VITE_LLM_MODEL", "VITE_OPENAI_MODEL", "VITE_DEEPSEEK_MODEL") || DEFAULT_OPENAI_COMPATIBLE_MODEL;
+  const simpleModel = readEnv(
+    "VITE_LLM_EXTERNAL_SIMPLE_MODEL",
+    "VITE_LLM_SIMPLE_MODEL",
+    "VITE_OPENAI_SIMPLE_MODEL",
+    "VITE_DEEPSEEK_SIMPLE_MODEL",
+  ) || model;
+  const simpleModelFallback = readEnv(
+    "VITE_LLM_EXTERNAL_SIMPLE_MODEL_FALLBACK",
+    "VITE_LLM_SIMPLE_MODEL_FALLBACK",
+    "VITE_OPENAI_SIMPLE_MODEL_FALLBACK",
+    "VITE_DEEPSEEK_SIMPLE_MODEL_FALLBACK",
+  ) || model;
+  return {
+    provider: "openai-compatible",
+    apiKey,
+    baseUrl,
+    model,
+    simpleModel,
+    simpleModelFallback,
+  };
+}
 
 interface GeminiResponse {
   candidates?: Array<{
@@ -50,7 +224,7 @@ interface GeminiResponse {
   }>;
 }
 
-interface DeepSeekResponse {
+interface OpenAiCompatibleResponse {
   choices?: Array<{
     message?: {
       content?: string | null;
@@ -63,15 +237,7 @@ interface RequestOptions {
 }
 
 export function getConfiguredProvider(): ProviderName {
-  if (CONFIGURED_PROVIDER === "deepseek") {
-    return "deepseek";
-  }
-
-  if (CONFIGURED_PROVIDER === "gemini") {
-    return "gemini";
-  }
-
-  return DEEPSEEK_API_KEY ? "deepseek" : "gemini";
+  return resolveLlmConfig().provider;
 }
 
 export function buildGeminiRequestBody(prompt: string) {
@@ -89,7 +255,7 @@ export function buildGeminiRequestBody(prompt: string) {
   };
 }
 
-export function buildDeepSeekRequestBody(prompt: string, model = DEEPSEEK_MODEL) {
+export function buildOpenAiCompatibleRequestBody(prompt: string, model = DEFAULT_OPENAI_COMPATIBLE_MODEL) {
   return {
     model,
     messages: [
@@ -105,6 +271,8 @@ export function buildDeepSeekRequestBody(prompt: string, model = DEEPSEEK_MODEL)
   };
 }
 
+export const buildDeepSeekRequestBody = buildOpenAiCompatibleRequestBody;
+
 export function extractJsonText(response: GeminiResponse): string {
   const text = response.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
   if (!text) {
@@ -113,13 +281,15 @@ export function extractJsonText(response: GeminiResponse): string {
   return text.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
 }
 
-export function extractDeepSeekJsonText(response: DeepSeekResponse): string {
+export function extractOpenAiCompatibleJsonText(response: OpenAiCompatibleResponse): string {
   const text = response.choices?.[0]?.message?.content?.trim();
   if (!text) {
-    throw new RuntimeError("DeepSeek returned an empty response.", "EMPTY_LLM_RESPONSE");
+    throw new RuntimeError("OpenAI-compatible model returned an empty response.", "EMPTY_LLM_RESPONSE");
   }
   return text.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
 }
+
+export const extractDeepSeekJsonText = extractOpenAiCompatibleJsonText;
 
 export function extractFirstJsonBlock(raw: string): string {
   const text = raw.trim();
@@ -179,19 +349,21 @@ export function parseModelJson(raw: string) {
 }
 
 export function getModelCandidates(task: "simple" | "default", provider: ProviderName = getConfiguredProvider()) {
-  if (provider === "deepseek") {
+  const config = provider === "gemini" ? resolveLlmConfig("external") : resolveLlmConfig();
+
+  if (provider === "openai-compatible") {
     if (task === "simple") {
-      return Array.from(new Set([DEEPSEEK_SIMPLE_MODEL, DEEPSEEK_MODEL].filter(Boolean)));
+      return Array.from(new Set([config.simpleModel, config.model].filter(Boolean)));
     }
 
-    return Array.from(new Set([DEEPSEEK_MODEL].filter(Boolean)));
+    return Array.from(new Set([config.model].filter(Boolean)));
   }
 
   if (task === "simple") {
-    return Array.from(new Set([GEMINI_SIMPLE_MODEL, GEMINI_SIMPLE_MODEL_FALLBACK, GEMINI_MODEL].filter(Boolean)));
+    return Array.from(new Set([config.simpleModel, config.simpleModelFallback, config.model].filter(Boolean)));
   }
 
-  return Array.from(new Set([GEMINI_MODEL].filter(Boolean)));
+  return Array.from(new Set([config.model].filter(Boolean)));
 }
 
 function throwIfAborted(signal?: AbortSignal) {
@@ -200,9 +372,19 @@ function throwIfAborted(signal?: AbortSignal) {
   }
 }
 
+function joinUrl(baseUrl: string, path: string) {
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
+  const normalizedPath = path.replace(/^\/+/, "");
+  if (normalizedBaseUrl.endsWith(normalizedPath)) {
+    return normalizedBaseUrl;
+  }
+  return `${normalizedBaseUrl}/${normalizedPath}`;
+}
+
 async function requestGemini(prompt: string, modelCandidates: string[], options: RequestOptions = {}) {
-  if (!GEMINI_API_KEY) {
-    throw new RuntimeError("Missing VITE_GEMINI_API_KEY.", "MISSING_API_KEY");
+  const config = resolveLlmConfig("external");
+  if (!config.apiKey) {
+    throw new RuntimeError("Missing LLM API key.", "MISSING_API_KEY");
   }
 
   throwIfAborted(options.signal);
@@ -217,7 +399,7 @@ async function requestGemini(prompt: string, modelCandidates: string[], options:
 
     try {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+        `${joinUrl(config.baseUrl, model)}:generateContent?key=${config.apiKey}`,
         {
           method: "POST",
           headers: {
@@ -276,9 +458,10 @@ async function requestGemini(prompt: string, modelCandidates: string[], options:
     : new RuntimeError(lastError instanceof Error ? lastError.message : "Gemini request failed.", "LLM_UNKNOWN_ERROR");
 }
 
-async function requestDeepSeek(prompt: string, modelCandidates: string[], options: RequestOptions = {}) {
-  if (!DEEPSEEK_API_KEY) {
-    throw new RuntimeError("Missing VITE_DEEPSEEK_API_KEY.", "MISSING_API_KEY");
+async function requestOpenAiCompatible(prompt: string, modelCandidates: string[], options: RequestOptions = {}) {
+  const config = resolveLlmConfig();
+  if (!config.apiKey) {
+    throw new RuntimeError("Missing LLM API key.", "MISSING_API_KEY");
   }
 
   throwIfAborted(options.signal);
@@ -292,43 +475,46 @@ async function requestDeepSeek(prompt: string, modelCandidates: string[], option
     options.signal?.addEventListener("abort", abortListener, { once: true });
 
     try {
-      const response = await fetch("https://api.deepseek.com/chat/completions", {
+      const response = await fetch(joinUrl(config.baseUrl, "chat/completions"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+          Authorization: `Bearer ${config.apiKey}`,
         },
-        body: JSON.stringify(buildDeepSeekRequestBody(prompt, model)),
+        body: JSON.stringify(buildOpenAiCompatibleRequestBody(prompt, model)),
         signal: controller.signal,
       });
 
       if (!response.ok) {
         const body = await response.text();
-        const error = new RuntimeError(`DeepSeek request failed: ${response.status}`, "LLM_HTTP_ERROR");
+        const error = new RuntimeError(`OpenAI-compatible request failed: ${response.status}`, "LLM_HTTP_ERROR");
         (error as RuntimeError & { cause?: string }).cause = body;
         throw error;
       }
 
-      const data = (await response.json()) as DeepSeekResponse;
+      const data = (await response.json()) as OpenAiCompatibleResponse;
       return {
-        raw: extractDeepSeekJsonText(data),
+        raw: extractOpenAiCompatibleJsonText(data),
         model,
       };
     } catch (error) {
       if (error instanceof RuntimeError) {
         lastError = error;
+        if (error.code === "LLM_HTTP_ERROR" && model !== modelCandidates.at(-1)) {
+          continue;
+        }
         throw error;
       }
 
       throwIfAborted(options.signal);
 
       if (error instanceof Error && error.name === "AbortError") {
-        throw new RuntimeError("DeepSeek request timed out.", "LLM_TIMEOUT");
+        throw new RuntimeError("OpenAI-compatible request timed out.", "LLM_TIMEOUT");
       }
 
       lastError = error;
       if (model === modelCandidates.at(-1)) {
-        throw new RuntimeError(error instanceof Error ? error.message : "DeepSeek request failed.", "LLM_UNKNOWN_ERROR");
+        throw new RuntimeError(error instanceof Error ? error.message : "OpenAI-compatible request failed.", "LLM_UNKNOWN_ERROR");
       }
     } finally {
       clearTimeout(timeoutId);
@@ -338,15 +524,15 @@ async function requestDeepSeek(prompt: string, modelCandidates: string[], option
 
   throw lastError instanceof RuntimeError
     ? lastError
-    : new RuntimeError(lastError instanceof Error ? lastError.message : "DeepSeek request failed.", "LLM_UNKNOWN_ERROR");
+    : new RuntimeError(lastError instanceof Error ? lastError.message : "OpenAI-compatible request failed.", "LLM_UNKNOWN_ERROR");
 }
 
 async function requestProvider(prompt: string, task: "simple" | "default", options: RequestOptions = {}) {
   const provider = getConfiguredProvider();
   const candidates = getModelCandidates(task, provider);
 
-  if (provider === "deepseek") {
-    return requestDeepSeek(prompt, candidates, options);
+  if (provider === "openai-compatible") {
+    return requestOpenAiCompatible(prompt, candidates, options);
   }
 
   return requestGemini(prompt, candidates, options);
@@ -449,7 +635,7 @@ function trimFinalResultSources(sources: ResearchSourceResult[] | undefined, max
     ...source,
     bodyExcerpt:
       source.bodyExcerpt.length > maxExcerptChars
-        ? `${source.bodyExcerpt.slice(0, maxExcerptChars - 1)}…`
+        ? `${source.bodyExcerpt.slice(0, Math.max(0, maxExcerptChars - 3))}...`
         : source.bodyExcerpt,
   }));
 }

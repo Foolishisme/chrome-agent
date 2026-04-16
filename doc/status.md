@@ -61,6 +61,7 @@
 - `src/background/llm-client.ts`
   - 已新增 research 候选重排序调用与严格回退
   - 已新增 direct-answer 路由与最终回答调用
+  - 已将模型 provider / base URL / model 名称收口为统一 env 配置，openai-compatible 可切换本地或各类 API
 
 ### 3.3 UI
 

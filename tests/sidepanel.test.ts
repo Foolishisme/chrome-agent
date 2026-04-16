@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConversationSummary, ConversationTurn, SessionPublicState } from "../src/shared/types";
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ConversationSummary, ConversationTurn, LlmProfile, SessionPublicState } from "../src/shared/types";
 
 type RuntimeMessage = {
   type: string;
@@ -7,6 +7,8 @@ type RuntimeMessage = {
 };
 
 let onRuntimeMessage: ((message: RuntimeMessage) => void) | undefined;
+const LLM_PROFILE_STORAGE_KEY = "browser-agent.llm-profile";
+let storedLlmProfile: LlmProfile | undefined;
 
 const conversationSummaries: ConversationSummary[] = [
   {
@@ -339,6 +341,12 @@ describe("sidepanel result actions", () => {
     return { ok: true };
   };
   const sendMessage = vi.fn(defaultSendMessageImplementation);
+  const storageGet = vi.fn(async () => ({
+    [LLM_PROFILE_STORAGE_KEY]: storedLlmProfile,
+  }));
+  const storageSet = vi.fn(async (values: Record<string, LlmProfile>) => {
+    storedLlmProfile = values[LLM_PROFILE_STORAGE_KEY];
+  });
 
   const addListener = vi.fn((listener: (message: RuntimeMessage) => void) => {
     onRuntimeMessage = listener;
@@ -352,9 +360,12 @@ describe("sidepanel result actions", () => {
     document.body.innerHTML = '<div id="app"></div>';
     onRuntimeMessage = undefined;
     requestStatePayload = undefined;
+    storedLlmProfile = undefined;
     clipboardWriteText.mockReset();
     sendMessage.mockReset();
     sendMessage.mockImplementation(defaultSendMessageImplementation);
+    storageGet.mockClear();
+    storageSet.mockClear();
     addListener.mockClear();
     createObjectURL.mockClear();
     revokeObjectURL.mockClear();
@@ -364,6 +375,12 @@ describe("sidepanel result actions", () => {
         sendMessage,
         onMessage: {
           addListener,
+        },
+      },
+      storage: {
+        local: {
+          get: storageGet,
+          set: storageSet,
         },
       },
     });
@@ -425,7 +442,42 @@ describe("sidepanel result actions", () => {
         type: "START_SESSION",
         goal: "解释一下事件循环",
         searchPreference: "prefer_search",
+        llmProfile: "external",
       });
+    });
+  });
+
+  it("persists and reuses the selected local LLM profile", async () => {
+    await loadSidepanel();
+
+    const localButton = document.querySelector("[data-llm-profile='local']") as HTMLButtonElement | null;
+    const goalInput = document.getElementById("goal-input") as HTMLTextAreaElement | null;
+    const startButton = document.getElementById("start-button") as HTMLButtonElement | null;
+
+    expect(localButton).not.toBeNull();
+    expect(goalInput).not.toBeNull();
+    expect(startButton).not.toBeNull();
+
+    localButton!.click();
+
+    await vi.waitFor(() => {
+      expect(storageSet).toHaveBeenCalledWith({
+        [LLM_PROFILE_STORAGE_KEY]: "local",
+      });
+    });
+
+    goalInput!.value = "test profile selection";
+    goalInput!.dispatchEvent(new Event("input"));
+    startButton!.click();
+
+    await vi.waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "START_SESSION",
+          goal: "test profile selection",
+          llmProfile: "local",
+        }),
+      );
     });
   });
 

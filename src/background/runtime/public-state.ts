@@ -66,6 +66,7 @@ export function toPublicState(memory: SessionMemory): SessionPublicState {
   return {
     sessionId: memory.runtimeMeta.sessionId,
     goal: memory.goal,
+    llmProfile: memory.runtimeMeta.llmProfile,
     conversationId: memory.conversationId,
     conversationTitle: memory.conversationTitle,
     conversationTurns: buildConversationTurns(memory),

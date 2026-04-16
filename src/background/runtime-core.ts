@@ -1,6 +1,7 @@
 import { RuntimeError } from "../shared/errors";
 import type { StartSessionResponse } from "../shared/protocol";
 import type { ActionResult, AgentAction, SessionPublicState, SnapshotData, StepRecord, ToolName, ToolResult } from "../shared/types";
+import { setActiveLlmProfile } from "./llm-client";
 import { summarizeSnapshot } from "./guards";
 import { saveSuccessfulSessionArchive } from "./session-archive";
 import { createInitialSession } from "./runtime/bootstrap";
@@ -67,6 +68,7 @@ export class BrowserAgentRuntime {
       conversationTurns?: SessionPublicState["conversationTurns"];
       currentTurnId?: number;
       searchPreference?: SessionPublicState["searchPreference"];
+      llmProfile?: SessionPublicState["llmProfile"];
     } = {},
   ): Promise<StartSessionResponse> {
     if (this.activeSession) {
@@ -82,6 +84,7 @@ export class BrowserAgentRuntime {
     this.pendingStartAbortController = startAbortController;
 
     try {
+      setActiveLlmProfile(options.llmProfile);
       const { session } = await createInitialSession(goal, {
         ...options,
         signal: startAbortController.signal,

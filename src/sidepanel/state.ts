@@ -1,4 +1,5 @@
 import type { ResultArtifact, SearchPreference, SessionPublicState, StepRecord } from "../shared/types";
+import type { LlmProfile } from "../shared/types";
 import { archiveUiText, messages, optimisticAssistantProgressText } from "./ui-text";
 
 export type PendingSessionSubmission = {
@@ -9,8 +10,27 @@ export type PendingSessionSubmission = {
 };
 
 export type UiNoticeTone = "info" | "error";
+const LLM_PROFILE_STORAGE_KEY = "browser-agent.llm-profile";
+const DEFAULT_LLM_PROFILE: LlmProfile = "external";
 
 const browserAgentWindow = window as Window & typeof globalThis & { __browserAgentElapsedTicker?: number };
+
+function normalizeLlmProfile(profile: string | undefined): LlmProfile | undefined {
+  const normalized = profile?.trim().toLowerCase();
+  if (normalized === "local") {
+    return "local";
+  }
+
+  if (normalized === "external" || normalized === "remote") {
+    return "external";
+  }
+
+  return undefined;
+}
+
+function resolveInitialLlmProfile(): LlmProfile {
+  return normalizeLlmProfile(import.meta.env.VITE_LLM_PROFILE || import.meta.env.VITE_LLM_DEFAULT_PROFILE) ?? DEFAULT_LLM_PROFILE;
+}
 
 function createBaseState(): SessionPublicState {
   return {
@@ -28,6 +48,7 @@ const state = {
   currentState: createBaseState(),
   draftGoal: "",
   draftSearchPreference: "auto" as SearchPreference,
+  draftLlmProfile: resolveInitialLlmProfile() as LlmProfile,
   uiNotice: "",
   uiNoticeTone: "info" as UiNoticeTone,
   uiNoticeTimer: undefined as number | undefined,
@@ -59,6 +80,30 @@ export function getDraftSearchPreference() {
 
 export function toggleDraftSearchPreference() {
   state.draftSearchPreference = state.draftSearchPreference === "prefer_search" ? "auto" : "prefer_search";
+}
+
+export function getDraftLlmProfile() {
+  return state.draftLlmProfile;
+}
+
+export function getActiveLlmProfile() {
+  return state.currentState.llmProfile ?? state.draftLlmProfile;
+}
+
+export function setDraftLlmProfile(profile: LlmProfile) {
+  state.draftLlmProfile = profile;
+}
+
+export async function loadDraftLlmProfile() {
+  const stored = await chrome.storage.local.get(LLM_PROFILE_STORAGE_KEY);
+  const storedProfile = normalizeLlmProfile(stored[LLM_PROFILE_STORAGE_KEY]);
+  state.draftLlmProfile = storedProfile ?? state.draftLlmProfile;
+  return state.draftLlmProfile;
+}
+
+export async function persistDraftLlmProfile(profile: LlmProfile) {
+  state.draftLlmProfile = profile;
+  await chrome.storage.local.set({ [LLM_PROFILE_STORAGE_KEY]: profile });
 }
 
 export function getUiNotice() {
@@ -222,6 +267,7 @@ export function applyState(next: SessionPublicState | undefined, onRender: () =>
   const hasConversationTitle = Object.prototype.hasOwnProperty.call(next, "conversationTitle");
   const hasConversationTurns = Object.prototype.hasOwnProperty.call(next, "conversationTurns");
   const hasAvailableConversations = Object.prototype.hasOwnProperty.call(next, "availableConversations");
+  const hasLlmProfile = Object.prototype.hasOwnProperty.call(next, "llmProfile");
 
   state.currentState = {
     ...createBaseState(),
@@ -231,6 +277,9 @@ export function applyState(next: SessionPublicState | undefined, onRender: () =>
     conversationId: hasConversationId ? next.conversationId : state.currentState.conversationId,
     conversationTitle: hasConversationTitle ? next.conversationTitle : state.currentState.conversationTitle,
   };
+  if (hasLlmProfile && next.llmProfile) {
+    state.draftLlmProfile = next.llmProfile;
+  }
   onRender();
 }
 
@@ -247,6 +296,7 @@ export function getRenderState() {
     displayedElapsedMs: getDisplayedElapsedMs(),
     finalResultDisplayMarkdown: getFinalResultDisplayMarkdown(),
     documentArtifacts: getDocumentArtifacts(),
+    selectedLlmProfile: getActiveLlmProfile(),
     archiveUiText,
     messages,
   };

@@ -16,6 +16,7 @@ import {
 } from "./actions";
 import { renderConversationSection } from "./renderers/conversation";
 import { renderTopLevelSection } from "./renderers/common";
+import { renderLlmProfileSelector } from "./renderers/llm-profile";
 import { renderResultsSection } from "./renderers/results";
 import { hasFailureState, renderRuntimeSection } from "./renderers/runtime";
 import {
@@ -23,7 +24,9 @@ import {
   getCurrentState,
   getPendingSessionSubmission,
   getRenderState,
+  loadDraftLlmProfile,
   setDraftGoal,
+  persistDraftLlmProfile,
   toggleDraftSearchPreference,
 } from "./state";
 
@@ -67,8 +70,13 @@ function render() {
   app.innerHTML = `
     <div class="panel-shell">
       <section class="hero">
-        <h1>${renderState.messages.heroTitle}</h1>
-        <p>${renderState.messages.heroDescription}</p>
+        <div class="hero-layout">
+          <div class="hero-copy">
+            <h1>${renderState.messages.heroTitle}</h1>
+            <p>${renderState.messages.heroDescription}</p>
+          </div>
+          ${renderLlmProfileSelector(renderState)}
+        </div>
       </section>
 
       ${renderTopLevelSection(renderState.messages.conversationTitle, renderConversationSection(renderState), true)}
@@ -113,7 +121,9 @@ app.addEventListener("keydown", async (event) => {
 });
 
 app.addEventListener("click", async (event) => {
-  const target = (event.target as HTMLElement | null)?.closest<HTMLElement>("button, [data-select-conversation-id], [data-rollback-turn-id], [data-copy-turn-id], [data-copy-live-result], [data-copy-artifact-index], [data-download-artifact-index]");
+  const target = (event.target as HTMLElement | null)?.closest<HTMLElement>(
+    "button, [data-select-conversation-id], [data-rollback-turn-id], [data-copy-turn-id], [data-copy-live-result], [data-copy-artifact-index], [data-download-artifact-index], [data-llm-profile]",
+  );
   if (!target) {
     return;
   }
@@ -133,6 +143,18 @@ app.addEventListener("click", async (event) => {
         ? getRenderState().messages.searchToggleHintPreferSearch
         : getRenderState().messages.searchToggleHintAuto,
     );
+    return;
+  }
+
+  if (target.dataset.llmProfile) {
+    event.preventDefault();
+    const nextProfile = target.dataset.llmProfile === "local" ? "local" : "external";
+    try {
+      await persistDraftLlmProfile(nextProfile);
+    } catch {
+      // Keep the in-memory selection even if local persistence is unavailable.
+    }
+    render();
     return;
   }
 
@@ -200,6 +222,7 @@ chrome.runtime.onMessage.addListener((message) => {
 
 async function bootstrap() {
   try {
+    await loadDraftLlmProfile();
     await requestSessionState(render);
   } catch {
     render();

@@ -165,14 +165,21 @@ npm run dev
 参考 [`.env.example`](./.env.example)：
 
 ```env
-VITE_LLM_PROVIDER=gemini
+VITE_LLM_PROVIDER=openai-compatible
+VITE_LLM_API_KEY=
+VITE_LLM_BASE_URL=http://localhost:11434/v1
+VITE_LLM_MODEL=deepseek-chat
+VITE_LLM_SIMPLE_MODEL=deepseek-chat
+VITE_LLM_SIMPLE_MODEL_FALLBACK=deepseek-chat
+
 VITE_GEMINI_API_KEY=
+VITE_GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/models
 VITE_GEMINI_MODEL=gemini-2.0-flash
 VITE_GEMINI_SIMPLE_MODEL=gemini-3.1-flash-lite-preview
 VITE_GEMINI_SIMPLE_MODEL_FALLBACK=gemini-2.5-flash-lite
-VITE_DEEPSEEK_API_KEY=
-VITE_DEEPSEEK_MODEL=deepseek-chat
 ```
+
+`VITE_LLM_BASE_URL` 填 provider 根地址即可，代码会自动补 `chat/completions` 或 Gemini 的 model 路径。
 
 ## 加载到 Chrome
 

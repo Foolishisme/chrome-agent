@@ -14,6 +14,7 @@ export async function createInitialSession(
     conversationTurns?: ActiveSession["memory"]["conversationTurns"];
     currentTurnId?: number;
     searchPreference?: SearchPreference;
+    llmProfile?: ActiveSession["memory"]["runtimeMeta"]["llmProfile"];
     signal: AbortSignal;
   },
 ): Promise<{ session: ActiveSession; navigatedToHome: boolean; fromUrl?: string }> {
@@ -95,6 +96,7 @@ export async function createInitialSession(
       tabId: tab.id!,
       pageType: "unknown",
       status: "idle",
+      llmProfile: options.llmProfile,
       currentStepId: undefined,
       currentTool: undefined,
       currentStep: 0,

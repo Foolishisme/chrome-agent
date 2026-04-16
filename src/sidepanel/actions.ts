@@ -10,6 +10,7 @@ import {
   getDefaultResultCopyText,
   getDocumentArtifacts,
   getDraftSearchPreference,
+  getDraftLlmProfile,
   getPendingSessionSubmission,
   openConversationDrawer,
   setDraftGoal,
@@ -85,6 +86,7 @@ export async function startSession(goal: string, render: () => void) {
       type: "START_SESSION",
       goal: goal.trim(),
       searchPreference: getDraftSearchPreference(),
+      llmProfile: getDraftLlmProfile(),
     })) as StartSessionResponse;
 
     if (!response.ok) {

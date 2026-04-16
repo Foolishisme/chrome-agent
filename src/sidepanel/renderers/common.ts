@@ -1,6 +1,6 @@
 import type { ArchiveUiText, Messages } from "../ui-text";
 import type { PendingSessionSubmission, UiNoticeTone } from "../state";
-import type { ResultArtifact, SearchPreference, SessionPublicState, StepRecord } from "../../shared/types";
+import type { LlmProfile, ResultArtifact, SearchPreference, SessionPublicState, StepRecord } from "../../shared/types";
 
 export interface RenderState {
   currentState: SessionPublicState;
@@ -14,6 +14,7 @@ export interface RenderState {
   displayedElapsedMs?: number;
   finalResultDisplayMarkdown: string;
   documentArtifacts: ResultArtifact[];
+  selectedLlmProfile: LlmProfile;
   archiveUiText: ArchiveUiText;
   messages: Messages;
 }
