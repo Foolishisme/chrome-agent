@@ -1,303 +1,217 @@
 # Browser Agent 文档写作规范
 
-## 1. 适用范围
+## 1. 文档目标
 
-本规范约束当前 `doc/` 下的协议层文档与线程文档：
+当前文档系统用于低摩擦调度，不用于复刻全部上下文。
 
-- `doc/spec.md`
-- `doc/constraints.md`
-- `doc/interaction.md`
-- `doc/plan.md`
-- `doc/status.md`
-- `doc/acceptance.md`
-- `doc/thread_bootstrap.md`
-- `doc/pitfalls.md`
-- `doc/threads/`
-- `doc/adr/`
+目标：
 
-默认不把历史快照、一次性分析稿和外部建议稿纳入本规范。
+- AI 能快速找到高权重事实。
+- 人能在关键节点接管。
+- 当前态、过程、经验和历史不混写。
+- 文档维护成本低于收益。
 
-## 2. 文档分层
+默认原则：
 
-当前文档体系固定为五层：
+> 少量高权重文件 + 极轻状态快照 + 按职责分开的 append-only 日志。
 
-1. 真理源
-2. 表达层
-3. 路径层
-4. 状态层
-5. 沉淀层
+## 2. 默认装载层
 
-对应关系：
+新任务默认只装载：
 
-- 真理源：`spec.md / constraints.md`
-- 表达层：`interaction.md`
-- 路径层：`plan.md`
-- 状态层：`status.md / threads/active/`
-- 沉淀层：`acceptance.md / pitfalls.md / adr/ / history/`
+1. `AGENTS.md`
+2. `doc/spec.md`
+3. `doc/constraints.md`
+4. `doc/status.md`
+5. 当前任务需要的单一日志：
+   - `doc/logs/exec.md`
+   - `doc/logs/review.md`
+   - `doc/logs/design.md`
 
-## 3. 总体原则
+禁止为了“了解全貌”一次性装载全部日志、全部历史和全部 reference。
 
-### 3.1 一份文档只回答一类问题
+## 3. 职责核心层
 
-- `spec.md` 回答“应该是什么”
-- `constraints.md` 回答“绝对不能怎么做”
-- `interaction.md` 回答“系统应如何被理解、等待、信任和接管”
-- `plan.md` 回答“当前准备怎么做”
-- `status.md` 回答“当前 checkpoint 在哪里”
-- `acceptance.md` 回答“怎样算通过”
-- `thread_bootstrap.md` 回答“新线程最先要知道什么”
-- `pitfalls.md` 回答“哪些坑已经确认踩过”
-- `adr/` 回答“为什么这样拍板”
-
-### 3.2 文档服务于调度，不服务于对话复刻
-
-优先保留：
-
-- 规则
-- 边界
-- 当前结论
-- 当前阻塞
-- 下一步
-
-默认不保留：
-
-- 大段闲聊
-- 原样复制的推理过程
-- 可从代码直接读出的低价值细节
-- 没有结论的发散想法
-
-### 3.3 先写约束，再写路径，再写状态
-
-更新时优先顺序：
-
-1. 设计变化先改 `spec.md`
-2. 红线变化先改 `constraints.md`
-3. 迁移路径变化先改 `plan.md`
-4. 当前 checkpoint 变化先改 `status.md`
-5. 验收口径变化先改 `acceptance.md`
-
-### 3.4 术语必须统一
-
-当前主线中优先使用以下术语：
-
-- `LLM`
-- `Tools`
-- `Memory`
-- `Runtime`
-- `task module`
-- `runtime-visible tool`
-- `tool-internal step`
-- `PlanStep`
-- `ToolResult`
-- `acceptance`
-
-## 4. 分文档规范
-
-### 4.1 `doc/spec.md`
-
-定位：
-
-- 设计真相
-- 架构边界
-- 长于当前实现的设计基线
-
-不应写：
-
-- 当日进度
-- 临时 TODO 堆积
-- 验证日志
-
-### 4.2 `doc/constraints.md`
-
-定位：
-
-- 红线
-- 禁区
-- 必须人工批准的高风险修改
-
-不应写：
-
-- 当前迁移顺序
-- 当前已完成进度
-- 详细历史复盘
-
-### 4.3 `doc/plan.md`
-
-定位：
-
-- 当前采用的迁移路径
-- 串并行依赖
-- 当前明确不做的部分
-
-不应写：
-
-- 当前 checkpoint
-- 每日进展
-- 长篇架构辩论
-
-### 4.4 `doc/status.md`
-
-定位：
-
-- 接力胶囊
-- 当前 checkpoint
-
-当前固定结构：
-
-- `Current Phase`
-- `Current Focus`
-- `Done`
-- `In Progress`
-- `Blockers`
-- `Rejected Paths`
-- `Next Actions`
-- `Needs Human Decision`
-
-不应写：
-
-- 大段设计重述
-- 冗长实现细节
-- 长期路线图
-
-### 4.5 `doc/acceptance.md`
-
-定位：
-
-- 验收项
-- 验证方式
-- 当前状态
-
-要求：
-
-- 验收项必须可验证
-- 未验证项不要写成 `PASS`
-- 如果验收口径变了，应同步回写 `spec.md`
-
-### 4.6 `doc/thread_bootstrap.md`
-
-定位：
-
-- 新线程的最小启动上下文
-
-要求：
-
-- 尽量短
-- 尽量稳
-- 可直接复制给 agent
-
-### 4.7 `doc/pitfalls.md`
-
-定位：
-
-- 高价值、已验证的常见坑
-
-要求：
-
-- 只保留长期复用价值高的坑
-- 硬红线优先移动到 `constraints.md`
-- 不保留一次性讨论残留
-
-### 4.8 `doc/threads/`
-
-当前统一结构：
-
-- `templates/`
-- `active/`
-- `closed/`
-
-约束：
-
-- 模板和实例不得混放
-- 活跃线程必须放在 `active/`
-- 已关闭但仍可能短期回看的线程放在 `closed/`
-- 长期归档再移到 `doc/history/threads/`
-
-### 4.9 `doc/adr/`
-
-定位：
-
-- 记录长期有效的结构性决策
-
-要求：
-
-- 一份 ADR 只记录一个决策
-- 必须包含背景、决策、被放弃方案、影响
-- 只有真正拍板的事项才进入 ADR
-
-### 4.10 `doc/interaction.md`
-
-定位：
-
-- 产品表达规则
-- 交互层级
-- 结果、过程、输入与历史的默认关系
-
-不应写：
-
-- runtime / tool 协议细节
-- 当日实现进度
-- 视觉样式微调
-
-## 5. 更新规则
-
-### 5.1 改设计时
-
-优先更新：
-
-- `doc/spec.md`
-
-### 5.2 改红线时
-
-优先更新：
-
-- `doc/constraints.md`
-
-### 5.3 改迁移路径时
-
-优先更新：
-
-- `doc/plan.md`
-
-### 5.4 改产品表达或交互规则时
-
-优先更新：
+以下文件保留在 `doc/` 根目录，但只在触发对应问题时读取：
 
 - `doc/interaction.md`
-
-### 5.5 改 checkpoint 时
-
-优先更新：
-
-- `doc/status.md`
-- `doc/threads/active/`
-
-### 5.6 改验收口径或状态时
-
-优先更新：
-
+  - 产品表达、交互层级、等待感、结果与过程关系。
 - `doc/acceptance.md`
+  - 验收项、验证方式、当前验收状态。
+- `doc/writing_rules.md`
+  - 文档系统自身规则。
 
-### 5.7 改长期决策时
+## 4. 按需查阅层
 
-优先新增或更新：
+`doc/reference/` 存放非默认装载材料：
 
-- `doc/adr/`
+- `doc/reference/pitfalls.md`
+  - 已确认坑点。
+- `doc/reference/success_patterns.md`
+  - 已验证有效做法。
+- `doc/reference/thread_bootstrap.md`
+  - 新线程启动提示。
+- `doc/reference/design_principles.md`
+  - 架构取舍、模块拆分、抽象边界和文档系统调整时按需查阅的设计原则。
+- `doc/reference/adr/`
+  - 罕见长期决策回溯。
 
-## 6. 当前推荐结构
+`doc/history/` 和 `doc/other/` 存放历史快照、旧线程、长篇草案和外部材料。
 
-当前阶段建议保持如下结构：
+## 5. 主文档写法
 
-- `spec.md`
-- `constraints.md`
-- `interaction.md`
-- `plan.md`
-- `status.md`
-- `acceptance.md`
-- `thread_bootstrap.md`
-- `writing_rules.md`
-- `pitfalls.md`
-- `threads/`
-- `adr/`
-- `history/`
+主文档只写当前成立的规则、边界和不变量。
 
-Updated: 2026-04-08
+主文档不得复制：
+
+- 代码可直接查到的接口字段。
+- schema 枚举。
+- tool 注册完整列表。
+- 某次迁移的完成流水。
+- 日期补丁。
+
+代码细节以代码为准：
+
+- `src/shared/types.ts`
+- `src/shared/schema.ts`
+- `src/background/tools/registry.ts`
+- `src/background/runtime-core.ts`
+
+过去式处理规则：
+
+- 执行动作、验证结果、剩余风险进入 `doc/logs/exec.md`。
+- 设计讨论、方案取舍、触发重审条件进入 `doc/logs/design.md`。
+- review 范围、结论和发现进入 `doc/logs/review.md`。
+- 长篇原文和旧材料进入 `doc/history/` 或 `doc/other/`。
+
+未来事项处理规则：
+
+- 未拍板方向、下一阶段能力、非当前范围事项不得写成当前事实。
+- 如果只是在讨论中出现，写入 `doc/logs/design.md` 的建议、风险或 revisit trigger。
+- 如果影响当前接手判断，写入 `doc/status.md` 的 `Next` 或 `Remaining Risks`。
+- 除非用户明确要求进入实现，否则不得把未来事项顺手落成代码或主链能力。
+
+## 6. 文件职责
+
+### 6.1 `doc/spec.md`
+
+定位：设计真相。
+
+只回答：
+
+- 系统应该是什么。
+- 当前核心架构和任务模块边界是什么。
+- 哪些不变量不能破。
+
+不承载：
+
+- 字段级接口复刻。
+- 进度流水。
+- 过期方案。
+
+### 6.2 `doc/constraints.md`
+
+定位：红线与禁区。
+
+只回答：
+
+- 绝对不能怎么做。
+- 哪些边界不能破。
+- 哪些高风险行为必须人工确认。
+
+### 6.3 `doc/status.md`
+
+定位：当前态快照。
+
+只保留：
+
+- Current Focus
+- Current Phase
+- Done
+- Blockers
+- Remaining Risks
+- Next
+- Needs Human Decision
+- Latest Validation
+
+要求：30 秒内能看懂当前状态。
+
+### 6.4 `doc/interaction.md`
+
+定位：交互表达规则。
+
+只回答用户如何理解、等待、信任和接管系统。
+
+### 6.5 `doc/acceptance.md`
+
+定位：验收口径。
+
+只记录验收项、验证方式、当前状态和必要备注。
+
+## 7. 降级机制
+
+### 7.1 `doc/plan.md`
+
+无 active migration 时，不保留 active `doc/plan.md`。
+
+只有存在明确跨天迁移任务时，才临时恢复 `doc/plan.md`；迁移完成后归档。
+
+普通计划、取舍和执行记录分别进入 `doc/logs/design.md` 与 `doc/logs/exec.md`。
+
+### 7.2 `doc/threads/`
+
+不再作为日常机制。
+
+旧线程原文进入 `doc/history/`，结论摘要进入对应 log。
+
+### 7.3 ADR
+
+ADR 从默认沉淀机制降级为罕见例外机制。
+
+只有同时满足以下条件时才新增 `doc/reference/adr/` 记录：
+
+- 影响长期架构边界。
+- 未来很可能被反复挑战。
+- 单看 `spec / constraints / logs` 看不出为什么这样定。
+- 该决策跨多个任务周期仍有效。
+
+普通设计取舍写入 `doc/logs/design.md`。
+
+## 8. 更新规则
+
+- 设计真相变化：更新 `doc/spec.md`
+- 红线变化：更新 `doc/constraints.md`
+- 当前 checkpoint 变化：更新 `doc/status.md`
+- 交互表达变化：更新 `doc/interaction.md`
+- 验收口径或验收状态变化：更新 `doc/acceptance.md`
+- 文档系统规则变化：更新 `doc/writing_rules.md`
+- 执行动作与验证：追加 `doc/logs/exec.md`
+- review 结论：追加 `doc/logs/review.md`
+- 设计讨论与取舍：追加 `doc/logs/design.md`
+- 已确认坑点：更新 `doc/reference/pitfalls.md`
+- 已验证有效做法：更新 `doc/reference/success_patterns.md`
+- 新线程启动提示：更新 `doc/reference/thread_bootstrap.md`
+
+## 9. 当前推荐结构
+
+```text
+doc/
+├─ spec.md
+├─ constraints.md
+├─ status.md
+├─ interaction.md
+├─ acceptance.md
+├─ writing_rules.md
+├─ logs/
+├─ review/
+├─ reference/
+│  ├─ pitfalls.md
+│  ├─ success_patterns.md
+│  ├─ thread_bootstrap.md
+│  ├─ design_principles.md
+│  └─ adr/
+├─ history/
+└─ other/
+```
+
+Updated: 2026-04-17

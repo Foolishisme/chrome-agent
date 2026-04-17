@@ -65,7 +65,7 @@
 4. 当前需要的静态初始 plan 是什么
 5. 哪些能力值得成为 `runtime-visible tool`
 6. 哪些步骤应留在 tool 内部
-7. 当前是否已有对应的线程实例位于 `doc/threads/active/`
+7. 当前是否需要查阅 `doc/logs/` 或 `doc/history/` 中的相关记录
 8. 当前 step 需要记什么结构化状态到 memory
 9. 这次变更应更新哪一份文档
 
@@ -96,4 +96,4 @@ LLM plan-driven tool orchestration
 3. 最小必要改动是什么
 ```
 
-Updated: 2026-04-09
+Updated: 2026-04-17
