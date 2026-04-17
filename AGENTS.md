@@ -2,31 +2,39 @@
 
 ## 1. 启动基线
 
-本项目当前核心定义：
+本项目目标已经切换为：
+
+`大众用户可用的通用浏览器 Agent`
+
+当前核心定义仍是：
 
 `Agent = LLM + Tools + Memory + Runtime`
 
-当前执行范式：
+新的主线范式是：
 
-`LLM plan-driven tool orchestration`
+`LLM-driven browser tool loop over a thick BrowserCapabilityLayer`
 
-详细设计以 [doc/spec.md](./doc/spec.md) 为准，红线以 [doc/constraints.md](./doc/constraints.md) 为准。
+当前代码仍保留 `LLM plan-driven tool orchestration` 与 `direct_answer / commerce_search / public_research / site_overview`，但这些 workflow/module 不再是长期产品边界。它们现在是验证场、训练轮和可沉淀为 skill/tool 的脚手架。
 
-## 2. 当前模块
+详细设计以 [doc/spec.md](./doc/spec.md) 为准，红线以 [doc/constraints.md](./doc/constraints.md) 为准，当前 checkpoint 以 [doc/status.md](./doc/status.md) 为准。
 
-当前主线模块：
+## 2. 当前优先级
 
-- `direct_answer`
-- `commerce_search`
-- `public_research`
-- `site_overview`
+优先推进：
 
-当前不应假设：
+- `BrowserCapabilityLayer`
+- `CdpDriver`
+- 页面 snapshot / screenshot / tab lifecycle
+- 工具内部恢复、重试、fallback
+- 页面裁剪、证据脱水、批量观察
+- 低风险 general browser mode
 
-- 已支持多站点通用 adapter。
-- 已支持执行中复杂 plan 改写。
-- 已支持下单、支付或其他高风险执行。
-- 已支持开放 raw DOM 原子动作给 LLM。
+后置推进：
+
+- 长期 memory
+- 多 agent / subagent 产品化
+- 深层账户动作
+- 高风险自动执行
 
 ## 3. 默认入口
 
@@ -45,19 +53,19 @@
 - [doc/interaction.md](./doc/interaction.md)
 - [doc/acceptance.md](./doc/acceptance.md)
 - [doc/writing_rules.md](./doc/writing_rules.md)
+- [doc/other/chromeclaw-deep-dive-decision.md](./doc/other/chromeclaw-deep-dive-decision.md)
+- [doc/other/browser-agent-product-flow.md](./doc/other/browser-agent-product-flow.md)
 - [doc/reference/](./doc/reference/)
 - [doc/history/](./doc/history/)
 
-文档职责、更新规则和降级机制以 [doc/writing_rules.md](./doc/writing_rules.md) 为准。
-
 ## 4. 硬提醒
 
-- 先判断当前目标属于哪个 `task module`。
-- 默认做最小必要改动，不擅自重构、重命名或修改无关文件。
-- 不让 `LLM` 承担 raw DOM 动作、selector 和等待细节。
-- 优先把稳定语义能力封装成 `runtime-visible tool`。
-- 不把 tool 内部局部恢复暴露成一串原子动作让 `LLM` 编排。
-- 不把代码可直接得到的事实和原始噪音重复塞给 `LLM`。
+- 先判断这次变更是在增强通用浏览器能力，还是只是在旧 workflow 内补丁。
+- 优先把能力封进稳定 tool 或 `BrowserCapabilityLayer`，而不是让 runtime 继续长成 workflow 引擎。
+- 不让 `LLM` 承担 raw DOM 动作、selector、等待和局部恢复细节。
+- `debugger` 权限不是默认阻力，但必须配套用户可见控制、停止、接管和高风险确认。
+- 不直接 fork ChromeClaw；默认选择性重写借鉴 browser/CDP/tool 能力。
+- Memory 不是第一阶段差距，先补 tools、恢复重试、页面裁剪和批量观察。
 - 未来能力、未拍板方向、非当前范围事项，只能记录为建议、风险或后续项；不得顺手实现。
 - 信息不足时先明确不确定性，不自行发明业务规则。
 
@@ -65,11 +73,11 @@
 
 任何新实现都应先回答：
 
-- 这件事该由 `LLM` 决策，还是该封进 `Tool`？
-- 这段上下文是否值得进入 `Memory`？
-- 这一步是否值得成为 `runtime-visible tool`？
-- 这一步是否只是 `tool-internal step`？
-- 这一步是否必须进入 `Runtime` 的最小执行循环？
+- 这件事是在迁移 tool 能力，还是在重塑执行范式？
+- 这一步应是 `runtime-visible tool`、`BrowserCapabilityLayer` 方法，还是 tool 内部步骤？
+- 这段恢复/重试逻辑能否留在 tool 内，而不是暴露给 `LLM` 编排？
+- 这段页面内容是否需要裁剪、脱水或结构化后再交给 `LLM`？
+- 这次变更是否把 workflow 从产品边界降级为 skill/tool/harness？
 - 这次变更应更新哪一份文档？
 
 Updated: 2026-04-17

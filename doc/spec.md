@@ -9,7 +9,7 @@
 - 字段级接口复刻
 - 某次迁移过程
 - 已完成事项流水
-- 日期补丁
+- 过期 workflow 细节
 
 代码可直接查到的协议细节，以代码为准：
 
@@ -18,168 +18,185 @@
 - `src/background/tools/registry.ts`
 - `src/background/runtime-core.ts`
 
+旧阶段快照已归档到 `doc/history/2026-04-17-general-browser-agent-shift/`。
+
 ## 2. 核心定义
 
-当前唯一核心定义：
+产品目标：
+
+`大众用户可用的通用浏览器 Agent`
+
+核心定义：
 
 `Agent = LLM + Tools + Memory + Runtime`
 
-当前执行范式：
+目标执行范式：
 
-`LLM plan-driven tool orchestration`
+`LLM-driven browser tool loop over a thick BrowserCapabilityLayer`
 
 含义：
 
-- `LLM` 是决策核心。
-- `Tools` 是稳定语义能力单元。
-- `Memory` 是结构化工作记忆。
-- `Runtime` 是最小执行保障层。
+- `LLM` 是目标理解、子任务拆分、工具选择、取舍和汇总的决策核心。
+- `Tools` 是稳定语义能力单元，负责把浏览器脏活封装成可靠能力。
+- `BrowserCapabilityLayer` 是浏览器控制底座，封装 tab、navigation、snapshot、screenshot、click、type、evaluate、等待、重试和 fallback。
+- `Runtime` 是最小执行保障层，负责 session 生命周期、预算、停止、状态广播、结果记录和最终兜底。
+- `Memory` 是结构化工作记忆，但不是当前第一差距；第一差距在 tools、恢复、裁剪和批量观察。
+
+当前代码仍保留 `LLM plan-driven tool orchestration`。该实现是过渡基线，不再代表长期产品边界。
 
 ## 3. 顶层设计目标
 
 系统设计优先满足：
 
-- AI 易检索：相关逻辑、文档和边界能被快速找到。
-- 系统易执行：路径稳定，副作用可见，验证与回滚容易。
-- 路径清晰：输入、状态、流程和异常流向明确。
-- 关键处可接管：人类无需看完全部，但必须能快速接管关键边界。
+- 通用浏览：能围绕用户目标搜索、打开、阅读、跳转、比较、汇总和执行低风险页面动作。
+- 工具可靠：等待、重试、fallback、页面裁剪和错误恢复优先封装在 tool 内。
+- LLM 少量高价值决策：LLM 不做每个 DOM 细节，只做目标理解、选择、判断、汇总和必要的下一步决策。
+- 过程可接管：用户能看到正在做什么，能停止、接管或拒绝高风险动作。
+- 结果可追溯：最终输出保留来源、覆盖边界、失败原因和下一步建议。
 
 完整设计原则放在 `doc/reference/design_principles.md`，仅在架构取舍、模块拆分、抽象边界或文档系统调整时按需查阅。
 
-## 4. 当前范围
+## 4. 执行流程
 
-当前主线任务模块：
+通用浏览器 Agent 的默认流程：
+
+1. 用户给出目标。
+2. Runtime 创建 session，注入时间、上下文、权限状态和安全边界。
+3. LLM 形成轻量工作假设：需要搜索、读取、比较、操作还是直接回答。
+4. LLM 调用稳定 tool；一次 turn 可以包含多个工具调用。
+5. Tools 通过 `BrowserCapabilityLayer` 执行浏览器动作，并在内部处理等待、重试、fallback、裁剪和结构化。
+6. Tool result 以短、结构化、带来源的形式回到上下文。
+7. LLM 基于结果决定继续搜索、打开页面、读取更多、停止或汇总。
+8. Runtime 负责预算、停止、循环检测和最终兜底。
+9. 最终结果统一表达 `success / partial / failed / blocked`。
+
+大任务可以被 LLM 拆成搜索关键词、候选页面、子问题或并行读取批次。这里的 plan 是工作假设，不是必须长期持久化的 workflow 引擎。
+
+## 5. Workflow 定位
+
+现有模块：
 
 - `direct_answer`
-  - 面向简单稳定知识、已有充分证据后的追问、无需继续浏览器取证的问题。
 - `commerce_search`
-  - 面向京东站内商品搜索、提取、过滤和推荐输出。
 - `public_research`
-  - 面向多来源网页调研，当前代表 `multi_source_overview`。
 - `site_overview`
-  - 面向明确站点或官网入口的主页与一跳高价值页面概况。
 
-当前不承诺：
+新的定位：
 
-- 执行中复杂改写 plan。
-- 多站点通用 adapter。
-- 下单、支付或其他高风险执行。
-- 将 raw DOM 原子动作暴露给 LLM。
-- 下载型附件、PDF、Word、Excel 主链读取。
-- 精准字段确认型 research。
+- 它们是验证浏览器能力的 harness。
+- 它们是可沉淀为 skill/tool 的任务模式。
+- 它们不是长期产品边界。
+- 它们不应阻止系统走向多站点、通用页面阅读和低风险页面操作。
 
-## 5. 组件边界
+`site_overview explicit_url` 仍是第一迁移实验，因为它能最小化业务变量，直接验证 CDP snapshot、页面裁剪、导航恢复和最终汇总质量。
 
-### 5.1 LLM
+## 6. 组件边界
 
-LLM 负责理解目标、生成静态初始 plan、判断任务模块、在多工具 step 中选 tool、对候选做受限取舍，并生成最终输出。
+### 6.1 LLM
 
-LLM 不负责 raw DOM 动作、selector、等待、滚动、tool 内恢复、绕过 `allowedTools` 或伪造事实来源。
+LLM 负责：
 
-### 5.2 Tools
+- 理解用户目标。
+- 生成轻量子任务、搜索关键词和候选策略。
+- 在可用工具范围内选择下一步。
+- 判断证据是否足够。
+- 汇总结果、说明边界和提出下一步建议。
 
-Tools 负责执行稳定语义能力，封装脏活、等待、fallback 和局部恢复，并返回结构化结果。
+LLM 不负责：
 
-Tools 不负责改写整个 plan、维护全局 workflow 脑子，或暴露原子 DOM 动作给 LLM 编排。
+- raw DOM 动作。
+- selector、等待、滚动、点击坐标和重试细节。
+- 绕过工具权限。
+- 伪造事实来源。
+- 替 tool 执行局部恢复。
 
-### 5.3 Memory
+### 6.2 Tools
 
-Memory 只保留结构化工作记忆：目标、任务类型、偏好、plan、step 状态、tool 历史、结构化事实、候选、来源、失败、unresolved issues 和最终结果。
+Tools 负责：
 
-Memory 不保留长网页原文、低价值页面噪音、代码可查接口细节、旧 phase 状态或重复摘要字段。
+- 暴露稳定语义能力。
+- 调用 `BrowserCapabilityLayer`。
+- 封装等待、恢复、fallback、裁剪、批量读取和结构化。
+- 返回短、可信、可合并的 `ToolResult`。
 
-### 5.4 Runtime
+Tools 不负责：
 
-Runtime 是最小保障层，负责 session 生命周期、静态 plan 启动、tool 执行宿主、预算、停止、恢复、状态广播、结果记录和最终兜底。
+- 维护全局 workflow 脑子。
+- 改写产品目标。
+- 把内部动作拆成一串 raw DOM 指令交给 LLM。
 
-Runtime 不按 `phase` 或 `stepId` 硬编码业务语义，不为不同任务模块维护隐式 workflow，不代替 tool 做局部恢复。
+### 6.3 BrowserCapabilityLayer
 
-## 6. 协议原则
+`BrowserCapabilityLayer` 是下一阶段最重要的抽象。
+
+它应覆盖：
+
+- tab open / close / focus / lifecycle
+- navigation / reload / wait
+- DOM or accessibility snapshot
+- screenshot
+- click / type / keyboard
+- page evaluate 的受控子集
+- stale reference 恢复
+- attach / reattach / fallback
+- 页面内容裁剪和元信息提取
+
+ChromeClaw 的 CDP/browser tool 是主要参考来源，但默认选择性重写，不直接 fork。
+
+### 6.4 Runtime
+
+Runtime 是最小保障层。
+
+Runtime 负责：
+
+- session 生命周期。
+- tool 执行宿主。
+- token、步数、耗时和失败预算。
+- stop / takeover / blocked。
+- tool loop 检测。
+- 状态广播和最终兜底。
+
+Runtime 不负责：
+
+- 按 workflow phase 写死业务语义。
+- 替 LLM 做任务级语义决策。
+- 替 tool 做浏览器局部恢复。
+
+### 6.5 Memory
+
+Memory 只保留结构化工作记忆：
+
+- 用户偏好。
+- 任务目标。
+- 关键来源。
+- 稳定事实。
+- 可复用失败模式。
+- 可复用页面/站点经验。
+
+Memory 当前后置。没有可靠 tools 和裁剪层之前，memory 只会放大噪音。
+
+## 7. 协议原则
 
 字段级协议以代码为准，文档只记录不变量：
 
-- Plan 是静态初始计划，执行中只更新 step 状态。
-- 每个 step 必须限定可用工具范围。
-- 内容脚本原子动作结果不等于 runtime-visible tool result。
-- runtime-visible tool result 必须可合并到结构化 memory。
+- runtime-visible tool result 必须可结构化消费。
+- 内容脚本或 CDP 原子动作结果不等于最终 tool result。
+- LLM 只能在授权工具和安全边界内行动。
+- 工具内部错误应尽量恢复；无法恢复时返回可解释失败。
 - 最终结果必须统一表达 `success / partial / failed / blocked`。
 - 文档产物不是默认输出；只有用户明确要求文件、报告或 markdown 时才生成 artifact。
 
-## 7. Runtime 不变量
+## 8. UI 契约
 
-当前 runtime 循环必须满足：
+Side Panel 应表达：
 
-- 先有静态 plan，再执行 step。
-- 单工具 step 不调用 LLM 选工具。
-- 多工具 step 的 LLM 选择必须落在 `allowedTools` 内。
-- tool 结果决定当前 step 的状态推进。
-- 预算、重复失败、无进展必须能停止执行。
-- 无论成功、失败、阻塞或用户停止，都必须形成结构化最终结果。
+- 当前目标。
+- 当前正在使用的能力。
+- 关键来源和关键失败。
+- 可停止、可接管、可重试。
+- 高风险动作需要确认。
 
-当前最小护栏包括总步数、软提醒、总耗时、同 tool 连续失败和连续无进展上限；具体数值以 `src/background/runtime-core.ts` 为准。
-
-## 8. Task Module 边界
-
-### 8.1 `direct_answer`
-
-适用：
-
-- 简单稳定知识。
-- conversation 已有充分证据的追问。
-- 无需继续打开浏览器的问题。
-
-不适用：
-
-- 明显依赖最新事实、当前时间、价格、新闻、法规或现势状态的问题。
-
-### 8.2 `commerce_search`
-
-适用：
-
-- 京东站内商品搜索。
-- 商品候选提取、过滤、比较和推荐。
-
-当前不扩展为：
-
-- 多电商通用 adapter。
-- 下单、支付或库存承诺。
-
-### 8.3 `public_research`
-
-适用：
-
-- 多来源网页调研。
-- 需要 Google 搜索、来源筛选、逐页读取和汇总的问题。
-
-当前边界：
-
-- 只承诺概况型多来源调研。
-- 不承诺精准字段抽取和完整事实核验。
-
-### 8.4 `site_overview`
-
-适用：
-
-- 用户给出明确 URL。
-- 用户明确要求查看某个官网、网站或站点。
-
-当前边界：
-
-- 可信入口主页。
-- 主页一跳高价值页面。
-- 输出粗粒度概况、来源列表和覆盖边界。
-
-不允许伪装成：
-
-- 完整站点画像。
-- 深层 crawl。
-- 精准字段确认。
-
-## 9. UI 契约
-
-Side Panel 只依赖当前 session 状态、timeline、最终结果和必要 artifacts。
-
-UI 不应重新引入 `currentPhase`、旧 workflow 状态，或与 runtime 细节重复的结果正文。
+UI 不应把旧 workflow phase 当作产品主流程。
 
 `inline` 在会话流展示最终正文；`artifact` 展示短摘要和文档卡片；运行细节次于最终结果。
 
