@@ -12,11 +12,14 @@
     "@mozilla/readability": "^0.6.0",
     "aria-query": "^5.3.2",
     "dom-accessibility-api": "^0.7.1",
+    "turndown": "^7.2.4",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.321",
+    "@types/jsdom": "^28.0.1",
     "@types/node": "^24.0.0",
+    "@types/turndown": "^5.0.6",
     "jsdom": "^26.0.0",
     "typescript": "^5.8.3",
     "vite": "^7.0.0",

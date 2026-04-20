@@ -79,3 +79,37 @@
 - Execution Shape: 先串行冻结接口和核心类型，再并发开发互不重叠的能力块，最后串行集成 `site_overview explicit_url`。
 - Reason: ChromeClaw 的速度和稳定性主要来自厚 browser tools、恢复重试、裁剪、批量执行和流式结果，而不是先拥有复杂 runtime；当前 workflow 仍可作为验证 harness。
 - Revisit Trigger: 如果 Phase 1 的 CDP 只读观察不能改善 `site_overview explicit_url` 的稳定性、速度或结果质量，则暂停后续阶段并重新评估 driver 路线。
+
+## 2026-04-20 - BrowserCapabilityLayer Phase 0 接口边界
+
+- Question: Phase 0 是否应照搬 ChromeClaw 的 LLM-facing `browser` 大工具，还是先冻结内部 browser capability contract。
+- Decision: 先新增 `BrowserCapabilityLayer`、driver contract、结构化观察/动作类型和 mock driver；不接入 runtime，不新增 runtime-visible raw browser tool。
+- Reference: 本地 `D:\test\chromeclaw\chrome-extension\src\background\tools\browser.ts / cdp.ts / debugger.ts` 的 tabs、snapshot、refMap、CDP reattach、screenshot 和 fallback 设计。
+- Boundary: ChromeClaw 的 raw debugger send/attach/detach/list_targets 和任意 evaluate 只作为内部参考；本阶段 `evaluateLimited` 默认 experimental/internal，不暴露给 LLM。
+- Revisit Trigger: Phase 1 接入真实 `CdpDriver` 时，如果接口无法表达 attach failure cache、stale ref、network idle 或 screenshot sanitization，再调整 contract。
+
+## 2026-04-20 - Browser Core V2 受控重建
+
+- Question: 当前 MVP 设计重心偏向 workflow，是否继续修旧链路，还是直接删除重开。
+- Decision: 采用受控重建。新主线为 `Browser Core V2`，在现有仓库内抽取 ChromeClaw browser tool 行为和当前 MVP 结构化契约重写；旧 workflow/code 保留为历史、对照、fallback 或 harness，不继续作为新主链投资。
+- Reason: 完全删除重开会丢掉 provider/UI/result contract/SourceFactCard/site_overview 验证资产；继续修旧 workflow 会让错误重心延续。受控重建能保留资产，同时让新链路独立验证。
+- Plan Update: `doc/plan.md` 从 browser tool migration 改为 `Browser Core V2 Controlled Rebuild Plan`。Phase 0 视为 contract/mock harness 已落地，下一步是 readonly `CdpDriver` 和 `explicit_url overview via Browser Core V2`。
+- Legacy Policy: 旧代码不因“旧”而删除；只有阻塞编译、测试、安全、理解或新主链验证时才清理。
+- Revisit Trigger: 如果 Browser Core V2 readonly 闭环不能优于旧 content-script path，或旧链路依赖导致新主链无法独立验证，则重新评估保留/隔离策略。
+
+## 2026-04-20 - Store-safe driver 优先与 CDP 后置
+
+- Question: 不采用 `debugger` / CDP 作为默认路径时，是否应先做完整范式迁移，还是先继续优化工具。
+- Decision: 默认大众/商店路径改为 `StoreSafeDriver + Agent Loop V2 minimal`。第一优先级是用现有 JS/DOM extraction 抽出 store-safe browser tool facade，并用它完成范式迁移最小闭环；`CdpDriver` 后置为 advanced/local/enterprise driver。
+- Reason: 旧 MVP 的问题不是 JS/DOM 路线本身，而是工具薄、恢复弱、裁剪和 workflow 绑定过重。单独迁移 runtime 范式会变成新 loop 跑旧薄工具；先押 CDP 又会放大上架、权限、隐私和用户信任风险。
+- Plan Update: `doc/plan.md` 的 Phase 1 改为 `Store-safe Browser Tool Facade`，Phase 2 改为 `Agent Loop V2 Minimal`，Phase 5 才实现 advanced `CdpDriver`。
+- Revisit Trigger: 如果 store-safe explicit URL overview 无法达到最低可用质量，再评估是否把 CDP 提前为非商店高级模式，而不是替代大众默认路径。
+
+## 2026-04-20 - Browser Core V2 参考重写岛
+
+- Question: Browser Core V2 是否应直接铺到现有 `src/background`、`src/content` 主目录，还是建立隔离的新系统岛。
+- Decision: 新建 `src/browser-core-v2` 作为参考重写岛；旧 runtime/tools/workflow/content 主链保留为历史、对照、fallback 或 harness。
+- Reason: 直接散落到旧主目录会把“受控重写”变成就地大重构，后续 AI 线程容易误判新旧边界。隔离目录让新主线可独立理解、测试和接线。
+- Boundary: 当前只建立 store-safe JS/DOM 默认路径和 background/content 框架，不注册 runtime-visible tool，不引入 CDP/debugger，不请求 `downloads` 权限。
+- Reference: ChromeClaw 用于 browser tool 行为和测试组织参考；browser-use 只参考 DOM serializer / markdown extractor 思路，不引入依赖。
+- Revisit Trigger: 如果 `src/browser-core-v2` 与旧契约重复到维护成本过高，或第一闭环需要大量复用旧 runtime 才能运行，再评估 adapter 边界。

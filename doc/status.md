@@ -2,18 +2,22 @@
 
 ## Current Phase
 
-`paradigm-transition`
+`browser-core-v2-controlled-rebuild`
 
 ## Current Focus
 
 当前主线已经从 workflow-first MVP 切换为通用浏览器 Agent 能力建设：
 
+- 当前产品仓库：`D:\code\browser-agent-mvp`。
+- ChromeClaw 参考仓库：`D:\test\chromeclaw`。
 - 当前产品目标是大众用户可用的通用浏览器 Agent。
-- workflow/module 保留为验证场、训练轮和可沉淀 skill/tool 的脚手架。
-- 下一阶段核心任务已经确定为：参考 ChromeClaw 分阶段迁移/重写 browser tools。
-- 关键能力是 `BrowserCapabilityLayer + CdpDriver + page trimming + tool-internal recovery`。
-- `site_overview explicit_url` 是默认第一迁移实验。
+- 下一阶段核心任务已经确定为：在现有仓库内受控重建 `Browser Core V2`。
+- 旧 workflow/module 保留为历史、对照、fallback 或 harness，不继续作为新主链投资。
+- 关键能力是 `StoreSafeDriver + BrowserCapabilityLayer / BrowserDriver + Agent Loop V2 minimal + page trimming + tool-internal recovery`。
+- 大众/商店默认路径不依赖 `debugger` / CDP；`CdpDriver` 后置为 advanced/local/enterprise driver。
+- `explicit_url overview via StoreSafeDriver` 是默认第一闭环。
 - Active migration plan: `doc/plan.md`。
+- Browser Core V2 采用隔离参考重写岛：`src/browser-core-v2`，避免把新主线散落进旧 runtime/tools/workflow 主目录。
 
 ## Done
 
@@ -26,47 +30,51 @@
 - ChromeClaw 静态调研已完成，结论记录在 `doc/other/chromeclaw-deep-dive-decision.md`。
 - 产品流程记录已新增到 `doc/other/browser-agent-product-flow.md`。
 - 旧阶段核心文档快照已归档到 `doc/history/2026-04-17-general-browser-agent-shift/`。
-- 浏览器工具迁移已拆为 Phase 0-5，并恢复 active `doc/plan.md` 作为下一阶段核心任务计划。
+- Browser Core V2 受控重建计划已写入 active `doc/plan.md`。
+- Phase 0 contract / mock driver / test harness 已有落地记录，现有 registry/runtime/workflow 未接入、未改变行为。
+- Browser Core V2 文件框架已建立：`src/browser-core-v2/shared`、`content`、`background`、`test-support`。
+- 已补充 `turndown`，用于 Readability HTML 到 markdown excerpt 的 store-safe 内容提取路径。
+- 已新增 `doc/reference/browser_core_v2_file_framework.md`，记录新目录职责和产品/参考仓库路径。
 
 ## Blockers
 
-- `BrowserCapabilityLayer` / `CdpDriver` 尚未落地。
-- 现有 runtime 仍偏 plan-driven，尚未完成 general browser tool-loop 切换。
+- `StoreSafeDriver` 尚未接入真实 `chrome.tabs / chrome.scripting`。
+- Agent Loop V2 minimal 尚未落地，现有 runtime 仍偏 plan-driven。
 - 自动化真机扩展会话验证仍未稳定拿到项目扩展上下文。
 - Provider live request 仍缺真实环境验证。
 - stop / error / budget guardrails 仍缺真机可视化记录。
 
 ## Remaining Risks
 
-- 过早删除 workflow 会损失现有可验证路径；当前应保留为 harness。
-- 只迁移 ChromeClaw 外形而不迁移 tool 内恢复、裁剪和 batch，会得不到速度与稳定性收益。
-- CDP/debugger 能力会扩大权限解释成本，必须配套用户可见控制。
+- 过早删除旧 workflow 会损失对照和验证路径；当前应保留但不继续投资。
+- 旧代码如果仍被主链 import/编译，可能拖累 Browser Core V2 独立验证。
+- 只迁移 ChromeClaw 外形而不迁移 tool 内恢复、裁剪和单测，会得不到速度与稳定性收益。
+- CDP/debugger 不适合作为大众/商店默认路径；若提前依赖会放大上架、隐私和用户信任风险。
 - Source fact card 的 LLM 脱水效果仍需真实 provider 样本验证。
 - `site_overview` 尚未完成 CDP 路径的 Chrome 真机样例验证。
 - 精准型 research、下载型附件、PDF/Word/Excel 主链读取仍不在当前第一实验范围内。
 
 ## Next
 
-1. Phase 0: 串行冻结 `BrowserCapabilityLayer` 接口、driver contract、核心类型和 mock driver。
-2. Phase 1: 并发实现只读 `CdpDriver`、页面裁剪、`site_overview explicit_url` adapter 和测试夹具。
-3. 串行集成 `site_overview explicit_url`，对比 CDP driver 与当前 content-script driver。
-4. Phase 2: 补 tab lifecycle、navigate/reload/wait、attach/reattach 和 navigation fallback。
-5. Phase 3: 增加 click/type/scroll/press 的低风险动作子集和 action risk 分级。
-6. Phase 4: 把批量读取、受限并发、tool 内恢复和 result trimming 做厚。
-7. Phase 5: tools 稳定后再开放低风险 general browser mode，并评估 runtime tool-loop 迁移。
+1. 接线 `StoreSafeDriver` 到 `chrome.tabs / chrome.scripting`，让 `content-script-client` 能调用 `src/browser-core-v2/content` bridge。
+2. 用 `explicit_url overview via StoreSafeDriver` 跑通不依赖旧 workflow 的第一闭环。
+3. 对比旧 workflow path 与新 Browser Core V2 path 的稳定性、速度和结果质量。
+4. 强化恢复、裁剪、stale target、page problem detection 和 result trimming。
+5. 增加 click/type/scroll/press 的低风险动作子集和 action risk 分级。
+6. 再实现 advanced `CdpDriver`，用于本地、企业或高级模式。
 
 ## Needs Human Decision
 
-- 是否接受第一阶段申请 `debugger` 与必要 host permissions 用于 CDP spike。
-- 是否把 `<all_urls>` 作为开发验证阶段默认权限，产品化前再裁剪。
-- 是否把旧 workflow 文档继续只保留在 history/reference，不再作为当前默认入口。
-- 是否批准 Phase 0/1 按 `doc/plan.md` 的串行接口定界 + 并发能力块方式启动。
+- manifest 中 `activeTab / scripting / optional host access` 的具体权限申请方式。
+- Browser Core V2 何时注册为 runtime-visible tool。
+- 低风险 click/type/press/scroll 的首批开放范围。
+- `downloads` 权限与文件处理策略是否进入后续阶段。
 
 ## Latest Validation
 
-- 本次为迁移计划文档同步，未运行构建、测试或真实浏览器任务。
-- 上次代码验证记录：
-  - `npm run build` 通过，记录于 2026-04-16。
-  - `npm test -- tests/schema.test.ts tests/llm-client.test.ts tests/public-research.test.ts tests/site-overview.test.ts` 通过，4 个测试文件，38 个测试，记录于 2026-04-16。
+- `npm test -- tests/browser-capability.test.ts tests/browser-core-v2/readable-content.test.ts tests/browser-core-v2/dom-snapshot.test.ts tests/browser-core-v2/browser-tool-schema.test.ts` 通过，4 个测试文件，12 个测试。
+- `npm run build` 通过。
+- `npx tsc --noEmit` 未通过；剩余错误位于既有 `llm-client`、`read-research-source-facts` 和旧测试 fixture 类型，不是 `src/browser-core-v2` 新增目录引入。
+- 本次未加载真实扩展、未配置 provider、未跑真实网页任务。
 
-Updated: 2026-04-17
+Updated: 2026-04-20

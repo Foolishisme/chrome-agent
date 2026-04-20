@@ -32,17 +32,17 @@
 
 目标执行范式：
 
-`LLM-driven browser tool loop over a thick BrowserCapabilityLayer`
+`LLM-driven browser tool loop over Store-safe Browser Core V2`
 
 含义：
 
 - `LLM` 是目标理解、子任务拆分、工具选择、取舍和汇总的决策核心。
 - `Tools` 是稳定语义能力单元，负责把浏览器脏活封装成可靠能力。
-- `BrowserCapabilityLayer` 是浏览器控制底座，封装 tab、navigation、snapshot、screenshot、click、type、evaluate、等待、重试和 fallback。
+- `BrowserCapabilityLayer` 是浏览器控制底座，默认先封装 store-safe JS/DOM observe/read/extract、navigation、click、type、等待、重试和 fallback。
 - `Runtime` 是最小执行保障层，负责 session 生命周期、预算、停止、状态广播、结果记录和最终兜底。
 - `Memory` 是结构化工作记忆，但不是当前第一差距；第一差距在 tools、恢复、裁剪和批量观察。
 
-当前代码仍保留 `LLM plan-driven tool orchestration`。该实现是过渡基线，不再代表长期产品边界。
+当前工程路径是 `Browser Core V2 controlled rebuild`。旧 `LLM plan-driven tool orchestration` 是过渡基线和对照资产，不再代表新主链。
 
 ## 3. 顶层设计目标
 
@@ -88,7 +88,7 @@
 - 它们不是长期产品边界。
 - 它们不应阻止系统走向多站点、通用页面阅读和低风险页面操作。
 
-`site_overview explicit_url` 仍是第一迁移实验，因为它能最小化业务变量，直接验证 CDP snapshot、页面裁剪、导航恢复和最终汇总质量。
+`explicit_url overview via StoreSafeDriver` 是第一闭环，因为它能最小化业务变量，直接验证 JS/DOM observe/read/extract、页面裁剪、Agent Loop V2 和最终汇总质量。
 
 ## 6. 组件边界
 
@@ -127,21 +127,23 @@ Tools 不负责：
 
 ### 6.3 BrowserCapabilityLayer
 
-`BrowserCapabilityLayer` 是下一阶段最重要的抽象。
+`BrowserCapabilityLayer` 是下一阶段最重要的抽象，但默认实现不依赖 `debugger` / CDP。
 
 它应覆盖：
 
 - tab open / close / focus / lifecycle
 - navigation / reload / wait
-- DOM or accessibility snapshot
-- screenshot
+- content-script JS/DOM snapshot
 - click / type / keyboard
 - page evaluate 的受控子集
 - stale reference 恢复
-- attach / reattach / fallback
 - 页面内容裁剪和元信息提取
 
-ChromeClaw 的 CDP/browser tool 是主要参考来源，但默认选择性重写，不直接 fork。
+ChromeClaw 的 browser tool 行为、fallback 和单测是主要参考来源；其 CDP/debugger 路线只作为 advanced/local/enterprise driver 参考，不作为大众/商店默认主路径。
+
+`CdpDriver` 可后置提供 DOMSnapshot、Accessibility、screenshot、Input fallback、attach/reattach 等高能力路径，但必须与 store-safe 主链解耦。
+
+`Browser Core V2` 可以与旧 workflow 代码并存。旧代码不因“旧”而删除；只要不进入新主链、不参与不必要编译、不阻碍验证，就保留为历史、对照、fallback 或 harness。
 
 ### 6.4 Runtime
 
@@ -200,4 +202,4 @@ UI 不应把旧 workflow phase 当作产品主流程。
 
 `inline` 在会话流展示最终正文；`artifact` 展示短摘要和文档卡片；运行细节次于最终结果。
 
-Updated: 2026-04-17
+Updated: 2026-04-20

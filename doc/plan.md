@@ -1,4 +1,4 @@
-# Browser Tool Migration Plan
+# Browser Core V2 Controlled Rebuild Plan
 
 ## 1. 定位
 
@@ -6,143 +6,231 @@
 
 当前核心任务：
 
-`参考 ChromeClaw，分阶段迁移/重写浏览器工具集，构建 BrowserCapabilityLayer，并用现有 workflow 作为验证 harness。`
+`在现有仓库内受控重建 Browser Core V2，优先用 store-safe JS/DOM 能力完成范式迁移最小闭环，再把 CDP/debugger 降级为高级/企业/本地 driver。`
+
+本计划不是删除重开。旧 workflow/code 可以保留为历史、对照、fallback 或 harness；只要不进入新主链、不参与不必要编译、不拖累验证，就不优先删除。
 
 本计划完成并进入稳定实现后，应归档到 `doc/history/`，不长期保留 active `doc/plan.md`。
 
-## 2. 总原则
+## 2. 仓库路径
 
-- 认知上先完成通用浏览器 Agent 范式切换。
-- 工程上先迁移 browser tools，而不是先重写 runtime。
-- workflow/module 暂时保留为验证场，不作为长期产品边界。
-- ChromeClaw 只作为 browser/CDP/tool 设计参考，不直接 fork。
-- Memory、subagent、cron、channel、Google identity 等非 browser capability 能力后置。
+当前产品仓库：
 
-## 3. 阶段拆分
+- `D:\code\browser-agent-mvp`
 
-### Phase 0 - 接口定界
+ChromeClaw 参考仓库：
+
+- `D:\test\chromeclaw`
+
+执行规则：
+
+- Browser Core V2 的代码、测试和文档默认写入 `D:\code\browser-agent-mvp`。
+- ChromeClaw 只用于静态阅读、行为抽取和测试样本参考。
+- 不直接 fork ChromeClaw，不把实现改动写入 `D:\test\chromeclaw`，除非用户明确要求。
+
+## 3. 总原则
+
+- 新主线是 `Browser Core V2`，不是继续修旧 workflow。
+- 当前 MVP 继续提供结构化契约、UI/provider 基础和验证 harness。
+- 默认大众/商店路径优先 `StoreSafeDriver`，不默认依赖 `debugger` / CDP。
+- `CdpDriver` 保留为 advanced/local/enterprise driver，后置实现。
+- ChromeClaw 提供 browser tool 行为参考和测试样本，不继承其默认权限形态。
+- 旧 `direct_answer / commerce_search / public_research / site_overview` 降级为 harness/fallback/历史参考。
+- 旧代码不因“旧”而删除；只有阻塞编译、测试、安全、理解或产品主链时才清理。
+- Memory、subagent、cron、channel、Google identity 等非 browser core 能力后置。
+
+## 4. 已保留资产
+
+从当前 MVP 保留并抽取：
+
+- `ToolResult / ActionResult / FinalResult`
+- `success / partial / failed / blocked`
+- `SemanticSnapshot`
+- `SourceFactCard`
+- provider / side panel / runtime 基础设施
+- content-script JS/DOM extraction
+- `scanner.ts / actions.ts / research.ts / extractor.ts` 中的 observe/read/extract/click/type/scroll 雏形
+- `@mozilla/readability` 已在 `src/content/research.ts` 接入正文提取，当前输出 `extractionStrategy: "readability" | "fallback"`
+- `site_overview explicit_url` 作为第一验证 harness
+
+从 ChromeClaw 借鉴：
+
+- LLM-facing `browser(action)` facade 形态
+- snapshot/refMap 思路
+- navigate fallback
+- click/type fallback
+- result truncation/sanitization
+- tool 级单测组织方式
+- CDP driver 作为高级能力参考
+
+## 4.1 Browser Core V2 文件框架
+
+新主线采用隔离的参考重写岛，而不是把文件散落进旧主目录：
+
+`src/browser-core-v2/`
+
+目录边界：
+
+- `shared/`：跨 background/content 的类型、contract re-export、result helper 和 page problem helper。
+- `content/`：store-safe JS/DOM primitives，包括 DOM snapshot、stable refs、links/controls、Readability、Turndown、page state、page problems、低风险 interaction 原语和裁剪。
+- `background/`：StoreSafeDriver 框架、content-script client 边界、LLM-facing browser tool schema/facade、explicit URL overview harness、action risk 和 result trimming。
+- `downloads/`：只预留未来 `chrome.downloads` API 归属，不在当前阶段请求权限或实现下载。
+- `test-support/`：后续 Browser Core V2 测试夹具。
+
+当前文件框架记录在 `doc/reference/browser_core_v2_file_framework.md`。
+
+原则：
+
+- 不新建 `SRE` 目录，避免与 Site Reliability Engineering 语义冲突。
+- 不在本阶段注册 runtime-visible browser tool。
+- 不引入 browser-use 依赖；只参考其 DOM serializer / markdown extractor 思路。
+- `turndown` 是当前补充的唯一运行时依赖，用于把 Readability HTML 转成 markdown excerpt。
+- CDP/debugger 保持后置 advanced/local/enterprise driver。
+
+## 5. 阶段拆分
+
+### Phase 0 - Core Contract and Mock Harness
+
+状态：已落地接口和 mock 测试夹具。
 
 目标：
 
-- 定义 `BrowserCapabilityLayer` 接口。
-- 定义 driver contract、snapshot、target ref、action result、page problem、risk level。
+- 定义 `BrowserCapabilityLayer` / `BrowserDriver` contract。
+- 定义 tab、target ref、risk level、page problem、observation、action result、screenshot 等共享类型。
 - 建立 mock driver 和最小测试夹具。
 
 验收：
 
-- 不改变现有 workflow 行为。
-- 后续 tools 可以只依赖接口，不直接依赖 CDP 或 content script。
-- 明确哪些能力是 runtime-visible tool，哪些只是 tool-internal step。
+- 不改变现有 runtime/workflow 行为。
+- 后续 `StoreSafeDriver`、页面裁剪和 adapter 可依赖该 contract。
+- raw debugger/evaluate 不暴露为 runtime-visible LLM 工具。
 
-### Phase 1 - 只读观察
+### Phase 1 - Browser Core V2 File Framework and Store-safe Facade
+
+状态：文件框架已建立；下一步是 StoreSafeDriver wiring。
 
 目标：
 
-- 实现只读 `CdpDriver` 子集：tab info、navigate/open/focus 的最小支持、snapshot、screenshot。
-- 建立页面裁剪和结构化观察结果：title、url、main text、links、controls、problem detection。
+- 在 `src/browser-core-v2` 建立隔离参考重写岛，不污染旧 runtime/tools/workflow 主链。
+- 从现有 content-script JS/DOM 能力抽取 `StoreSafeDriver`。
+- 建立 LLM-facing browser tool facade 的最小 action 集：`open/navigate/observe/read/extractLinksAndControls/finalize`。
+- 保留现有 `@mozilla/readability` 路径，补充 `turndown` 生成 markdown excerpt；不要重写已可用的 Readability fallback 链路。
+- 先支持 explicit URL 的只读浏览，不默认 `debugger`、不默认 `<all_urls>`。
+- 使用 `activeTab / scripting / optional host access / content script` 路线。
 
 验收：
 
-- `site_overview explicit_url` 能用新观察层读取入口页。
-- 长页面不会把原文直接塞给 LLM。
-- 404、登录墙、空正文、不可读页面能返回结构化失败原因。
+- `browser-core-v2` 能在 store-safe 权限下完成 explicit URL 打开、观察、读取和结构化返回。
+- 页面内容进入 LLM 前经过 Readability/Turndown、裁剪、脱水或结构化。
+- 旧 workflow 未被强制接入。
+- 不需要 CDP 也能跑通第一闭环。
 
-### Phase 2 - 导航生命周期
+### Phase 2 - Agent Loop V2 Minimal
 
 目标：
 
-- 完成 tab lifecycle、navigate、reload、wait for stable、attach/reattach、fallback。
-- 处理 SPA/hash route、导航失败、tab 失焦和刷新后的恢复。
+- 新建最小动态 browser tool-loop，不再依赖旧静态 workflow。
+- LLM 基于 `browser.observe/read` 结果决定继续读页、读一跳链接、停止或汇总。
+- Runtime 只做预算、停止、loop guard、状态广播和 final result 兜底。
+- 第一任务为 `explicit_url overview via StoreSafeDriver`。
 
 验收：
 
-- `site_overview explicit_url` 的主页和一跳页读取能完整走 `BrowserCapabilityLayer`。
-- 导航失败不直接中断整个任务，能返回 partial success。
+- 不走 `compileTaskSpec -> PlanStep -> allowedTools -> finalize*` 旧链路，也能完成 explicit URL overview。
+- 输出已读页面、跳过页面、覆盖边界和未覆盖区域。
+- 结果能表达 `success / partial / failed / blocked`。
 
-### Phase 3 - 低风险页面动作
+### Phase 3 - Tool Hardening
 
 目标：
 
-- 实现 click、type、press、scroll 的受控子集。
-- 引入 action risk 分级：read-only、low-risk write、medium-risk submit、high-risk irreversible。
-- 动作前后重新 observe，stale target 可重新 snapshot。
+- 强化 store-safe 工具厚度：恢复、重试、stale target、页面问题识别、result trimming。
+- 增加一跳页面读取、受限并发和 partial success。
+- 建立更多 mock 和 unit tests。
+
+验收：
+
+- 工具内部能处理常见失败，不把恢复步骤暴露给 LLM。
+- 页面失败不拖垮整个任务。
+- LLM 主要做少量选择和汇总，而不是逐 DOM 步骤编排。
+
+### Phase 4 - Low-risk Interaction
+
+目标：
+
+- 实现 click、type、press、scroll 的低风险子集。
+- 动作前后重新 observe。
+- 引入 action risk gate。
 
 验收：
 
 - 支持搜索框输入、展开菜单、打开链接、滚动和普通草稿填写。
 - 下单、支付、删除、发送不可撤回内容等高风险动作默认 blocked 或要求确认。
 
-### Phase 4 - 工具内部恢复、批量读取、裁剪
+### Phase 5 - Advanced Drivers
 
 目标：
 
-- 把重试、fallback、页面裁剪、批量读页和部分成功收口在 tool 内。
-- 建立受限并发读取和 result trimming。
+- 实现 `CdpDriver` 作为 advanced/local/enterprise driver。
+- 借鉴 ChromeClaw 的 CDP attach/reattach、DOM snapshot、screenshot、Input fallback。
+- 不作为大众商店版默认能力。
 
 验收：
 
-- 单个 tool 能完成一批候选页面读取并返回短结构化结果。
-- 页面失败不拖垮整个任务。
-- LLM 主要做少量选择和汇总，而不是逐 DOM 步骤编排。
+- Store-safe 主链不依赖 `debugger`。
+- CdpDriver 可作为对照、企业版或本地高级模式。
+- 权限、隐私说明、stop/takeover、高风险确认完整。
 
-### Phase 5 - 低风险通用 Browser Mode
+## 6. 推荐开发方式
 
-目标：
+串行：
 
-- 在 tools 足够厚后，开放低风险 general browser mode。
-- runtime 从 workflow-first 逐步转为动态 browser tool-loop。
+1. 每个阶段先冻结 contract 和测试清单。
+2. 主线程负责更新 facade、ToolResult 边界和最终集成。
+3. Agent Loop V2 最小闭环由主线程串行收口。
 
-验收：
+并发：
 
-- 不指定 `commerce_search / public_research / site_overview` 也能完成低风险浏览任务。
-- workflow 降级为 skill/harness。
-- stop、takeover、高风险确认和结构化 final result 可用。
+- Worker A: `StoreSafeDriver` observe/read/extract。
+- Worker B: page trimming、page problem detection、result shaping。
+- Worker C: explicit URL overview harness/adapter。
+- Worker D: mock driver、content-script driver 单测和 browser facade 单测。
 
-## 4. 推荐并发开发方式
+后置并发：
 
-先串行：
+- Worker E: low-risk click/type/scroll。
+- Worker F: advanced `CdpDriver`。
 
-1. 冻结 `BrowserCapabilityLayer` 接口。
-2. 冻结核心类型和 driver contract。
-3. 冻结 feature flag / driver selection 方式。
+收口：
 
-再并发：
+- 不让多个 worker 同时改 runtime 主循环。
+- 不让多个 worker 同时改共享 result contract。
+- 新主链验证通过前，不删除旧 workflow。
 
-- Worker A: 只读 `CdpDriver`，不改 runtime 和 site_overview。
-- Worker B: 页面裁剪、结构化观察、problem detection。
-- Worker C: `site_overview explicit_url` driver adapter。
-- Worker D: mock driver、测试夹具和边界样例。
+## 7. 第一闭环
 
-最后串行：
+默认第一闭环：
 
-- 集成 `site_overview explicit_url`。
-- 收口 `ToolResult` 和 final result。
-- 决定是否进入 Phase 2。
-
-## 5. 第一实验
-
-默认第一实验：
-
-`site_overview explicit_url`
-
-原因：
-
-- 用户输入明确。
-- 业务变量少。
-- 能直接比较 content-script driver 与 CDP driver。
-- 能验证 snapshot、screenshot、导航恢复、页面裁剪和最终汇总质量。
+`explicit_url overview via StoreSafeDriver`
 
 成功标准：
 
-- 读取稳定性优于当前实现。
-- 页面内容更短、更结构化。
-- 对失败页面能给出清晰原因。
-- 能输出已读页面、跳过页面、覆盖边界和未覆盖区域。
+- 输入明确 URL。
+- Browser Core V2 用 store-safe driver 打开/导航/观察页面。
+- 页面被裁剪成短结构化观察。
+- LLM 基于 observation 决定是否读取一跳链接或汇总。
+- 最终输出结构化结果和覆盖边界。
+- 旧链路可作为对照，但不是新主链。
+- 不要求 `debugger` / CDP。
 
-## 6. 不做事项
+## 8. 不做事项
 
-当前迁移阶段不优先做：
+当前阶段不优先做：
 
+- 删除旧 workflow。
+- 重写整个 runtime。
+- 默认依赖 `debugger` / CDP。
+- 默认 `<all_urls>`。
 - memory 长期化。
 - subagent 产品化。
 - cron / channel。
@@ -150,15 +238,15 @@
 - Google identity / Gmail / Drive。
 - cookies / declarativeNetRequest 默认权限。
 - 高风险真实账户自动化。
-- 完整 runtime 范式重写。
 
-## 7. Revisit Trigger
+## 9. Revisit Trigger
 
 需要重新评估本计划的情况：
 
-- Phase 1 的 CDP snapshot 对 `site_overview explicit_url` 没有稳定性或质量收益。
-- `debugger` 权限说明、stop/takeover、高风险确认无法形成可接受产品体验。
-- 工具层恢复和裁剪无法明显减少 LLM 上下文噪音。
-- 并发开发导致接口反复变更，集成成本高于收益。
+- StoreSafeDriver 无法支撑 explicit URL overview 的最低可用质量。
+- Agent Loop V2 最小闭环在没有 CDP 时无法稳定完成。
+- 页面裁剪和结构化仍无法明显减少 LLM 上下文噪音。
+- 新主链被旧 workflow 依赖拖住，无法独立验证。
+- 并发开发导致 contract 反复变更，集成成本高于收益。
 
 Updated: 2026-04-20
