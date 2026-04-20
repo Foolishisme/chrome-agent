@@ -89,3 +89,16 @@
   - `npx tsc --noEmit` 未通过；剩余错误位于既有 `llm-client`、`read-research-source-facts` 和旧测试 fixture 类型，不是本次新增 Browser Core V2 目录引入。
 - Result: Browser Core V2 现在有可编译、可测试的独立目录框架；现有 runtime-visible tool registry 未接入，旧 workflow 行为未改变。
 - Risk: `StoreSafeDriver` 仍未接真实 `chrome.tabs / chrome.scripting`；低风险 interaction 只是 content primitive，尚未接 policy gate、确认 UI 或真机扩展验证。
+
+## 2026-04-20 - Browser Core V2 验收口径切换
+
+- Action: 将 active 验收目标从旧 workflow-first 任务模块切到 Browser Core V2 分层场景。
+- Changed:
+  - 将旧 `doc/acceptance.md` 原文归档到 `doc/history/2026-04-20-browser-core-v2-acceptance-shift/acceptance-workflow-first.md`。
+  - 重写 `doc/acceptance.md`，定义 S0 直答回归、S1 explicit URL overview、S2 一跳读取、S3 开放问题浏览调研、S4 低风险页面操作、S5 advanced/CDP driver。
+  - 更新 `doc/status.md`、`doc/plan.md`、`doc/spec.md`，同步第一主验收和旧 workflow 降级定位。
+- Validation:
+  - 文档结构检查通过。
+  - 本次为文档口径更新，未运行代码测试。
+- Result: `explicit_url overview via StoreSafeDriver` 成为当前第一主验收；旧 `direct_answer / commerce_search / public_research / site_overview` 只保留为回归、对照、fallback 或 harness。
+- Risk: `StoreSafeDriver` 和 Agent Loop V2 minimal 尚未接线，S1 仍为 `NOT_RUN`。

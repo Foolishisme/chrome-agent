@@ -19,6 +19,7 @@
 - `src/background/runtime-core.ts`
 
 旧阶段快照已归档到 `doc/history/2026-04-17-general-browser-agent-shift/`。
+旧 workflow-first 验收清单已归档到 `doc/history/2026-04-20-browser-core-v2-acceptance-shift/`。
 
 ## 2. 核心定义
 
@@ -32,7 +33,7 @@
 
 目标执行范式：
 
-`LLM-driven browser tool loop over Store-safe Browser Core V2`
+`LLM-driven bounded plan + thin runner over Store-safe Browser Core V2`
 
 含义：
 
@@ -40,9 +41,10 @@
 - `Tools` 是稳定语义能力单元，负责把浏览器脏活封装成可靠能力。
 - `BrowserCapabilityLayer` 是浏览器控制底座，默认先封装 store-safe JS/DOM observe/read/extract、navigation、click、type、等待、重试和 fallback。
 - `Runtime` 是最小执行保障层，负责 session 生命周期、预算、停止、状态广播、结果记录和最终兜底。
+- `Thin Runner` 是 Runtime 内的确定性执行层，负责校验一轮有界 plan、调度原子工具、聚合结果和更新 state；它不替 LLM 做任务语义决策。
 - `Memory` 是结构化工作记忆，但不是当前第一差距；第一差距在 tools、恢复、裁剪和批量观察。
 
-当前工程路径是 `Browser Core V2 controlled rebuild`。旧 `LLM plan-driven tool orchestration` 是过渡基线和对照资产，不再代表新主链。
+当前工程路径是 `Browser Core V2 controlled rebuild`。旧 `LLM plan-driven tool orchestration` 是过渡基线和对照资产，不再代表新主链；新的 plan 语义是每轮 1-5 个 action 的局部有界计划，不是全局长 workflow。
 
 ## 3. 顶层设计目标
 
@@ -63,14 +65,15 @@
 1. 用户给出目标。
 2. Runtime 创建 session，注入时间、上下文、权限状态和安全边界。
 3. LLM 形成轻量工作假设：需要搜索、读取、比较、操作还是直接回答。
-4. LLM 调用稳定 tool；一次 turn 可以包含多个工具调用。
-5. Tools 通过 `BrowserCapabilityLayer` 执行浏览器动作，并在内部处理等待、重试、fallback、裁剪和结构化。
-6. Tool result 以短、结构化、带来源的形式回到上下文。
-7. LLM 基于结果决定继续搜索、打开页面、读取更多、停止或汇总。
-8. Runtime 负责预算、停止、循环检测和最终兜底。
-9. 最终结果统一表达 `success / partial / failed / blocked`。
+4. LLM 为当前子目标生成一轮 `bounded plan`，通常 1-5 个 action，可包含串行依赖和小规模并行组。
+5. Thin Runner 校验 plan schema、工具白名单、工具 metadata、前置条件、预算、风险等级和输出引用。
+6. Thin Runner 按确定性调度执行 Tools；Tools 通过 `BrowserCapabilityLayer` 执行浏览器动作，并在内部处理等待、重试、fallback、裁剪和结构化。
+7. Tool result 以短、结构化、带来源的形式聚合成 node/state update。
+8. LLM 基于更新后的 state 决定 done、replan、读取更多、停止或汇总。
+9. Runtime 负责预算、停止、循环检测和最终兜底。
+10. 最终结果统一表达 `success / partial / failed / blocked`。
 
-大任务可以被 LLM 拆成搜索关键词、候选页面、子问题或并行读取批次。这里的 plan 是工作假设，不是必须长期持久化的 workflow 引擎。
+大任务可以被 LLM 拆成搜索关键词、候选页面、子问题或并行读取批次。这里的 plan 是当前轮的局部执行计划，不是必须长期持久化的 workflow 引擎，也不是无限 DAG。
 
 ## 5. Workflow 定位
 
@@ -88,7 +91,9 @@
 - 它们不是长期产品边界。
 - 它们不应阻止系统走向多站点、通用页面阅读和低风险页面操作。
 
-`explicit_url overview via StoreSafeDriver` 是第一闭环，因为它能最小化业务变量，直接验证 JS/DOM observe/read/extract、页面裁剪、Agent Loop V2 和最终汇总质量。
+`explicit_url overview via bounded plan runner + StoreSafeDriver` 是第一闭环，因为它能最小化业务变量，直接验证 bounded plan、ToolRegistry metadata、JS/DOM observe/read/extract、页面裁剪、Agent Loop V2 和最终汇总质量。
+
+当前主验收以 Browser Core V2 分层场景为准：S0 直答回归、S1 explicit URL overview、S2 一跳读取、S3 开放问题浏览调研、S4 低风险页面操作、S5 advanced/CDP driver。旧任务模块不再作为新主线验收目标。
 
 ## 6. 组件边界
 
@@ -153,6 +158,8 @@ Runtime 负责：
 
 - session 生命周期。
 - tool 执行宿主。
+- bounded plan schema 校验、工具白名单校验和确定性调度。
+- 工具 metadata 检查，包括 side effect、并行策略、前置条件和输出产物。
 - token、步数、耗时和失败预算。
 - stop / takeover / blocked。
 - tool loop 检测。
@@ -163,6 +170,7 @@ Runtime 不负责：
 - 按 workflow phase 写死业务语义。
 - 替 LLM 做任务级语义决策。
 - 替 tool 做浏览器局部恢复。
+- 生成无限长计划、长期 DAG 或业务专用 workflow。
 
 ### 6.5 Memory
 
@@ -184,6 +192,8 @@ Memory 当前后置。没有可靠 tools 和裁剪层之前，memory 只会放�
 - runtime-visible tool result 必须可结构化消费。
 - 内容脚本或 CDP 原子动作结果不等于最终 tool result。
 - LLM 只能在授权工具和安全边界内行动。
+- LLM 每轮 plan 必须有界，默认 1-5 个 action；超过上限必须 replan 或拆分。
+- Runtime-visible tool 必须通过带 metadata 的 ToolRegistry 注册，至少声明 schema、side effect、并行策略、前置条件、输出产物和 handler。
 - 工具内部错误应尽量恢复；无法恢复时返回可解释失败。
 - 最终结果必须统一表达 `success / partial / failed / blocked`。
 - 文档产物不是默认输出；只有用户明确要求文件、报告或 markdown 时才生成 artifact。

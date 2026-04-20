@@ -6,7 +6,7 @@
 
 当前核心任务：
 
-`在现有仓库内受控重建 Browser Core V2，优先用 store-safe JS/DOM 能力完成范式迁移最小闭环，再把 CDP/debugger 降级为高级/企业/本地 driver。`
+`在现有仓库内受控重建 Browser Core V2，优先用 store-safe JS/DOM 能力和 bounded plan + thin runner 完成范式迁移最小闭环，再把 CDP/debugger 降级为高级/企业/本地 driver。`
 
 本计划不是删除重开。旧 workflow/code 可以保留为历史、对照、fallback 或 harness；只要不进入新主链、不参与不必要编译、不拖累验证，就不优先删除。
 
@@ -31,13 +31,16 @@ ChromeClaw 参考仓库：
 ## 3. 总原则
 
 - 新主线是 `Browser Core V2`，不是继续修旧 workflow。
+- 新主线的执行形态是有限任务节点 + 每轮 bounded action plan + thin runner，而不是单工具 ReAct、全局长 plan 或重型 DAG runtime。
 - 当前 MVP 继续提供结构化契约、UI/provider 基础和验证 harness。
 - 默认大众/商店路径优先 `StoreSafeDriver`，不默认依赖 `debugger` / CDP。
 - `CdpDriver` 保留为 advanced/local/enterprise driver，后置实现。
 - ChromeClaw 提供 browser tool 行为参考和测试样本，不继承其默认权限形态。
 - 旧 `direct_answer / commerce_search / public_research / site_overview` 降级为 harness/fallback/历史参考。
+- 当前验收口径不再以旧任务模块为主；active 验收源是 `doc/acceptance.md` 中的 Browser Core V2 S0-S5 分层场景。
 - 旧代码不因“旧”而删除；只有阻塞编译、测试、安全、理解或产品主链时才清理。
 - Memory、subagent、cron、channel、Google identity 等非 browser core 能力后置。
+- 第一阶段不引入 LangGraph、Temporal 或类似重型编排框架；先实现 TS 版轻量 runner。
 
 ## 4. 已保留资产
 
@@ -74,6 +77,8 @@ ChromeClaw 参考仓库：
 - `shared/`：跨 background/content 的类型、contract re-export、result helper 和 page problem helper。
 - `content/`：store-safe JS/DOM primitives，包括 DOM snapshot、stable refs、links/controls、Readability、Turndown、page state、page problems、低风险 interaction 原语和裁剪。
 - `background/`：StoreSafeDriver 框架、content-script client 边界、LLM-facing browser tool schema/facade、explicit URL overview harness、action risk 和 result trimming。
+- `background/runner/`：后续 bounded plan schema、thin runner、action 调度、输出引用解析和统一错误聚合。
+- `background/tools/`：后续 Browser Core V2 ToolRegistry，注册原子语义工具及其 metadata。
 - `downloads/`：只预留未来 `chrome.downloads` API 归属，不在当前阶段请求权限或实现下载。
 - `test-support/`：后续 Browser Core V2 测试夹具。
 
@@ -125,18 +130,22 @@ ChromeClaw 参考仓库：
 - 旧 workflow 未被强制接入。
 - 不需要 CDP 也能跑通第一闭环。
 
-### Phase 2 - Agent Loop V2 Minimal
+### Phase 2 - Bounded Plan Runner and Agent Loop V2 Minimal
 
 目标：
 
-- 新建最小动态 browser tool-loop，不再依赖旧静态 workflow。
-- LLM 基于 `browser.observe/read` 结果决定继续读页、读一跳链接、停止或汇总。
+- 新建最小 bounded plan runner，不再依赖旧静态 workflow。
+- LLM 每轮为当前子目标生成 1-5 个 action 的局部 plan；runner 负责 schema 校验、工具白名单、串并行调度、输出引用解析、失败归一和 state 更新。
+- 建立带 metadata 的 ToolRegistry，工具至少声明 name、schema、sideEffectLevel、parallelPolicy、requires、produces、timeout、failure policy 和 handler。
+- LLM 基于 runner 更新后的 state 决定继续读页、读一跳链接、停止或汇总。
 - Runtime 只做预算、停止、loop guard、状态广播和 final result 兜底。
-- 第一任务为 `explicit_url overview via StoreSafeDriver`。
+- 第一任务为 `explicit_url overview via bounded plan runner + StoreSafeDriver`。
 
 验收：
 
-- 不走 `compileTaskSpec -> PlanStep -> allowedTools -> finalize*` 旧链路，也能完成 explicit URL overview。
+- 不走 `compileTaskSpec -> PlanStep -> allowedTools -> finalize*` 旧链路，也能用一轮 bounded plan 完成 explicit URL overview。
+- runner 能拒绝超长 plan、未知工具、schema 失败、越权高风险 action 和不满足前置条件的 action。
+- runner 能串行执行 `browser.open -> browser.observe/read`，并能在 mock 中验证不同资源的只读 action 可受限并行。
 - 输出已读页面、跳过页面、覆盖边界和未覆盖区域。
 - 结果能表达 `success / partial / failed / blocked`。
 
@@ -186,36 +195,42 @@ ChromeClaw 参考仓库：
 串行：
 
 1. 每个阶段先冻结 contract 和测试清单。
-2. 主线程负责更新 facade、ToolResult 边界和最终集成。
-3. Agent Loop V2 最小闭环由主线程串行收口。
+2. 主线程负责冻结 bounded plan schema、ToolRegistry metadata、ToolResult 边界和最终集成。
+3. Bounded plan runner 与 Agent Loop V2 最小闭环由主线程串行收口。
 
 并发：
 
 - Worker A: `StoreSafeDriver` observe/read/extract。
 - Worker B: page trimming、page problem detection、result shaping。
-- Worker C: explicit URL overview harness/adapter。
-- Worker D: mock driver、content-script driver 单测和 browser facade 单测。
+- Worker C: ToolRegistry metadata、bounded plan schema 和 runner mock 单测。
+- Worker D: explicit URL overview harness/adapter。
+- Worker E: mock driver、content-script driver 单测和 browser facade 单测。
 
 后置并发：
 
-- Worker E: low-risk click/type/scroll。
-- Worker F: advanced `CdpDriver`。
+- Worker F: low-risk click/type/scroll。
+- Worker G: advanced `CdpDriver`。
 
 收口：
 
 - 不让多个 worker 同时改 runtime 主循环。
 - 不让多个 worker 同时改共享 result contract。
 - 新主链验证通过前，不删除旧 workflow。
+- 不在 runner 稳定前引入重型 DAG 框架或长期 checkpoint/resume 机制。
 
 ## 7. 第一闭环
 
 默认第一闭环：
 
-`explicit_url overview via StoreSafeDriver`
+`explicit_url overview via bounded plan runner + StoreSafeDriver`
+
+它对应 `doc/acceptance.md` 的 S1，是当前 Browser Core V2 的第一主验收。S0 直答只作为回归基线，用来确保明确可直接回答的问题不会误触 browser tool。
 
 成功标准：
 
 - 输入明确 URL。
+- LLM 或测试夹具生成一轮 1-5 个 action 的 bounded plan。
+- runner 校验 ToolRegistry metadata、工具白名单、前置条件、输出引用和预算。
 - Browser Core V2 用 store-safe driver 打开/导航/观察页面。
 - 页面被裁剪成短结构化观察。
 - LLM 基于 observation 决定是否读取一跳链接或汇总。
@@ -223,12 +238,22 @@ ChromeClaw 参考仓库：
 - 旧链路可作为对照，但不是新主链。
 - 不要求 `debugger` / CDP。
 
+后续验收顺序：
+
+1. S1：明确 URL 页面理解。
+2. S2：明确 URL + 一跳高价值链接读取。
+3. S3：开放问题浏览调研。
+4. S4：低风险页面操作。
+5. S5：advanced / CDP driver。
+
 ## 8. 不做事项
 
 当前阶段不优先做：
 
 - 删除旧 workflow。
 - 重写整个 runtime。
+- 引入重型 DAG / LangGraph / Temporal 式编排框架。
+- 让 LLM 生成无限长 plan、任意 selector、任意 JS 或未注册工具 action。
 - 默认依赖 `debugger` / CDP。
 - 默认 `<all_urls>`。
 - memory 长期化。

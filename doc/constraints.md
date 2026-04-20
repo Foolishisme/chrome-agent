@@ -15,6 +15,8 @@
 - `Runtime` 只做最小保障层。
 - `Tools` 只暴露稳定语义能力。
 - `BrowserCapabilityLayer` 封装浏览器控制、恢复、裁剪和 fallback。
+- 新主链采用有界局部 plan + thin runner；每轮 plan 默认 1-5 个 action，由 runner 确定性校验和调度。
+- runtime-visible tool 必须经 ToolRegistry 注册，并声明 schema、side effect、并行策略、前置条件、输出产物和 handler。
 - 大众/商店默认 driver 是 store-safe JS/DOM 路线，不默认依赖 `debugger` / CDP。
 - `Memory` 只保留结构化工作记忆，且当前后置。
 
@@ -22,6 +24,7 @@
 
 - 再把 `Runtime` 膨胀成隐式 workflow 引擎。
 - 再按 `phase -> tool` 或 `stepId -> 业务语义` 写死主链。
+- 把 bounded plan 扩展成无限 DAG、长期 workflow engine 或 LangGraph/Temporal 式重型编排依赖。
 - 把当前 workflow/module 当作长期产品边界。
 - 继续围绕失败旧链路做主线投资，而不是推进 `Browser Core V2` 独立闭环。
 - 把 tool 内局部恢复拆成 raw DOM 动作交给 LLM 编排。
@@ -34,6 +37,8 @@
 - 代码仍可能使用 plan-driven loop，但新设计不得继续强化 workflow 依赖。
 - 新能力优先进入 `BrowserCapabilityLayer` 或稳定 tool。
 - LLM 只在明确授权的工具集合内行动。
+- LLM 生成的一轮 plan 必须有 action 上限、工具白名单和失败策略；runner 必须拒绝超长、未知工具或高风险越权 action。
+- runner 可以依据工具 metadata 做串行、并行和跳过依赖项，但不得替 LLM 补充业务语义。
 - tool result 必须短、结构化、带来源或带失败解释。
 - 页面内容进入 LLM 前必须裁剪、脱水或结构化。
 - 搜索、读页、点击、输入等能力必须有预算、超时和失败路径。
@@ -47,6 +52,7 @@
 - 让 LLM 绕过工具权限或安全边界。
 - 让 tool 擅自改写产品级目标。
 - 让 runtime 替 LLM 做任务级语义决策。
+- 让 LLM 输出任意 selector、任意 JS、无限循环或未注册 tool action 作为 bounded plan。
 - 为了“重开”而删除仍有对照或 fallback 价值的旧代码。
 - 为了追求 ChromeClaw 式能力而把 `debugger` / CDP 设为大众/商店默认路径。
 - 把未来方向、未验证设想、下一阶段能力当作当前任务顺手实现；除非用户明确要求，否则只能记录为建议、风险或后续项。
@@ -112,6 +118,7 @@
 必须满足：
 
 - runtime-visible tool 返回统一高层 `ToolResult`。
+- runtime-visible tool 必须声明 `sideEffectLevel`、`parallelPolicy`、`requires`、`produces`、默认 timeout 和默认失败策略。
 - 内容脚本或 CDP 原子动作只作为 tool 内部实现细节。
 - 局部恢复、等待和 fallback 留在 tool 内。
 - 页面读取必须返回覆盖边界、来源和失败项。
