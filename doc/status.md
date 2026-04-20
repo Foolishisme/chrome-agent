@@ -10,9 +10,10 @@
 
 - 当前产品目标是大众用户可用的通用浏览器 Agent。
 - workflow/module 保留为验证场、训练轮和可沉淀 skill/tool 的脚手架。
-- 第一优先级是迁移/重写 browser tools，而不是先上 memory。
+- 下一阶段核心任务已经确定为：参考 ChromeClaw 分阶段迁移/重写 browser tools。
 - 关键能力是 `BrowserCapabilityLayer + CdpDriver + page trimming + tool-internal recovery`。
 - `site_overview explicit_url` 是默认第一迁移实验。
+- Active migration plan: `doc/plan.md`。
 
 ## Done
 
@@ -25,6 +26,7 @@
 - ChromeClaw 静态调研已完成，结论记录在 `doc/other/chromeclaw-deep-dive-decision.md`。
 - 产品流程记录已新增到 `doc/other/browser-agent-product-flow.md`。
 - 旧阶段核心文档快照已归档到 `doc/history/2026-04-17-general-browser-agent-shift/`。
+- 浏览器工具迁移已拆为 Phase 0-5，并恢复 active `doc/plan.md` 作为下一阶段核心任务计划。
 
 ## Blockers
 
@@ -45,23 +47,24 @@
 
 ## Next
 
-1. 定义 `BrowserCapabilityLayer` 接口。
-2. 实现最小 `CdpDriver` spike：tab focus、navigate、snapshot、screenshot、click/type 的受控子集。
-3. 用 `site_overview explicit_url` 验证 CDP snapshot 与当前 content-script driver 的差异。
-4. 把页面裁剪和来源脱水前移到 tool 内。
-5. 把导航失败、stale ref、点击失败、读页不足等恢复逻辑留在 tool 内。
-6. 开放低风险 general browser mode，但保留 stop / takeover / high-risk confirmation。
-7. 等 tools 稳定后，再评估 memory、subagent 和更完整动态 tool-loop runtime。
+1. Phase 0: 串行冻结 `BrowserCapabilityLayer` 接口、driver contract、核心类型和 mock driver。
+2. Phase 1: 并发实现只读 `CdpDriver`、页面裁剪、`site_overview explicit_url` adapter 和测试夹具。
+3. 串行集成 `site_overview explicit_url`，对比 CDP driver 与当前 content-script driver。
+4. Phase 2: 补 tab lifecycle、navigate/reload/wait、attach/reattach 和 navigation fallback。
+5. Phase 3: 增加 click/type/scroll/press 的低风险动作子集和 action risk 分级。
+6. Phase 4: 把批量读取、受限并发、tool 内恢复和 result trimming 做厚。
+7. Phase 5: tools 稳定后再开放低风险 general browser mode，并评估 runtime tool-loop 迁移。
 
 ## Needs Human Decision
 
 - 是否接受第一阶段申请 `debugger` 与必要 host permissions 用于 CDP spike。
 - 是否把 `<all_urls>` 作为开发验证阶段默认权限，产品化前再裁剪。
 - 是否把旧 workflow 文档继续只保留在 history/reference，不再作为当前默认入口。
+- 是否批准 Phase 0/1 按 `doc/plan.md` 的串行接口定界 + 并发能力块方式启动。
 
 ## Latest Validation
 
-- 本次为文档换挡和静态调研结论同步，未运行构建、测试或真实浏览器任务。
+- 本次为迁移计划文档同步，未运行构建、测试或真实浏览器任务。
 - 上次代码验证记录：
   - `npm run build` 通过，记录于 2026-04-16。
   - `npm test -- tests/schema.test.ts tests/llm-client.test.ts tests/public-research.test.ts tests/site-overview.test.ts` 通过，4 个测试文件，38 个测试，记录于 2026-04-16。

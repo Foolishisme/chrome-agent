@@ -43,6 +43,7 @@
 - [doc/spec.md](./doc/spec.md)
 - [doc/constraints.md](./doc/constraints.md)
 - [doc/status.md](./doc/status.md)
+- [doc/plan.md](./doc/plan.md)（仅当前 active browser tool migration 阶段）
 - 当前任务需要的单一日志：
   - [doc/logs/exec.md](./doc/logs/exec.md)
   - [doc/logs/review.md](./doc/logs/review.md)

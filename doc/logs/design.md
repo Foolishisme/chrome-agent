@@ -70,3 +70,12 @@
 - Default Path: 先定义 `BrowserCapabilityLayer`，再做 `CdpDriver` spike，以 `site_overview explicit_url` 验证 snapshot、screenshot、导航恢复、页面裁剪和最终汇总质量。
 - History: 切换前核心文档已快照到 `doc/history/2026-04-17-general-browser-agent-shift/`。
 - Revisit Trigger: 如果 CDP spike 不能显著改善页面观察/恢复/速度，或权限说明、stop/takeover、高风险确认无法形成可接受产品体验，则重新评估是否继续以 content-script workflow harness 为主。
+
+## 2026-04-20 - Browser tools 迁移阶段定位
+
+- Question: 下一阶段应优先完整迁移 runtime 范式，还是先参考 ChromeClaw 分阶段迁移浏览器工具集。
+- Decision: 将“分阶段迁移/重写 browser tools，构建 `BrowserCapabilityLayer`”定为下一阶段核心任务；runtime 范式迁移后置到 tools 足够厚之后。
+- Plan: 恢复 active `doc/plan.md`，按 Phase 0-5 推进：接口定界、只读观察、导航生命周期、低风险动作、工具内恢复/批量读取/裁剪、低风险通用 browser mode。
+- Execution Shape: 先串行冻结接口和核心类型，再并发开发互不重叠的能力块，最后串行集成 `site_overview explicit_url`。
+- Reason: ChromeClaw 的速度和稳定性主要来自厚 browser tools、恢复重试、裁剪、批量执行和流式结果，而不是先拥有复杂 runtime；当前 workflow 仍可作为验证 harness。
+- Revisit Trigger: 如果 Phase 1 的 CDP 只读观察不能改善 `site_overview explicit_url` 的稳定性、速度或结果质量，则暂停后续阶段并重新评估 driver 路线。
