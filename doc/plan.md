@@ -30,9 +30,9 @@ ChromeClaw 参考仓库：
 
 ## 3. 总原则
 
-- 新主线是 `Browser Core V2`，不是继续修旧 workflow。
+- 采取 **Hybrid Architecture（混合架构）**：通用 Agent 兜底 90% 长尾问题，特化的旧版 Workflow（如 deep_research）被封装为 Macro Tool / Skill 攻坚 10% 复杂场景。保持原有 UI 交互与路由逻辑不变。
 - 新主线的执行形态是有限任务节点 + 每轮 bounded action plan + thin runner，而不是单工具 ReAct、全局长 plan 或重型 DAG runtime。
-- 当前 MVP 继续提供结构化契约、UI/provider 基础和验证 harness。
+- 工具的设计必须是**粗颗粒度的宏工具（Macro Tools）**，如 `browser.search` 和 `browser.batchRead`，严禁向 LLM 暴露诸如 open/observe/read 这样需要拼装的原子级微操工具。
 - 默认大众/商店路径优先 `StoreSafeDriver`，不默认依赖 `debugger` / CDP。
 - `CdpDriver` 保留为 advanced/local/enterprise driver，后置实现。
 - ChromeClaw 提供 browser tool 行为参考和测试样本，不继承其默认权限形态。
@@ -118,7 +118,9 @@ ChromeClaw 参考仓库：
 
 - 在 `src/browser-core-v2` 建立隔离参考重写岛，不污染旧 runtime/tools/workflow 主链。
 - 从现有 content-script JS/DOM 能力抽取 `StoreSafeDriver`。
-- 建立 LLM-facing browser tool facade 的最小 action 集：`open/navigate/observe/read/extractLinksAndControls/finalize`。
+- 建立 LLM-facing 的**粗颗粒度宏工具（Macro Tools）**：如 `browser.search`（自然语言搜索返回精简结果）和 `browser.batchRead`（批量打开提取正文并脱水）。
+- 绝不向 LLM 暴露细碎的原子方法，将 `open/navigate/observe/read` 降级为底层 Driver 的内部能力。
+- 将旧版的优质 Workflow（如 deep_research）重新封装为黑盒技能（Skill）直接接入系统。
 - 保留现有 `@mozilla/readability` 路径，补充 `turndown` 生成 markdown excerpt；不要重写已可用的 Readability fallback 链路。
 - 先支持 explicit URL 的只读浏览，不默认 `debugger`、不默认 `<all_urls>`。
 - 使用 `activeTab / scripting / optional host access / content script` 路线。

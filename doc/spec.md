@@ -38,7 +38,7 @@
 含义：
 
 - `LLM` 是目标理解、子任务拆分、工具选择、取舍和汇总的决策核心。
-- `Tools` 是稳定语义能力单元，负责把浏览器脏活封装成可靠能力。
+- `Tools` 分为两类：1) 解决 90% 通用长尾问题的“宏工具（Macro Tools，如 search, batchRead）”；2) 解决 10% 纵深复杂场景的“专家技能（Skills，如封装好的 deep_research workflow）”。它们共同负责把浏览器脏活和多步逻辑封装成黑盒可靠能力。
 - `BrowserCapabilityLayer` 是浏览器控制底座，默认先封装 store-safe JS/DOM observe/read/extract、navigation、click、type、等待、重试和 fallback。
 - `Runtime` 是最小执行保障层，负责 session 生命周期、预算、停止、状态广播、结果记录和最终兜底。
 - `Thin Runner` 是 Runtime 内的确定性执行层，负责校验一轮有界 plan、调度原子工具、聚合结果和更新 state；它不替 LLM 做任务语义决策。
@@ -84,12 +84,12 @@
 - `public_research`
 - `site_overview`
 
-新的定位：
+新的定位（Hybrid Architecture 混合架构）：
 
-- 它们是验证浏览器能力的 harness。
-- 它们是可沉淀为 skill/tool 的任务模式。
-- 它们不是长期产品边界。
-- 它们不应阻止系统走向多站点、通用页面阅读和低风险页面操作。
+- 原有 UI 交互与路由保持不变。
+- 它们不应被简单抛弃，而应作为“专家技能（Skills / Macro Tools）”被降维封装并保留。
+- 像 `deep_research` 和 `commerce_search` 这种复杂的多步逻辑，直接封装为高级 Tool，供系统或 LLM 在特定意图下直接调用。
+- 通用 Agent 兜底 90% 的长尾通用浏览任务（使用粗颗粒度的 search / batchRead 等工具），特化的 Workflow 攻坚 10% 的纵深场景。
 
 `explicit_url overview via bounded plan runner + StoreSafeDriver` 是第一闭环，因为它能最小化业务变量，直接验证 bounded plan、ToolRegistry metadata、JS/DOM observe/read/extract、页面裁剪、Agent Loop V2 和最终汇总质量。
 
