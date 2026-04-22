@@ -102,3 +102,39 @@
   - 本次为文档口径更新，未运行代码测试。
 - Result: `explicit_url overview via StoreSafeDriver` 成为当前第一主验收；旧 `direct_answer / commerce_search / public_research / site_overview` 只保留为回归、对照、fallback 或 harness。
 - Risk: `StoreSafeDriver` 和 Agent Loop V2 minimal 尚未接线，S1 仍为 `NOT_RUN`。
+
+## 2026-04-21 - 首批 LLM-visible tool contracts 冻结
+
+- Action: 冻结 Browser Core V2 首批 `LLM-visible tools` 的静态契约、metadata、schema 示例与 prompt catalog，并同步最小 checkpoint 文档。
+- Changed:
+  - 新增 `src/browser-core-v2/background/tools/first-party-tool-contracts.ts`，定义 `browser.search`、`browser.webDetail`、`browser.siteOverview`、`skill.commerceResearch` 的 input/output schema、metadata、示例和 prompt guidance。
+  - 新增 `src/browser-core-v2/background/tools/index.ts`，并更新 `src/browser-core-v2/background/index.ts` 导出首批工具契约。
+  - 新增 `tests/browser-core-v2/first-party-tool-contracts.test.ts`，覆盖 schema 样例、metadata 完整性、prompt catalog 一致性、`browser.search` 不暴露 `topK`、`webDetail` 与 `siteOverview` 边界、`commerceResearch` 黑盒 skill 定位。
+  - 新增 `doc/reference/browser_core_v2_first_party_tools.md`，记录首批工具边界、metadata 口径与 prompt 使用规则。
+  - 更新 `doc/status.md` 与 `doc/logs/design.md`，同步“首批工具契约已冻结，但尚未接 runtime/tool registry”这一 checkpoint。
+- Validation:
+  - `npm test -- tests/browser-core-v2/browser-tool-schema.test.ts tests/browser-core-v2/first-party-tool-contracts.test.ts tests/public-research.test.ts tests/site-overview.test.ts` 通过，4 个测试文件，26 个测试。
+  - `npm run build` 通过。
+- Result: 第一批工具边界已经从旧 workflow 语义中抽出，并形成可供第二步 ToolRegistry / runner 接线的稳定契约；前端与 runtime 主循环未改动。
+- Risk:
+  - 当前只是“冻结契约”，还没有注册为真正可调度的 runtime-visible tool。
+  - `skill.commerceResearch` 仍是契约级黑盒 skill，尚未做新范式接线。
+  - 尚未运行全量测试，也未做真机扩展验证。
+- Next: 先把首批工具契约接入 ToolRegistry，并补注册校验与最小 handler/mock 验证；在接线后再扩大测试范围，而不是先做全量“完整测试”。
+
+## 2026-04-22 - 首批工具 registry 校验与 mock 验证
+
+- Action: 为 Browser Core V2 首批工具补静态 registry、注册校验、默认 handlers、mock 验证和最小集成测试。
+- Changed:
+  - 新增 `src/browser-core-v2/background/tools/first-party-tool-registry.ts`，定义首批工具 registry、注册校验、统一执行入口与默认 handlers。
+  - `browser.search / browser.webDetail / browser.siteOverview` 当前默认通过 BrowserDriver 只读路径执行。
+  - `skill.commerceResearch` 当前通过 delegate/adapter 承接黑盒 commerce 流程；未接 delegate 时返回 `blocked`。
+  - 更新 `doc/reference/browser_core_v2_first_party_tools.md`、`doc/status.md`、`doc/logs/design.md`，同步“静态 registry 已落地，但尚未接 runtime 主链”的 checkpoint。
+  - 新增 `tests/browser-core-v2/first-party-tool-registry.test.ts`，覆盖 registry 完整性、注册失败校验、mock handler 验证，以及 search/webDetail/siteOverview/commerce delegate 的最小集成测试。
+- Validation:
+  - 待运行 Browser Core V2 registry 与相关回归测试。
+  - 待运行 `npm run build`。
+- Result: 首批工具从“只有静态契约”升级为“可注册、可校验、可 mock 执行”的静态 registry；下一步可以接 runtime-visible ToolRegistry 或 bounded plan runner。
+- Risk:
+  - 当前 search/webDetail/siteOverview handlers 仍是 Browser Core V2 只读路径的最小实现，不代表最终产品级恢复/裁剪厚度。
+  - `skill.commerceResearch` 仍依赖 delegate/adapter，尚未直接接入旧 workflow 主链。

@@ -4,4 +4,5 @@ export * from "./facade/browser-tool";
 export * from "./facade/browser-tool-schema";
 export * from "./overview/explicit-url-overview";
 export * from "./policy/action-risk";
+export * from "./tools";
 export * from "./trim/result-trimmer";

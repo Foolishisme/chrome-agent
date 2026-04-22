@@ -40,6 +40,9 @@
 - 已补充 `turndown`，用于 Readability HTML 到 markdown excerpt 的 store-safe 内容提取路径。
 - 已新增 `doc/reference/browser_core_v2_file_framework.md`，记录新目录职责和产品/参考仓库路径。
 - 架构方向已收敛为“有限任务节点 + 每轮 1-5 action bounded plan + thin runner + 带 metadata 的 ToolRegistry”；当前只是设计 checkpoint，尚未实现 runner。
+- 已冻结首批 `LLM-visible tool contracts`：`browser.search`、`browser.webDetail`、`browser.siteOverview`、`skill.commerceResearch`，并补齐 metadata、schema 示例与 prompt catalog；内部 `open / navigate / observe / read / extractLinksAndControls` 继续留在 Browser Core V2 内部层。
+- 已新增 `doc/reference/browser_core_v2_first_party_tools.md`，记录首批工具边界、metadata 口径与 prompt 使用规则。
+- 已新增 Browser Core V2 首批工具静态 registry、注册校验、默认 handlers、mock 验证与最小集成测试；当前仍未接入旧 runtime 主循环或 bounded plan runner。
 
 ## Blockers
 
@@ -47,6 +50,7 @@
 - ToolRegistry metadata 尚未落地，现有旧 registry 仍只有 `name/run` 级别。
 - Bounded plan runner 尚未落地，现有 runtime 仍偏旧 plan-driven。
 - Agent Loop V2 minimal 尚未落地。
+- 首批工具契约已冻结，并已有静态 registry 与默认 handlers；但仍未升级为旧 runtime 主链可调度的 runtime-visible tool，也尚未接入新 runner。
 - 自动化真机扩展会话验证仍未稳定拿到项目扩展上下文。
 - Provider live request 仍缺真实环境验证。
 - stop / error / budget guardrails 仍缺真机可视化记录。
@@ -66,15 +70,16 @@
 ## Next
 
 1. 定义 Browser Core V2 ToolRegistry metadata：`name / schema / outputSchema / sideEffectLevel / parallelPolicy / requires / produces / timeout / failurePolicy / handler`。
-2. 定义 bounded plan schema 和 thin runner，先支持 1-5 个 action、串行依赖、受限并行、简单输出引用、工具白名单和统一错误聚合。
-3. 用 mock tools 验证 runner：超长 plan 拒绝、未知工具拒绝、schema 失败、依赖跳过、partial success、同资源串行和不同资源受限并行。
-4. 接线 `StoreSafeDriver` 到 `chrome.tabs / chrome.scripting`，让 `content-script-client` 能调用 `src/browser-core-v2/content` bridge。
-5. 用 `explicit_url overview via bounded plan runner + StoreSafeDriver` 跑通不依赖旧 workflow 的第一闭环。
-6. 按 `doc/acceptance.md` 记录 S1 真机样例和失败边界。
-7. 对比旧 workflow path 与新 Browser Core V2 path 的稳定性、速度和结果质量。
-8. 强化恢复、裁剪、stale target、page problem detection 和 result trimming。
-9. 增加 click/type/scroll/press 的低风险动作子集和 action risk 分级。
-10. 再实现 advanced `CdpDriver`，用于本地、企业或高级模式。
+2. 把静态 registry 升级为旧 workflow/runtime 可调度的 runtime-visible ToolRegistry，并明确哪些首批工具由旧 workflow 黑盒承接、哪些由 Browser Core V2 只读路径承接。
+3. 定义 bounded plan schema 和 thin runner，先支持 1-5 个 action、串行依赖、受限并行、简单输出引用、工具白名单和统一错误聚合。
+4. 用 mock tools 验证 runner：超长 plan 拒绝、未知工具拒绝、schema 失败、依赖跳过、partial success、同资源串行和不同资源受限并行。
+5. 接线 `StoreSafeDriver` 到 `chrome.tabs / chrome.scripting`，让 `content-script-client` 能调用 `src/browser-core-v2/content` bridge。
+6. 用 `explicit_url overview via bounded plan runner + StoreSafeDriver` 跑通不依赖旧 workflow 的第一闭环。
+7. 按 `doc/acceptance.md` 记录 S1 真机样例和失败边界。
+8. 对比旧 workflow path 与新 Browser Core V2 path 的稳定性、速度和结果质量。
+9. 强化恢复、裁剪、stale target、page problem detection 和 result trimming。
+10. 增加 click/type/scroll/press 的低风险动作子集和 action risk 分级。
+11. 再实现 advanced `CdpDriver`，用于本地、企业或高级模式。
 
 ## Needs Human Decision
 
@@ -84,10 +89,13 @@
 - Browser Core V2 何时注册为 runtime-visible tool。
 - 低风险 click/type/press/scroll 的首批开放范围。
 - `downloads` 权限与文件处理策略是否进入后续阶段。
+- 首批工具何时从“冻结契约”升级为真正可调度的 ToolRegistry handler。
 
 ## Latest Validation
 
 - `npm test -- tests/browser-capability.test.ts tests/browser-core-v2/readable-content.test.ts tests/browser-core-v2/dom-snapshot.test.ts tests/browser-core-v2/browser-tool-schema.test.ts` 通过，4 个测试文件，12 个测试。
+- 本次应补充 Browser Core V2 首批工具契约测试，包括 schema 样例、metadata 完整性、prompt catalog 一致性，以及 `browser.search` 不暴露 `topK` 的约束。
+- 本次应补充 Browser Core V2 首批工具 registry 校验、默认 handler mock 验证，以及 search/webDetail/siteOverview/commerce delegate 的最小集成测试。
 - `npm run build` 通过。
 - `npx tsc --noEmit` 未通过；剩余错误位于既有 `llm-client`、`read-research-source-facts` 和旧测试 fixture 类型，不是 `src/browser-core-v2` 新增目录引入。
 - 本次未加载真实扩展、未配置 provider、未跑真实网页任务。

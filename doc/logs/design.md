@@ -113,3 +113,29 @@
 - Boundary: 当前只建立 store-safe JS/DOM 默认路径和 background/content 框架，不注册 runtime-visible tool，不引入 CDP/debugger，不请求 `downloads` 权限。
 - Reference: ChromeClaw 用于 browser tool 行为和测试组织参考；browser-use 只参考 DOM serializer / markdown extractor 思路，不引入依赖。
 - Revisit Trigger: 如果 `src/browser-core-v2` 与旧契约重复到维护成本过高，或第一闭环需要大量复用旧 runtime 才能运行，再评估 adapter 边界。
+
+## 2026-04-21 - 首批 LLM-visible tool contracts 冻结
+
+- Question: 在切换 bounded plan runner 之前，是否应先冻结第一批可见工具契约，以及按什么粒度拆旧 workflow。
+- Decision: 先冻结四个首批工具契约：`browser.search`、`browser.webDetail`、`browser.siteOverview`、`skill.commerceResearch`。其中 `public_research` 按旧 workflow 语义拆为 `search -> webDetail -> 汇总` 的可复用工具边界；`commerce_search` 暂保留为黑盒 skill，不在第一步拆细。
+- Contract Boundary:
+  - `browser.search` 只处理浏览器第一页自然结果，规则过滤并保持页面顺序，不暴露 `topK`，不做 LLM reorder。
+  - `browser.webDetail` 负责单页高价值读取，不负责同站多页概览。
+  - `browser.siteOverview` 负责明确站点入口、主页与同站一跳概览，可内部复用 `webDetail` 能力。
+  - `skill.commerceResearch` 延续旧 JD 搜索、抽取、过滤、候选整理和总结路径，但对外只暴露黑盒 skill 结果。
+- Metadata Decision: 首批工具统一冻结 `name / description / inputSchema / outputSchema / sideEffectLevel / parallelPolicy / requires / produces / timeoutMs / failurePolicy`。`browser.*` 默认为 `read_only`，`skill.commerceResearch` 为 `external_navigation`；高风险提交动作统一 `blocked`。
+- Internal Boundary: `open / navigate / observe / read / extractLinksAndControls` 继续属于 Browser Core V2 内部动作，不进入首批 `LLM-visible tool catalog`。
+- Reason: 如果先做 runner 再定工具边界，最终只会把旧 workflow 节点换个壳继续调度；先冻结可见工具契约，第二步再接 runner，才能让执行范式切换真正围绕新工具集发生。
+- Reference: `doc/reference/browser_core_v2_first_party_tools.md`。
+
+## 2026-04-22 - 首批工具静态 registry 与默认 handlers
+
+- Question: 首批工具契约冻结之后，下一步应先跑“完整测试”，还是先让这些工具变成可注册、可校验、可 mock 执行的静态 ToolRegistry。
+- Decision: 先补静态 registry、注册校验、默认 handlers、mock 验证和最小集成测试；不先做旧 runtime 主循环接线，也不先跑与新链路无关的全量测试。
+- Registry Shape: Browser Core V2 首批工具 registry 要求 key 与首批工具名完全一致，每个 entry 都包含 contract 与 handler。`executeFirstPartyTool` 统一做 input schema 校验、handler 执行和 output schema 校验。
+- Handler Boundary:
+  - `browser.search` 通过 BrowserDriver 打开搜索页并从第一页 links 做规则过滤。
+  - `browser.webDetail` 通过 BrowserDriver 打开显式 URL，返回裁剪后的单页详情。
+  - `browser.siteOverview` 通过 BrowserDriver 串行读取入口页与同站一跳页面。
+  - `skill.commerceResearch` 通过 delegate/adapter 承接旧黑盒 commerce 流程；未接 delegate 时返回 `blocked`，而不是伪造执行能力。
+- Reason: 现在的风险不在“测试不够多”，而在“新工具还没变成真正可注册、可调用的对象”。先把 registry 站住，后续 runtime 接线与 runner 测试才有真实目标。
