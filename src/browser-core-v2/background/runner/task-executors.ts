@@ -660,7 +660,7 @@ async function runCommerceDelegate(
   _handlerContext: FirstPartyToolHandlerContext,
 ): Promise<CommerceResearchToolOutput> {
   const openResult = await runLegacyTool(context, openSearchResultsTool);
-  if (openResult.stepStatus === "blocked" || openResult.stepStatus === "failed") {
+  if (openResult.stepStatus !== "succeeded") {
     return {
       status: mapLegacyToolStatus(openResult),
       shortlist: [],

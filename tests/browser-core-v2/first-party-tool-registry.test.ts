@@ -211,13 +211,14 @@ describe("Browser Core V2 first-party tool registry", () => {
           title: "OpenAI",
           mainText: "OpenAI home page",
           links: [
+            { text: "Home", url: "https://openai.com/" },
             { text: "Products", url: "https://openai.com/products" },
             { text: "Pricing", url: "https://openai.com/pricing" },
             { text: "External", url: "https://example.com/" },
           ],
           coverage: {
             mainTextChars: 16,
-            linkCount: 3,
+            linkCount: 4,
             controlCount: 0,
             targetCount: 0,
           },

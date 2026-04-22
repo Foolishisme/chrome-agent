@@ -6,6 +6,7 @@ import { buildBrowserCoreV2DisplayPlan } from "../../browser-core-v2/background/
 import { toPublicState } from "./public-state";
 import type { ActiveSession } from "./shared";
 import { appendLog, createSessionId } from "./shared";
+import { getOrPrepareSessionTab } from "./tab-host";
 
 async function getSessionAnchorTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -13,6 +14,19 @@ async function getSessionAnchorTab() {
     throw new Error("No active tab is available.");
   }
   return tab;
+}
+
+async function getSessionBootstrapTab(taskType: string) {
+  if (taskType === "commerce_search") {
+    return getOrPrepareSessionTab(taskType);
+  }
+
+  const tab = await getSessionAnchorTab();
+  return {
+    tab,
+    navigatedToHome: false,
+    fromUrl: tab.url ?? undefined,
+  };
 }
 
 export async function createInitialSession(
@@ -60,7 +74,7 @@ export async function createInitialSession(
   });
 
   const taskType = route.taskType;
-  const tab = await getSessionAnchorTab();
+  const { tab, navigatedToHome, fromUrl } = await getSessionBootstrapTab(taskType);
   const compiled = await compileTaskSpec(goal, {
     taskType,
     searchPreference: options.searchPreference,
@@ -183,9 +197,17 @@ export async function createInitialSession(
     currentUrl: tab.url,
   });
 
+  if (navigatedToHome) {
+    appendLog(session, "runtime", "warn", "Automatically redirected the active tab before session start.", {
+      fromUrl,
+      toUrl: tab.url,
+      taskType,
+    });
+  }
+
   return {
     session,
-    navigatedToHome: false,
-    fromUrl: tab.url ?? undefined,
+    navigatedToHome,
+    fromUrl,
   };
 }

@@ -470,6 +470,81 @@ describe("Browser Core V2 runtime loop", () => {
     expect(session.memory.plan.map((step) => step.status)).toEqual(["succeeded", "succeeded", "succeeded"]);
   });
 
+  it("does not continue commerce extraction when search preparation is still retryable", async () => {
+    const taskSpec: CommerceTaskSpec = {
+      taskType: "commerce_search",
+      originalGoal: "Find a thin laptop under 3000 RMB",
+      outputMode: "inline",
+      budgetMax: 3000,
+      topK: 3,
+      llmInputLimit: 3,
+      extractLimit: 6,
+      searchQuery: "薄本 3000元",
+      querySource: "rule",
+      notes: [],
+    };
+    decideRoundActionMock.mockResolvedValue({
+      decision: "abort",
+      reason: "搜索页仍未稳定，停止本轮。",
+      source: "llm-lite",
+      model: "mock-model",
+      provider: "openai-compatible",
+    });
+
+    const memory = createBaseMemory(taskSpec);
+    const session = createSession(memory);
+    const unexpectedSnapshot: SnapshotData = {
+      url: "https://www.jd.com/",
+      title: "JD Home",
+      pageType: "content",
+      interactiveElements: [],
+      semanticSnapshot: {
+        version: 1,
+        url: "https://www.jd.com/",
+        title: "JD Home",
+        nodeCount: 1,
+        truncated: false,
+        root: { ref: "sem_root", role: "main", name: "", children: [] },
+      },
+      productCandidates: [],
+      pageReady: { ready: true, reason: "ready", checks: [] },
+      pageFacts: {
+        searchBox: { present: false, visible: false, text: "" },
+        searchSubmit: { present: false, visible: false, text: "" },
+      },
+      timestamp: Date.now(),
+    };
+    const executeAction = vi.fn(async (action: AgentAction) => {
+      if (action.type === "NAVIGATE") {
+        return {
+          success: true,
+          actionType: "NAVIGATE" as const,
+          message: "navigated",
+          navigated: true,
+        };
+      }
+
+      throw new Error(`Unexpected action ${action.type}`);
+    });
+    const deps = createDeps({
+      scanPage: vi
+        .fn()
+        .mockResolvedValueOnce(unexpectedSnapshot)
+        .mockResolvedValueOnce(unexpectedSnapshot)
+        .mockResolvedValueOnce(unexpectedSnapshot),
+      ensureUsableSnapshot: vi.fn(async () => unexpectedSnapshot),
+      executeAction,
+    });
+    const driver = new MockBrowserDriver();
+
+    await runBrowserCoreV2Loop(session, deps, { driver });
+
+    expect(executeAction).toHaveBeenCalledTimes(2);
+    expect(executeAction.mock.calls.every(([action]) => action.type === "NAVIGATE")).toBe(true);
+    expect(session.memory.extractedItems).toHaveLength(0);
+    expect(session.memory.finalResult?.status).toBe("failed");
+  });
+
   it("replans public_research once and then finalizes on the second round", async () => {
     const taskSpec: PublicResearchTaskSpec = {
       taskType: "public_research",

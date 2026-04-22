@@ -198,10 +198,15 @@ function inferSitePageRole(link: BrowserLinkObservation, fallback: BrowserSiteOv
 
 function sameSiteLinks(entryUrl: string, links: BrowserLinkObservation[]) {
   let hostname: string | undefined;
+  let normalizedEntryUrl: string | undefined;
   try {
-    hostname = new URL(entryUrl).hostname.replace(/^www\./, "");
+    const parsedEntryUrl = new URL(entryUrl);
+    hostname = parsedEntryUrl.hostname.replace(/^www\./, "");
+    parsedEntryUrl.hash = "";
+    normalizedEntryUrl = parsedEntryUrl.toString();
   } catch {
     hostname = undefined;
+    normalizedEntryUrl = undefined;
   }
 
   if (!hostname) {
@@ -210,7 +215,13 @@ function sameSiteLinks(entryUrl: string, links: BrowserLinkObservation[]) {
 
   const filtered = links.filter((link) => {
     try {
-      const linkHostname = new URL(link.url).hostname.replace(/^www\./, "");
+      const parsedLinkUrl = new URL(link.url);
+      parsedLinkUrl.hash = "";
+      if (normalizedEntryUrl && parsedLinkUrl.toString() === normalizedEntryUrl) {
+        return false;
+      }
+
+      const linkHostname = parsedLinkUrl.hostname.replace(/^www\./, "");
       return linkHostname === hostname || linkHostname.endsWith(`.${hostname}`) || hostname.endsWith(`.${linkHostname}`);
     } catch {
       return false;
