@@ -276,6 +276,66 @@ export function buildFinalResultPrompt(options: {
   ].join("\n");
 }
 
+export function buildRoundDecisionPrompt(options: {
+  goal: string;
+  taskType: Exclude<TaskType, "direct_answer">;
+  taskSpec: SearchTaskSpec | PublicResearchTaskSpec | SiteOverviewTaskSpec;
+  roundIndex: number;
+  maxRounds: number;
+  currentFacts?: Record<string, unknown>;
+  unresolvedIssues?: string[];
+  candidates?: Array<{
+    title: string;
+    url: string;
+    source?: string;
+    rank: number;
+  }>;
+  sources?: Array<{
+    title: string;
+    url: string;
+    status: string;
+    textLength: number;
+    unresolvedIssues: string[];
+  }>;
+  items?: Array<{
+    title: string;
+    url: string;
+    priceText?: string;
+    summary?: string;
+  }>;
+  filterDiagnostics?: unknown;
+}) {
+  return [
+    "Task: decide whether the current browser-agent round should finalize, replan, or abort.",
+    "",
+    "Output:",
+    "Return JSON only.",
+    'Schema: {"decision":"finalize|replan|abort","reason":"one short sentence","nextRoundSummary":"optional short summary","taskSpecPatch":{"searchQuery":"optional","officialSearchQuery":"optional","entryUrl":"optional url","candidateLimit":1,"sourceTargetCount":1,"pageReadLimit":1,"topK":1,"llmInputLimit":1,"extractLimit":1,"notesAppend":["optional note"]}}',
+    "",
+    "Hard rules:",
+    "1. Write reason and nextRoundSummary in concise Chinese.",
+    "2. Choose finalize when the current evidence is already enough for a stable final answer.",
+    "3. Choose replan only when another round is likely to materially improve quality.",
+    "4. Choose abort when the task is blocked, has no meaningful progress, or another round is unlikely to help.",
+    "5. Do not change the task type. taskSpecPatch may only adjust the current taskSpec within the same task type.",
+    "6. Keep taskSpecPatch minimal. Omit fields that do not need to change.",
+    "7. If roundIndex >= maxRounds, do not choose replan.",
+    "8. Do not invent external facts or URLs that are not already present in the evidence, except rewriting searchQuery or officialSearchQuery.",
+    "",
+    `User goal: ${options.goal}`,
+    `Task type: ${options.taskType}`,
+    `Current round: ${options.roundIndex}`,
+    `Max rounds: ${options.maxRounds}`,
+    `Current taskSpec: ${JSON.stringify(options.taskSpec, null, 2)}`,
+    `Current facts: ${JSON.stringify(options.currentFacts ?? {}, null, 2)}`,
+    `Unresolved issues: ${JSON.stringify(options.unresolvedIssues ?? [], null, 2)}`,
+    `Candidates: ${JSON.stringify(options.candidates ?? [], null, 2)}`,
+    `Sources: ${JSON.stringify(options.sources ?? [], null, 2)}`,
+    `Items: ${JSON.stringify(options.items ?? [], null, 2)}`,
+    `Filter diagnostics: ${JSON.stringify(options.filterDiagnostics ?? null, null, 2)}`,
+  ].join("\n");
+}
+
 export function buildDirectAnswerPrompt(options: {
   goal: string;
   taskSpec: DirectAnswerTaskSpec;

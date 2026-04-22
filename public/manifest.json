@@ -1,10 +1,19 @@
 {
   "manifest_version": 3,
-  "name": "浏览器 Agent MVP",
-  "version": "0.1.0",
-  "description": "浏览器 Agent MVP，包含商品搜索、公网调研、Side Panel 与规则化运行时编排。",
-  "permissions": ["sidePanel", "tabs", "activeTab", "scripting", "storage"],
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "name": "浏览器 Agent",
+  "version": "0.2.0",
+  "description": "浏览器 Agent,包含商品搜索、公网调研、Side Panel 与规则化运行时编排。",
+  "permissions": [
+    "sidePanel",
+    "tabs",
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -13,19 +22,30 @@
     "default_path": "sidepanel.html"
   },
   "action": {
-    "default_title": "打开浏览器 Agent MVP"
+    "default_title": "打开浏览器 Agent"
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["content-bridge.js", "chunks/*"],
-      "matches": ["http://*/*", "https://*/*"]
+      "resources": [
+        "content-bridge.js",
+        "chunks/*"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
     }
   ]
 }

@@ -134,6 +134,10 @@ ChromeClaw 参考仓库：
 
 ### Phase 2 - Bounded Plan Runner and Agent Loop V2 Minimal
 
+状态：
+
+`PARTIAL`
+
 目标：
 
 - 新建最小 bounded plan runner，不再依赖旧静态 workflow。
@@ -142,6 +146,13 @@ ChromeClaw 参考仓库：
 - LLM 基于 runner 更新后的 state 决定继续读页、读一跳链接、停止或汇总。
 - Runtime 只做预算、停止、loop guard、状态广播和 final result 兜底。
 - 第一任务为 `explicit_url overview via bounded plan runner + StoreSafeDriver`。
+
+当前进展：
+
+- 默认 runtime 主链已经切到 `Browser Core V2 runtime loop`。
+- 非 `direct_answer` 任务已经支持 `execute round -> decideRoundAction -> finalize | replan | abort` 的两轮小循环。
+- 当前仍是 task-family-specific executor，不是完整的通用 `RoundPlanSchema` runner。
+- 下一步是把现有粗粒度 executor 提升成可执行 3-5 步 per-round plan 的通用 runner。
 
 验收：
 

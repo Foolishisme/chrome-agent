@@ -53,7 +53,7 @@ describe("Browser Core V2 first-party tool registry", () => {
     expect(() =>
       createFirstPartyToolRegistry({
         "browser.search": vi.fn(async () => ({
-          status: "success",
+          status: "success" as const,
           results: [],
           searchPageUrl: "https://www.google.com/search?q=test",
           coverage: { scope: "test", limitations: [] },
@@ -282,7 +282,7 @@ describe("Browser Core V2 first-party tool registry", () => {
       },
       {
         commerceResearchDelegate: vi.fn(async () => ({
-          status: "success",
+          status: "success" as const,
           shortlist: [
             {
               title: "Mock Laptop",

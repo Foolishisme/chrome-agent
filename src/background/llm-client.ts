@@ -6,6 +6,7 @@ import {
   nextToolSelectionSchema,
   queryRefinementSchema,
   researchCandidateReorderSchema,
+  roundDecisionSchema,
   sourceFactCardSchema,
   taskRouteSchema,
 } from "../shared/schema";
@@ -29,6 +30,7 @@ import {
   buildFinalResultPrompt,
   buildCommerceQueryRefinementPrompt,
   buildNextToolPrompt,
+  buildRoundDecisionPrompt,
   buildResearchCandidateReorderPrompt,
   buildResearchQueryRefinementPrompt,
   buildSourceFactCardPrompt,
@@ -53,6 +55,10 @@ function readEnv(...keys: string[]) {
     }
   }
   return undefined;
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
 }
 
 function normalizeLlmProfile(profile: string | undefined): LlmProfile | undefined {
@@ -362,17 +368,17 @@ export function getModelCandidates(task: "simple" | "default", provider: Provide
 
   if (provider === "openai-compatible") {
     if (task === "simple") {
-      return Array.from(new Set([config.simpleModel, config.model].filter(Boolean)));
+      return Array.from(new Set([config.simpleModel, config.model].filter(isDefined)));
     }
 
-    return Array.from(new Set([config.model].filter(Boolean)));
+    return Array.from(new Set([config.model].filter(isDefined)));
   }
 
   if (task === "simple") {
-    return Array.from(new Set([config.simpleModel, config.simpleModelFallback, config.model].filter(Boolean)));
+    return Array.from(new Set([config.simpleModel, config.simpleModelFallback, config.model].filter(isDefined)));
   }
 
-  return Array.from(new Set([config.model].filter(Boolean)));
+  return Array.from(new Set([config.model].filter(isDefined)));
 }
 
 function throwIfAborted(signal?: AbortSignal) {
@@ -708,7 +714,7 @@ export async function generateSourceFactCard(
     ...response.data,
     title: response.data.title || input.title,
     url: input.url,
-    facts: response.data.facts.map((fact) => ({
+    facts: (response.data.facts ?? []).map((fact) => ({
       ...fact,
       evidenceUrl: input.url,
       evidenceTitle: fact.evidenceTitle || response.data.title || input.title,
@@ -767,6 +773,181 @@ export async function generateDirectAnswerResult(
     model: response.model,
     provider: response.provider,
   };
+}
+
+export interface RoundDecisionTaskSpecPatch {
+  searchQuery?: string;
+  officialSearchQuery?: string;
+  entryUrl?: string;
+  candidateLimit?: number;
+  sourceTargetCount?: number;
+  pageReadLimit?: number;
+  topK?: number;
+  llmInputLimit?: number;
+  extractLimit?: number;
+  notesAppend?: string[];
+}
+
+export interface RoundDecisionResult {
+  decision: "finalize" | "replan" | "abort";
+  reason: string;
+  nextRoundSummary?: string;
+  taskSpecPatch?: RoundDecisionTaskSpecPatch;
+  source: "llm-lite" | "rule";
+  model?: string;
+  provider?: ProviderName;
+}
+
+function buildFallbackRoundDecision(
+  input: {
+    taskType: Exclude<TaskType, "direct_answer">;
+    taskSpec: SearchTaskSpec | PublicResearchTaskSpec | SiteOverviewTaskSpec;
+    roundIndex: number;
+    maxRounds: number;
+    items?: ExtractedItem[];
+    sources?: ResearchSourceResult[];
+    unresolvedIssues?: string[];
+  },
+  fallbackReason: string,
+): RoundDecisionResult {
+  const successSourceCount = (input.sources ?? []).filter((source) => source.status === "success").length;
+  const usableSourceCount = (input.sources ?? []).filter((source) => source.status !== "failed").length;
+  const itemCount = input.items?.length ?? 0;
+  const hasEvidence = itemCount > 0 || usableSourceCount > 0;
+  const reachedMaxRounds = input.roundIndex >= input.maxRounds;
+  const reasonPrefix = `fallback: ${fallbackReason}`;
+
+  if (input.taskType === "commerce_search") {
+    const commerceTaskSpec = input.taskSpec as SearchTaskSpec;
+    if (itemCount > 0) {
+      return {
+        decision: "finalize",
+        reason: `${reasonPrefix}；已经有可汇总的候选商品。`,
+        source: "rule",
+      };
+    }
+
+    if (reachedMaxRounds) {
+      return {
+        decision: "abort",
+        reason: `${reasonPrefix}；没有收集到可用商品且已到最大轮次。`,
+        source: "rule",
+      };
+    }
+
+    return {
+      decision: "replan",
+      reason: `${reasonPrefix}；先再尝试一轮更宽的商品收集。`,
+      nextRoundSummary: "调整搜索词并扩大候选收集范围。",
+      taskSpecPatch: {
+        llmInputLimit: Math.min(commerceTaskSpec.llmInputLimit + 1, commerceTaskSpec.extractLimit + 2),
+        extractLimit: commerceTaskSpec.extractLimit + 2,
+        notesAppend: ["Fallback replan after insufficient commerce evidence."],
+      },
+      source: "rule",
+    };
+  }
+
+  if (successSourceCount >= 2 || (hasEvidence && reachedMaxRounds)) {
+    return {
+      decision: "finalize",
+      reason: `${reasonPrefix}；现有证据已足够进入最终总结。`,
+      source: "rule",
+    };
+  }
+
+  if (reachedMaxRounds) {
+    return {
+      decision: hasEvidence ? "finalize" : "abort",
+      reason: hasEvidence
+        ? `${reasonPrefix}；已到最大轮次，使用现有证据收尾。`
+        : `${reasonPrefix}；没有新增有效证据且已到最大轮次。`,
+      source: "rule",
+    };
+  }
+
+  if (input.taskType === "site_overview") {
+    const siteTaskSpec = input.taskSpec as SiteOverviewTaskSpec;
+    return {
+      decision: "replan",
+      reason: `${reasonPrefix}；先补读更多站内页面再决定是否收尾。`,
+      nextRoundSummary: "继续同站补读高价值页面。",
+      taskSpecPatch: {
+        pageReadLimit: Math.min(siteTaskSpec.pageReadLimit + 2, 8),
+        notesAppend: ["Fallback replan after insufficient site coverage."],
+      },
+      source: "rule",
+    };
+  }
+
+  const researchTaskSpec = input.taskSpec as PublicResearchTaskSpec;
+  return {
+    decision: "replan",
+    reason: `${reasonPrefix}；先补读更多候选来源再决定是否收尾。`,
+    nextRoundSummary: "扩大候选读取范围并继续补证据。",
+    taskSpecPatch: {
+      candidateLimit: Math.min(researchTaskSpec.candidateLimit + 2, 8),
+      sourceTargetCount: Math.min(researchTaskSpec.sourceTargetCount + 1, 4),
+      notesAppend: ["Fallback replan after insufficient research evidence."],
+    },
+    source: "rule",
+  };
+}
+
+export async function decideRoundAction(
+  input: {
+    goal: string;
+    taskType: Exclude<TaskType, "direct_answer">;
+    taskSpec: SearchTaskSpec | PublicResearchTaskSpec | SiteOverviewTaskSpec;
+    roundIndex: number;
+    maxRounds: number;
+    currentFacts?: Record<string, unknown>;
+    unresolvedIssues?: string[];
+    candidates?: ResearchCandidate[];
+    sources?: ResearchSourceResult[];
+    items?: ExtractedItem[];
+    filterDiagnostics?: unknown;
+  },
+  options: RequestOptions = {},
+): Promise<RoundDecisionResult> {
+  try {
+    const response = await requestProviderJson(
+      buildRoundDecisionPrompt({
+        ...input,
+        candidates: (input.candidates ?? []).slice(0, 6).map((candidate) => ({
+          title: candidate.title,
+          url: candidate.url,
+          source: candidate.source,
+          rank: candidate.rank,
+        })),
+        sources: (input.sources ?? []).slice(0, 6).map((source) => ({
+          title: source.pageTitle || source.candidate.title,
+          url: source.sourceUrl,
+          status: source.status,
+          textLength: source.textLength,
+          unresolvedIssues: source.unresolvedIssues.slice(0, 3),
+        })),
+        items: (input.items ?? []).slice(0, 6).map((item) => ({
+          title: item.title,
+          url: item.url,
+          priceText: item.priceText,
+          summary: item.summary,
+        })),
+      }),
+      roundDecisionSchema,
+      "simple",
+      options,
+    );
+
+    return {
+      ...response.data,
+      source: "llm-lite",
+      model: response.model,
+      provider: response.provider,
+    };
+  } catch (error) {
+    return buildFallbackRoundDecision(input, error instanceof Error ? error.message : "Round decision failed");
+  }
 }
 
 export async function chooseNextTool(

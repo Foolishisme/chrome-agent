@@ -79,6 +79,8 @@ function createSiteMemory(overrides: Partial<SessionMemory> = {}): SessionMemory
       sameToolRetryCount: 0,
       sameToolRetryTool: undefined,
       consecutiveNoProgressCount: 0,
+      currentRound: 1,
+      maxRounds: 2,
       startedAt: Date.now(),
     },
   };

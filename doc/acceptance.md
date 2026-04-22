@@ -8,6 +8,10 @@
 
 `LLM-driven bounded plan + thin runner over Store-safe Browser Core V2`
 
+Current snapshot note:
+- default runtime path is `START_SESSION -> BrowserAgentRuntime shell -> Browser Core V2 runtime loop`
+- non-`direct_answer` tasks now use `execute round -> decideRoundAction -> finalize | replan | abort`
+
 旧 `direct_answer / commerce_search / public_research / site_overview` 不再作为新主线验收目标；它们保留为回归、对照、fallback 或 harness。
 
 旧 workflow-first 验收清单已归档到：
@@ -28,7 +32,7 @@
 | 编号 | 场景 | 定位 | 状态 | 备注 |
 |---|---|---|---|---|
 | S0 | 直答不误触浏览器 | 回归基线，验证明确可直接回答的问题不会强制启动 browser tool | PASS | 旧 query/runtime/sidepanel 单测已有覆盖，后续保持回归 |
-| S1 | explicit URL overview | 当前第一主验收，验证 bounded plan runner + Browser Core V2 + StoreSafeDriver 独立读页、裁剪、结构化总结 | NOT_RUN | ToolRegistry metadata、runner、StoreSafeDriver chrome wiring 尚未完成 |
+| S1 | explicit URL overview | 当前第一主验收，验证 bounded plan runner + Browser Core V2 + StoreSafeDriver 独立读页、裁剪、结构化总结 | NOT_RUN | StoreSafeDriver chrome wiring 与真机闭环验证尚未完成 |
 | S2 | explicit URL + 一跳读取 | 下一步主验收，基于 links/controls 选择少量高价值链接继续读 | NOT_RUN | 依赖 S1、受限 action 数、受限并发和读取预算 |
 | S3 | 开放问题浏览调研 | 后续验收，用户不给 URL 时搜索、打开候选、读多页、汇总 | NOT_RUN | 不复用旧 `public_research` 作为产品边界 |
 | S4 | 低风险页面操作 | 后续验收，搜索框输入、点击链接、展开菜单、滚动、普通草稿填写 | NOT_RUN | 必须接 action risk gate |
@@ -96,9 +100,8 @@
 阻塞：
 
 - `StoreSafeDriver` 尚未接入真实 `chrome.tabs / chrome.scripting`。
-- ToolRegistry metadata 尚未落地。
-- Bounded plan runner 尚未落地。
-- Agent Loop V2 minimal 尚未落地。
+- 通用 `RoundPlanSchema` runner 尚未落地；当前仍是 task-family-specific executor + round-end decision gate。
+- 新主链下的 explicit URL overview 尚未完成真机闭环验证。
 
 ## 6. S2 - explicit URL + 一跳读取
 

@@ -1,10 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LIMITS } from "../src/shared/constants";
 import { RuntimeError } from "../src/shared/errors";
-import type { PlanStep, SessionMemory, ToolResult } from "../src/shared/types";
+import type { SessionMemory } from "../src/shared/types";
+import type { ActiveSession } from "../src/background/runtime/shared";
 
 const { chooseNextToolMock } = vi.hoisted(() => ({
   chooseNextToolMock: vi.fn(),
+}));
+
+const { createInitialSessionMock, runBrowserCoreV2LoopMock } = vi.hoisted(() => ({
+  createInitialSessionMock: vi.fn(),
+  runBrowserCoreV2LoopMock: vi.fn(),
 }));
 
 vi.mock("../src/background/llm-client", async () => {
@@ -16,12 +22,30 @@ vi.mock("../src/background/llm-client", async () => {
   };
 });
 
+vi.mock("../src/background/runtime/bootstrap", async () => {
+  const actual = await vi.importActual<typeof import("../src/background/runtime/bootstrap")>("../src/background/runtime/bootstrap");
+  return {
+    ...actual,
+    createInitialSession: createInitialSessionMock,
+  };
+});
+
+vi.mock("../src/browser-core-v2/background/runner", async () => {
+  const actual = await vi.importActual<typeof import("../src/browser-core-v2/background/runner")>("../src/browser-core-v2/background/runner");
+  return {
+    ...actual,
+    runBrowserCoreV2Loop: runBrowserCoreV2LoopMock,
+  };
+});
+
 import { BrowserAgentRuntime, evaluateRuntimeBudget, isReceiverMissingError, sendMessageToTab } from "../src/background/runtime";
 
 function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
-  return {
+  const memory: SessionMemory = {
     goal: "Research the difference between Playwright and Selenium",
     taskType: "public_research",
+    searchPreference: "auto",
+    conversationTurns: [],
     plan: [],
     toolHistory: [],
     currentFacts: {},
@@ -52,10 +76,15 @@ function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
       sameToolRetryCount: 0,
       sameToolRetryTool: undefined,
       consecutiveNoProgressCount: 0,
+      currentRound: 1,
+      maxRounds: 2,
       startedAt: Date.now(),
     },
     ...overrides,
   };
+  memory.searchPreference = overrides.searchPreference ?? "auto";
+  memory.conversationTurns = overrides.conversationTurns ?? [];
+  return memory;
 }
 
 function createSession(memory: SessionMemory) {
@@ -79,6 +108,8 @@ describe("runtime messaging recovery", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
     chooseNextToolMock.mockReset();
+    createInitialSessionMock.mockReset();
+    runBrowserCoreV2LoopMock.mockReset();
   });
 
   it("detects the missing receiver error", () => {
@@ -287,7 +318,7 @@ describe("runtime page wait recovery", () => {
   });
 });
 
-describe("runtime orchestration guardrails", () => {
+describe("runtime Browser Core V2 orchestration", () => {
   beforeEach(() => {
     vi.stubGlobal("chrome", {
       runtime: {
@@ -296,91 +327,62 @@ describe("runtime orchestration guardrails", () => {
     });
   });
 
-  it("does not call the model when a step exposes only one tool", async () => {
-    const runtime = new BrowserAgentRuntime() as unknown as {
-      chooseToolForStep(session: ReturnType<typeof createSession>, step: PlanStep): Promise<string>;
-    };
+  it("dispatches runSession to the Browser Core V2 loop", async () => {
     const memory = createMemory({
+      taskType: "public_research",
+      taskSpec: {
+        taskType: "public_research",
+        originalGoal: "Research OpenAI",
+        outputMode: "inline",
+        searchQuery: "OpenAI",
+        querySource: "rule",
+        notes: [],
+        searchEngine: "google",
+        candidateLimit: 5,
+        sourceTargetCount: 3,
+      },
       plan: [
         {
-          stepId: "open-search-results",
-          goal: "Open search results",
-          allowedTools: ["openSearchResults"],
+          stepId: "browser-search",
+          goal: "Collect first-page source candidates.",
+          allowedTools: ["browser.search"],
           successCriteria: [],
-          status: "running",
+          status: "pending",
         },
       ],
+      runtimeMeta: {
+        ...createMemory().runtimeMeta,
+        status: "idle",
+      },
     });
-
-    const selected = await runtime.chooseToolForStep(createSession(memory), memory.plan[0]!);
-
-    expect(selected).toBe("openSearchResults");
-    expect(chooseNextToolMock).not.toHaveBeenCalled();
-  });
-
-  it("rejects a model-selected tool outside allowedTools", async () => {
-    chooseNextToolMock.mockResolvedValue({
-      toolName: "finalizeResearchResult",
-      reason: "bad selection",
-      source: "llm-lite",
+    const session = createSession(memory);
+    runBrowserCoreV2LoopMock.mockImplementation(async (currentSession: ActiveSession, deps: { publishState: (session: ActiveSession) => Promise<void> }) => {
+      currentSession.memory.runtimeMeta.status = "done";
+      currentSession.memory.finalResult = {
+        outputMode: "inline",
+        status: "partial",
+        summary: "Done",
+        markdown: "Done",
+        keyResults: [],
+        completedSteps: [],
+        remainingOrFailedSteps: [],
+        errorsOrBlockers: [],
+        artifacts: [],
+        suggestedNextAction: "None",
+      };
+      await deps.publishState(currentSession);
     });
 
     const runtime = new BrowserAgentRuntime() as unknown as {
-      chooseToolForStep(session: ReturnType<typeof createSession>, step: PlanStep): Promise<string>;
+      runSession(session: ActiveSession): Promise<void>;
+      activeSession?: ActiveSession;
+      getState(): { status: string; finalResult?: { summary: string } };
     };
-    const memory = createMemory({
-      plan: [
-        {
-          stepId: "branching-step",
-          goal: "Select a tool",
-          allowedTools: ["openSearchResults", "collectResearchCandidates"],
-          successCriteria: [],
-          status: "running",
-        },
-      ],
-    });
+    runtime.activeSession = session;
+    await runtime.runSession(session);
 
-    await expect(runtime.chooseToolForStep(createSession(memory), memory.plan[0]!)).rejects.toMatchObject({
-      code: "TOOL_NOT_ALLOWED",
-    });
-  });
-
-  it("stops after the same tool returns retryable errors three times", () => {
-    const runtime = new BrowserAgentRuntime() as unknown as {
-      applyRetryGuardrails(session: ReturnType<typeof createSession>, toolName: string, result: ToolResult, madeProgress: boolean): void;
-    };
-    const session = createSession(createMemory());
-    const result: ToolResult = {
-      status: "retryable_error",
-      summary: "temporary failure",
-      outputs: {},
-      artifacts: [],
-      facts: {},
-      stepStatus: "running",
-      retryHint: "try again",
-    };
-
-    runtime.applyRetryGuardrails(session, "openSearchResults", result, false);
-    runtime.applyRetryGuardrails(session, "openSearchResults", result, false);
-    expect(() => runtime.applyRetryGuardrails(session, "openSearchResults", result, false)).toThrowError(/retry limit/i);
-  });
-
-  it("stops after three consecutive no-progress tool runs", () => {
-    const runtime = new BrowserAgentRuntime() as unknown as {
-      applyRetryGuardrails(session: ReturnType<typeof createSession>, toolName: string, result: ToolResult, madeProgress: boolean): void;
-    };
-    const session = createSession(createMemory());
-    const result: ToolResult = {
-      status: "partial",
-      summary: "no progress",
-      outputs: {},
-      artifacts: [],
-      facts: {},
-      stepStatus: "running",
-    };
-
-    runtime.applyRetryGuardrails(session, "readResearchSourceFacts", result, false);
-    runtime.applyRetryGuardrails(session, "readResearchSourceFacts", result, false);
-    expect(() => runtime.applyRetryGuardrails(session, "readResearchSourceFacts", result, false)).toThrowError(/no meaningful progress/i);
+    expect(runBrowserCoreV2LoopMock).toHaveBeenCalledOnce();
+    expect(runtime.getState().status).toBe("done");
+    expect(runtime.getState().finalResult?.summary).toBe("Done");
   });
 });

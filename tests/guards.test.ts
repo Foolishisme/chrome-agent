@@ -44,9 +44,11 @@ function createSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
 }
 
 function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
-  return {
+  const memory: SessionMemory = {
     goal: "Find laptops",
     taskType: "commerce_search",
+    searchPreference: "auto",
+    conversationTurns: [],
     plan: [],
     toolHistory: [],
     currentFacts: {},
@@ -73,13 +75,18 @@ function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
       dialogCloseRecoveryCount: 0,
       searchReopenRecoveryCount: 0,
       queryRefineTried: false,
-      sameToolRetryCount: 0,
-      sameToolRetryTool: undefined,
-      consecutiveNoProgressCount: 0,
-      startedAt: Date.now(),
-    },
+        sameToolRetryCount: 0,
+        sameToolRetryTool: undefined,
+        consecutiveNoProgressCount: 0,
+        currentRound: 1,
+        maxRounds: 2,
+        startedAt: Date.now(),
+      },
     ...overrides,
   };
+  memory.searchPreference = overrides.searchPreference ?? "auto";
+  memory.conversationTurns = overrides.conversationTurns ?? [];
+  return memory;
 }
 
 describe("guardrails", () => {

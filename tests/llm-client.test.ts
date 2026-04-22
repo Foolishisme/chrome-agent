@@ -3,6 +3,7 @@ import {
   buildGeminiRequestBody,
   buildOpenAiCompatibleRequestBody,
   chooseNextTool,
+  decideRoundAction,
   extractOpenAiCompatibleJsonText,
   extractFirstJsonBlock,
   extractJsonText,
@@ -90,6 +91,34 @@ describe("llm client helpers", () => {
 
     expect(result.toolName).toBe("openSearchResults");
     expect(result.source).toBe("rule");
+  });
+
+  it("falls back to a rule-based round decision when the model is unavailable", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network unavailable")));
+
+    const result = await decideRoundAction({
+      goal: "Research OpenAI pricing",
+      taskType: "public_research",
+      taskSpec: {
+        taskType: "public_research",
+        originalGoal: "Research OpenAI pricing",
+        outputMode: "inline",
+        searchQuery: "OpenAI pricing",
+        querySource: "rule",
+        notes: [],
+        searchEngine: "google",
+        candidateLimit: 4,
+        sourceTargetCount: 1,
+      },
+      roundIndex: 1,
+      maxRounds: 2,
+      candidates: [],
+      sources: [],
+      unresolvedIssues: ["No usable candidate yet."],
+    });
+
+    expect(result.source).toBe("rule");
+    expect(result.decision).toBe("replan");
   });
 
   it("reorders research candidates when the model returns a valid index order", async () => {

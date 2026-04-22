@@ -16,9 +16,11 @@ vi.mock("../src/background/llm-client", async () => {
 });
 
 function createResearchMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
-  return {
+  const memory: SessionMemory = {
     goal: "Research AI agent development",
     taskType: "public_research",
+    searchPreference: "auto",
+    conversationTurns: [],
     plan: [],
     toolHistory: [],
     currentFacts: {},
@@ -48,10 +50,15 @@ function createResearchMemory(overrides: Partial<SessionMemory> = {}): SessionMe
       sameToolRetryCount: 0,
       sameToolRetryTool: undefined,
       consecutiveNoProgressCount: 0,
+      currentRound: 1,
+      maxRounds: 2,
       startedAt: Date.now(),
     },
     ...overrides,
   };
+  memory.searchPreference = overrides.searchPreference ?? "auto";
+  memory.conversationTurns = overrides.conversationTurns ?? [];
+  return memory;
 }
 
 function createGoogleSnapshot(): SnapshotData {

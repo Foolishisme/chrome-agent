@@ -1,6 +1,7 @@
 import { RuntimeError } from "../shared/errors";
 import type { StartSessionResponse } from "../shared/protocol";
-import type { ActionResult, AgentAction, SessionPublicState, SnapshotData, StepRecord, ToolName, ToolResult } from "../shared/types";
+import type { ActionResult, AgentAction, SessionPublicState, SnapshotData, StepRecord } from "../shared/types";
+import { evaluateRuntimeBudget, runBrowserCoreV2Loop } from "../browser-core-v2/background/runner";
 import { setActiveLlmProfile } from "./llm-client";
 import { summarizeSnapshot } from "./guards";
 import { saveSuccessfulSessionArchive } from "./session-archive";
@@ -8,7 +9,6 @@ import { createInitialSession } from "./runtime/bootstrap";
 import { defaultPublicState, ensureTerminalResult, toPublicState } from "./runtime/public-state";
 import type { ActiveSession } from "./runtime/shared";
 import { appendLog } from "./runtime/shared";
-import { applyRetryGuardrails, chooseToolForStep, evaluateRuntimeBudget, runRuntimeLoop } from "./runtime/loop";
 import {
   ensureSessionUsableSnapshot,
   executeSessionAction,
@@ -46,14 +46,6 @@ export class BrowserAgentRuntime {
     session.lastPublicState = toPublicState(session.memory);
     this.lastPublicState = session.lastPublicState;
     await broadcastUpdate(session.lastPublicState, asError);
-  }
-
-  private async chooseToolForStep(session: ActiveSession, step: ActiveSession["memory"]["plan"][number]) {
-    return chooseToolForStep(session, step);
-  }
-
-  private applyRetryGuardrails(session: ActiveSession, toolName: ToolName, result: ToolResult, madeProgress: boolean) {
-    return applyRetryGuardrails(session, toolName, result, madeProgress);
   }
 
   getState(): SessionPublicState {
@@ -144,7 +136,7 @@ export class BrowserAgentRuntime {
 
   private async runSession(session: ActiveSession) {
     try {
-      await runRuntimeLoop(session, {
+      await runBrowserCoreV2Loop(session, {
         publishState: (currentSession, asError) => this.publishSessionState(currentSession, asError),
         scanPage: () => this.scanPage(session),
         ensureUsableSnapshot: () => this.ensureUsableSnapshot(session),

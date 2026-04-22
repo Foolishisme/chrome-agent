@@ -139,3 +139,28 @@
   - `browser.siteOverview` 通过 BrowserDriver 串行读取入口页与同站一跳页面。
   - `skill.commerceResearch` 通过 delegate/adapter 承接旧黑盒 commerce 流程；未接 delegate 时返回 `blocked`，而不是伪造执行能力。
 - Reason: 现在的风险不在“测试不够多”，而在“新工具还没变成真正可注册、可调用的对象”。先把 registry 站住，后续 runtime 接线与 runner 测试才有真实目标。
+## 2026-04-22 - Browser Core V2 runtime loop cutover
+
+- Question: After first-party contracts and registry landed, should the repo keep the legacy runtime loop as the main execution path.
+- Decision: Keep the `BrowserAgentRuntime` shell and public-state protocol, but switch the main execution path to a Browser Core V2 runner.
+- Runtime Shape:
+  - `createInitialSession()` now compiles `taskSpec` during bootstrap and builds a coarse display plan for the side panel.
+  - `runBrowserCoreV2Loop()` dispatches by `taskSpec.taskType`, not by legacy `allowedTools`.
+  - `direct_answer` goes straight to the legacy finalizer adapter.
+  - `public_research` runs `browser.search -> browser.webDetail(batch) -> finalizeResearchResult`.
+  - `site_overview` runs `browser.search? -> browser.siteOverview -> finalizeResearchResult`.
+  - `commerce_search` runs `skill.commerceResearch -> finalizeCommerceResult`, with the skill delegate wired to legacy helper tools instead of the legacy runtime loop.
+- Driver Decision: Until StoreSafeDriver chrome wiring is complete, the new loop uses a temporary runtime BrowserDriver adapter over `chrome.tabs + sendMessageToTab + content bridge`.
+- Public State Decision: `SessionPublicState` stays stable. Only the displayed plan/current tool semantics shift from legacy workflow steps to coarse Browser Core V2 tools.
+- Revisit Trigger: Replace the temporary runtime BrowserDriver adapter after StoreSafeDriver chrome wiring and real-browser S1 are stable.
+## 2026-04-22 - Round-End Finalize Or Replan Gate
+
+- Question: How should Browser Core V2 move from "one fixed executor round then finalize" toward a bounded multi-round agent loop without reintroducing per-tool workflow branching?
+- Decision: Add one shared round-end decision layer for all non-direct tasks. Each round now follows `execute bounded tool round -> observation digest -> decideRoundAction -> finalize | replan | abort`.
+- Why: The missing piece was not more tools or finer browser primitives, but a generic planner/replanner layer. A single round-end decision contract keeps the loop generic and avoids hardcoding per-tool second-pass logic.
+- Boundaries:
+  - `direct_answer` remains single-round and bypasses the decision gate.
+  - Existing finalizers remain the user-facing answer writers.
+  - `replan` only patches the current task type; it does not freely rewrite the task into another task family.
+  - The first implementation keeps `maxRounds = 2`.
+- Follow-up: If this stabilizes in real-browser use, the next step is to lift round planning itself into an explicit bounded `RoundPlanSchema` instead of keeping the first round executor-fixed.

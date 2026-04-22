@@ -10,13 +10,18 @@ export type PlanStepStatus = "pending" | "running" | "succeeded" | "failed" | "b
 export type ToolName =
   | "compileTaskSpec"
   | "finalizeDirectAnswer"
+  | "decideRoundAction"
   | "resolveEntryPoint"
   | "openSearchResults"
   | "collectCommerceCandidates"
   | "collectResearchCandidates"
   | "readResearchSourceFacts"
   | "finalizeCommerceResult"
-  | "finalizeResearchResult";
+  | "finalizeResearchResult"
+  | "browser.search"
+  | "browser.webDetail"
+  | "browser.siteOverview"
+  | "skill.commerceResearch";
 
 export type RuntimeStatus = "idle" | "running" | "done" | "error";
 
@@ -492,6 +497,8 @@ export interface SessionMemory {
     sameToolRetryCount: number;
     sameToolRetryTool?: ToolName;
     consecutiveNoProgressCount: number;
+    currentRound: number;
+    maxRounds: number;
     startedAt: number;
   };
 }

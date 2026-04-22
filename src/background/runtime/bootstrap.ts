@@ -1,10 +1,19 @@
 import type { SearchPreference } from "../../shared/types";
 import { classifyTaskType } from "../llm-client";
-import { buildPlanSteps, detectTaskTypeWithLiteModel } from "../query-compiler";
+import { compileTaskSpec, detectTaskTypeWithLiteModel } from "../query-compiler";
+import { refineCommerceSearchQuery, refineResearchQuery } from "../llm-client";
+import { buildBrowserCoreV2DisplayPlan } from "../../browser-core-v2/background/runner/task-plan-builder";
 import { toPublicState } from "./public-state";
-import { getOrPrepareSessionTab } from "./tab-host";
 import type { ActiveSession } from "./shared";
 import { appendLog, createSessionId } from "./shared";
+
+async function getSessionAnchorTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) {
+    throw new Error("No active tab is available.");
+  }
+  return tab;
+}
 
 export async function createInitialSession(
   goal: string,
@@ -51,18 +60,63 @@ export async function createInitialSession(
   });
 
   const taskType = route.taskType;
-  const { tab, navigatedToHome, fromUrl } = await getOrPrepareSessionTab(taskType);
+  const tab = await getSessionAnchorTab();
+  const compiled = await compileTaskSpec(goal, {
+    taskType,
+    searchPreference: options.searchPreference,
+    routeReason: route.reason,
+    currentTimeIso,
+    timezone,
+    conversationTurns,
+    classifyTaskTypeWithLiteModel: async (routeGoal) => {
+      const classified = await classifyTaskType(routeGoal, {
+        signal: options.signal,
+        conversationContext,
+        conversationTurns,
+        currentTimeIso,
+        timezone,
+        searchPreference: options.searchPreference,
+      });
+      return {
+        taskType: classified.taskType,
+        reason: classified.reason,
+        confidence: classified.confidence,
+        decisionSignals: classified.decisionSignals,
+      };
+    },
+    refineCommerceWithLiteModel: async (routeGoal) => {
+      const refined = await refineCommerceSearchQuery(routeGoal, {
+        signal: options.signal,
+        conversationContext,
+      });
+      return {
+        searchQuery: refined.searchQuery,
+        reason: refined.reason,
+      };
+    },
+    refineResearchWithLiteModel: async (routeGoal) => {
+      const refined = await refineResearchQuery(routeGoal, {
+        signal: options.signal,
+        conversationContext,
+      });
+      return {
+        searchQuery: refined.searchQuery,
+        reason: refined.reason,
+      };
+    },
+  });
 
   const sessionId = createSessionId();
   const memory: ActiveSession["memory"] = {
     goal,
-    taskType,
+    taskType: compiled.taskType,
     searchPreference: options.searchPreference ?? "auto",
     conversationId: options.conversationId,
     conversationTitle: options.conversationTitle,
     currentTurnId: options.currentTurnId,
     conversationTurns,
-    plan: buildPlanSteps(taskType),
+    plan: buildBrowserCoreV2DisplayPlan(compiled.taskSpec),
+    taskSpec: compiled.taskSpec,
     toolHistory: [],
     currentFacts: {
       routeReason: route.reason,
@@ -82,15 +136,9 @@ export async function createInitialSession(
     activeSourceIndex: 0,
     failures: [],
     liveStepSummary:
-      taskType === "direct_answer"
+      compiled.taskType === "direct_answer"
         ? "Ready to answer directly."
-        : navigatedToHome && taskType === "commerce_search"
-          ? "Detected a non-JD page and opened jd.com automatically."
-          : navigatedToHome && taskType === "public_research"
-            ? "Detected a non-scriptable page and opened Google automatically."
-            : navigatedToHome && taskType === "site_overview"
-              ? "Detected a non-scriptable page and opened Google automatically."
-            : "Ready to start the session.",
+        : "Ready to start the Browser Core V2 session.",
     runtimeMeta: {
       sessionId,
       tabId: tab.id!,
@@ -110,6 +158,8 @@ export async function createInitialSession(
       sameToolRetryCount: 0,
       sameToolRetryTool: undefined,
       consecutiveNoProgressCount: 0,
+      currentRound: 1,
+      maxRounds: 2,
       startedAt: Date.now(),
     },
   };
@@ -124,7 +174,7 @@ export async function createInitialSession(
 
   appendLog(session, "runtime", "info", "Session started.", {
     goal,
-    taskType,
+    taskType: compiled.taskType,
     routeSource: route.source,
     routeReason: route.reason,
     routeConfidence: route.confidence,
@@ -133,17 +183,9 @@ export async function createInitialSession(
     currentUrl: tab.url,
   });
 
-  if (navigatedToHome) {
-    appendLog(session, "runtime", "warn", "Automatically redirected the active tab before session start.", {
-      fromUrl,
-      toUrl: tab.url,
-      taskType,
-    });
-  }
-
   return {
     session,
-    navigatedToHome,
-    fromUrl,
+    navigatedToHome: false,
+    fromUrl: tab.url ?? undefined,
   };
 }

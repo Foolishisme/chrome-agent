@@ -138,3 +138,38 @@
 - Risk:
   - 当前 search/webDetail/siteOverview handlers 仍是 Browser Core V2 只读路径的最小实现，不代表最终产品级恢复/裁剪厚度。
   - `skill.commerceResearch` 仍依赖 delegate/adapter，尚未直接接入旧 workflow 主链。
+## 2026-04-22 - Browser Core V2 runtime loop cutover
+
+- Action: Switched the runtime shell from the legacy `runRuntimeLoop()` path to `runBrowserCoreV2Loop()`, while keeping the existing `BrowserAgentRuntime` shell and side-panel public state protocol.
+- Changed:
+  - Added `src/browser-core-v2/background/runner/` with the Browser Core V2 runner, task plan builder, runtime BrowserDriver adapter, and task executors.
+  - Updated `src/background/runtime/bootstrap.ts` to compile `taskSpec` during session start and build coarse display plans for the side panel.
+  - Updated `src/background/runtime-core.ts` to call the Browser Core V2 loop instead of the legacy runtime loop.
+  - Expanded `ToolName` to include first-party Browser Core V2 tools and kept legacy finalizers/helpers as internal adapters.
+  - Wired `skill.commerceResearch` to a legacy commerce helper delegate so commerce sessions no longer default to `blocked`.
+  - Added Browser Core V2 runtime loop tests and rewrote runtime orchestration coverage to validate the new loop entry.
+- Validation:
+  - `npm test -- tests/runtime.test.ts tests/browser-core-v2/runtime-v2-loop.test.ts tests/browser-core-v2/first-party-tool-contracts.test.ts tests/browser-core-v2/first-party-tool-registry.test.ts tests/public-research.test.ts tests/site-overview.test.ts tests/sidepanel.test.ts`
+  - `npm run build`
+  - `npx tsc --noEmit` still fails, but the remaining failures are in pre-existing `llm-client`, legacy research typing, and older test fixtures; the new runtime-loop cutover removed the new type errors introduced by this change.
+- Result: The default runtime path now enters Browser Core V2 directly, uses first-party tools for public/site tasks, uses a wired commerce skill delegate, and keeps the side panel protocol stable.
+- Risk:
+  - The runtime BrowserDriver is still a temporary adapter over the existing tab/message bridge, not the final StoreSafeDriver chrome wiring.
+  - Real-browser S1 validation is still not part of this change.
+  - `npx tsc --noEmit` remains red for older repo issues outside the new runtime loop slice.
+## 2026-04-22 - Non-direct tasks now decide finalize or replan
+
+- Action: Inserted a shared round-end decision layer before final output for `public_research`, `site_overview`, and `commerce_search`.
+- Changed:
+  - Added `roundDecisionSchema`, `buildRoundDecisionPrompt()`, and `decideRoundAction()` to the shared LLM path.
+  - Extended Browser Core V2 display plans with a `decideRoundAction` step before finalization for all non-direct tasks.
+  - Updated task executors so non-direct tasks run a bounded round, call the decision layer, and either finalize, abort, or patch the current `taskSpec` for round 2.
+  - Kept existing finalizers in place and reused them only after the decision layer returns `finalize`.
+  - Added/updated tests for decision fallback, single-round finalize, and one-round replan to second-round finalize.
+- Validation:
+  - `npm test -- tests/llm-client.test.ts tests/runtime.test.ts tests/browser-core-v2/runtime-v2-loop.test.ts`
+  - `npm test -- tests/runtime.test.ts tests/llm-client.test.ts tests/browser-core-v2/runtime-v2-loop.test.ts tests/browser-core-v2/first-party-tool-contracts.test.ts tests/browser-core-v2/first-party-tool-registry.test.ts tests/public-research.test.ts tests/site-overview.test.ts tests/sidepanel.test.ts`
+  - `npm run build`
+  - `npx tsc --noEmit` still fails, but remaining errors are in pre-existing unrelated files/tests: `read-research-source-facts.ts`, `session-archive.test.ts`, and `sidepanel.test.ts`.
+- Result: The main runtime path now supports a simple bounded two-round loop for non-direct tasks without adding per-tool special-case replanning code.
+- Risk: Replan currently patches only the existing task type and still depends on coarse task executors; it is not yet a fully generic `RoundPlanSchema` runner.

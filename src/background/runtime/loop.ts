@@ -11,7 +11,7 @@ import type {
   ToolResult,
 } from "../../shared/types";
 import { chooseNextTool } from "../llm-client";
-import { getToolDefinition } from "../tools/registry";
+import { getToolDefinition, type LegacyToolName } from "../tools/registry";
 import type { StepOptions } from "../tools/shared";
 import { ensureTerminalResult } from "./public-state";
 import type { ActiveSession } from "./shared";
@@ -180,7 +180,7 @@ async function runToolForPlanStep(
     pushState(stepSummary?: string): Promise<void>;
   },
 ): Promise<ToolResult> {
-  const tool = getToolDefinition(toolName);
+  const tool = getToolDefinition(toolName as LegacyToolName);
   session.memory.runtimeMeta.currentTool = toolName;
   session.memory.runtimeMeta.currentStep += 1;
   appendLog(session, "runtime", "info", "Running high-level tool.", {
