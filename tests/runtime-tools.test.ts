@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { buildRuleBasedSummary, getToolDefinition } from "../src/background/tools";
+import { buildRuleBasedSummary } from "../src/background/tools";
+import { openSearchResultsTool } from "../src/background/tools/open-search-results";
 import { compileSearchTask } from "../src/background/query-compiler";
-import type { ActionResult, SessionMemory, SnapshotData } from "../src/shared/types";
+import { finalizeTaskResult, prepareCommerceCandidates } from "../src/browser-core-v2/background/adapters";
+import type { ActionResult, CommerceTaskSpec, SessionMemory, SnapshotData } from "../src/shared/types";
 
 function createSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
   return {
@@ -90,6 +92,31 @@ function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
   return memory;
 }
 
+function createToolContext(
+  memory: SessionMemory,
+  overrides: Partial<{
+    scanPage: () => Promise<SnapshotData>;
+    ensureUsableSnapshot: () => Promise<SnapshotData>;
+    executeAction: (action: unknown, stepSummary: string) => Promise<ActionResult>;
+    settleAfterAction: (action: unknown) => Promise<void>;
+    appendLog: (...args: unknown[]) => void;
+    recordStep: (...args: unknown[]) => void;
+    pushState: (stepSummary?: string) => Promise<void>;
+  }> = {},
+) {
+  return {
+    memory,
+    signal: new AbortController().signal,
+    scanPage: overrides.scanPage ?? vi.fn(),
+    ensureUsableSnapshot: overrides.ensureUsableSnapshot ?? vi.fn(),
+    executeAction: overrides.executeAction ?? vi.fn(),
+    settleAfterAction: overrides.settleAfterAction ?? vi.fn().mockResolvedValue(undefined),
+    appendLog: overrides.appendLog ?? vi.fn(),
+    recordStep: overrides.recordStep ?? vi.fn(),
+    pushState: overrides.pushState ?? vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 beforeEach(() => {
   vi.stubGlobal("chrome", {
     runtime: {
@@ -125,7 +152,6 @@ describe("runtime tool helpers", () => {
   });
 
   it("finalizes a direct answer from conversation evidence when live generation is unavailable", async () => {
-    const tool = getToolDefinition("finalizeDirectAnswer");
     const memory = createMemory({
       goal: "那第二点再展开一下",
       taskType: "direct_answer",
@@ -133,14 +159,14 @@ describe("runtime tool helpers", () => {
         {
           stepId: "compile-task-spec",
           goal: "compile",
-          allowedTools: ["compileTaskSpec"],
+          allowedTools: ["decideRoundAction"],
           successCriteria: [],
           status: "succeeded",
         },
         {
           stepId: "finalize-direct-answer",
           goal: "finalize",
-          allowedTools: ["finalizeDirectAnswer"],
+          allowedTools: ["finalizeTaskResult"],
           successCriteria: [],
           status: "running",
         },
@@ -167,20 +193,9 @@ describe("runtime tool helpers", () => {
       },
     });
 
-    const result = await tool.run({
-      memory,
-      signal: new AbortController().signal,
-      scanPage: vi.fn(),
-      ensureUsableSnapshot: vi.fn(),
-      executeAction: vi.fn(),
-      settleAfterAction: vi.fn(),
-      appendLog: vi.fn(),
-      recordStep: vi.fn(),
-      pushState: vi.fn().mockResolvedValue(undefined),
-    });
+    const result = await finalizeTaskResult(createToolContext(memory), "direct_answer");
 
-    expect(result.stepStatus).toBe("succeeded");
-    expect(result.terminal).toBe(true);
+    expect(result.finalStatus).toBe("partial");
     expect(memory.finalResult?.status).toBe("partial");
     expect(memory.finalResult?.markdown).toContain("当前会话依据");
     expect(memory.finalResult?.markdown).toContain("Playwright 在现代浏览器支持和自动等待上更强");
@@ -189,7 +204,6 @@ describe("runtime tool helpers", () => {
 
 describe("runtime recovery path", () => {
   it("uses scroll recovery inside the commerce collection tool", async () => {
-    const tool = getToolDefinition("collectCommerceCandidates");
     const memory = createMemory({
       taskSpec: {
         taskType: "commerce_search",
@@ -225,21 +239,20 @@ describe("runtime recovery path", () => {
     const settleAfterAction = vi.fn().mockResolvedValue(undefined);
     const scanPage = vi.fn().mockResolvedValue(snapshot);
     const recordStep = vi.fn();
+    const taskSpec = memory.taskSpec as CommerceTaskSpec;
 
-    const result = await tool.run({
-      memory,
-      signal: new AbortController().signal,
-      scanPage,
-      ensureUsableSnapshot: vi.fn().mockResolvedValue(snapshot),
-      executeAction,
-      settleAfterAction,
-      appendLog: vi.fn(),
-      recordStep,
-      pushState: vi.fn().mockResolvedValue(undefined),
-    });
+    const result = await prepareCommerceCandidates(
+      createToolContext(memory, {
+        scanPage,
+        ensureUsableSnapshot: vi.fn().mockResolvedValue(snapshot),
+        executeAction,
+        settleAfterAction,
+        recordStep,
+      }),
+      taskSpec,
+    );
 
     expect(result.status).toBe("partial");
-    expect(result.stepStatus).toBe("succeeded");
     expect(executeAction).toHaveBeenNthCalledWith(2, { type: "SCROLL", direction: "down", amount: 920 }, "Scroll to load more result cards.");
     expect(memory.runtimeMeta.recoveryCount).toBe(1);
     expect(recordStep).toHaveBeenCalledWith(
@@ -252,7 +265,7 @@ describe("runtime recovery path", () => {
 
 describe("search page query matching", () => {
   it("accepts a matching search result page even when the search input is missing", async () => {
-    const tool = getToolDefinition("openSearchResults");
+    const tool = openSearchResultsTool;
     const memory = createMemory({
       taskType: "commerce_search",
       taskSpec: {
@@ -301,7 +314,7 @@ describe("search page query matching", () => {
   });
 
   it("closes a blocking dialog once before continuing", async () => {
-    const tool = getToolDefinition("openSearchResults");
+    const tool = openSearchResultsTool;
     const memory = createMemory({
       taskType: "commerce_search",
       taskSpec: {
@@ -373,7 +386,7 @@ describe("search page query matching", () => {
   });
 
   it("navigates directly to the JD search url when the current page does not match the query", async () => {
-    const tool = getToolDefinition("openSearchResults");
+    const tool = openSearchResultsTool;
     const memory = createMemory({
       taskType: "commerce_search",
       taskSpec: {
@@ -430,7 +443,7 @@ describe("search page query matching", () => {
   });
 
   it("reopens the canonical search page once when the first result page is unexpected", async () => {
-    const tool = getToolDefinition("openSearchResults");
+    const tool = openSearchResultsTool;
     const memory = createMemory({
       taskType: "commerce_search",
       taskSpec: {

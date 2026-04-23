@@ -1,11 +1,10 @@
-import { KNOWN_CATEGORY_KEYWORDS, LIMITS, RESEARCH_INTENT_KEYWORDS } from "../shared/constants";
+﻿import { KNOWN_CATEGORY_KEYWORDS, LIMITS, RESEARCH_INTENT_KEYWORDS } from "../shared/constants";
 import { RuntimeError } from "../shared/errors";
 import type {
   CommerceTaskSpec,
   ConversationTurn,
   DirectAnswerTaskSpec,
   OutputMode,
-  PlanStep,
   PublicResearchTaskSpec,
   SearchPreference,
   SiteOverviewTaskSpec,
@@ -30,12 +29,12 @@ function buildExtractLimit(llmInputLimit: number) {
 }
 
 function extractTopK(goal: string) {
-  const matched = goal.match(/(?:前|TOP|top)\s*(\d{1,2})/);
+  const matched = goal.match(/(?:鍓峾TOP|top)\s*(\d{1,2})/);
   if (matched) {
     return Math.max(1, Number(matched[1]));
   }
 
-  const compareMatched = goal.match(/对比\s*(\d{1,2})\s*个/);
+  const compareMatched = goal.match(/compare\s*(\d{1,2})/i);
   if (compareMatched) {
     return Math.max(1, Number(compareMatched[1]));
   }
@@ -44,7 +43,7 @@ function extractTopK(goal: string) {
 }
 
 function hasBudgetSignal(goal: string) {
-  return /\d+\s*(元|块|人民币|rmb)/i.test(goal) || /预算|价位|多少钱/.test(goal);
+  return /\d+\s*(yuan|rmb)/i.test(goal) || /预算|价位|多少钱/i.test(goal);
 }
 
 function hasCommerceCategory(goal: string) {
@@ -57,7 +56,7 @@ function hasResearchSignal(goal: string) {
 }
 
 function extractExplicitUrl(goal: string) {
-  const matched = goal.match(/https?:\/\/[^\s"'，。！？、；：)）]+/i);
+  const matched = goal.match(/https?:\/\/[^\s\"'，。！？、】【；：）]+/i);
   if (!matched) {
     return undefined;
   }
@@ -74,11 +73,11 @@ function hasSiteOverviewSignal(goal: string) {
     return true;
   }
 
-  return /官网|官方网站|官方站点|站点|网站|这个站|这个网站|该站点|该网站|site overview|website overview/i.test(goal);
+  return /官网|官方网站|官方站点|站点|网站|site overview|website overview|official website|official site|website|site/i.test(goal);
 }
 
 function hasMultiSourceSignal(goal: string) {
-  return /口碑|评价|评测|新闻|报道|竞品|对比|市场|观点|是否靠谱|靠谱吗|争议|舆情|用户反馈|第三方|媒体|news|review|compare|competitor/i.test(goal);
+  return /口碑|评价|评测|新闻|报道|竞品|对比|市场|观点|靠谱吗|争议|舆情|用户反馈|第三方|news|review|compare|competitor/i.test(goal);
 }
 
 function hasCompanyInfoSignal(goal: string) {
@@ -86,9 +85,7 @@ function hasCompanyInfoSignal(goal: string) {
 }
 
 function hasFreshnessSignal(goal: string) {
-  return /今天|今日|昨天|明天|现在|当前|目前|最近|最新|实时|本周|本月|今年|刚刚|现任|股价|价格|汇率|天气|比分|新闻|CEO|ceo|president/i.test(
-    goal,
-  );
+  return /今天|今日|昨天|明天|现在|当前|目前|最近|最新|实时|本周|本月|今年|刚刚|现任|股价|价格|汇率|天气|比分|新闻|CEO|ceo|president/i.test(goal);
 }
 
 function hasFollowUpSignal(goal: string) {
@@ -100,7 +97,7 @@ function hasConversationEvidence(turns: ConversationTurn[] | undefined) {
 }
 
 function hasStableKnowledgeSignal(goal: string) {
-  return /是什么|什么意思|解释一下|解释下|讲讲|介绍一下|原理|概念|作用|区别|怎么理解|为何|为什么/.test(goal);
+  return /是什么|什么意思|解释一下|解释一个|讲讲|介绍一下|原理|概念|作用|区别|怎么理解|为何|为什么/i.test(goal);
 }
 
 function resolveCurrentTimeIso(currentTimeIso?: string) {
@@ -113,8 +110,8 @@ function resolveTimezone(timezone?: string) {
 
 function buildFallbackResearchQuery(goal: string) {
   const normalized = goal
-    .replace(/[，。！？、；：]/g, " ")
-    .replace(/(?:进入前|前)\s*\d+\s*个?页面?/g, " ")
+    .replace(/[，。！？、】【；：]/g, " ")
+    .replace(/(?:进入前?\s*\d+\s*个?页面?)/g, " ")
     .replace(/帮我|请|麻烦你|我想了解|我想知道|给我/g, " ")
     .replace(/调研一下|研究一下|总结一下|查一下|介绍一下|解释一下/g, " ")
     .replace(/\s+/g, " ")
@@ -163,7 +160,7 @@ export function detectTaskTypeWithContext(
     return "public_research";
   }
 
-  if (hasBudgetSignal(goal) || hasCommerceCategory(goal) || /买|推荐|选购|商品|下单/.test(goal)) {
+  if (hasBudgetSignal(goal) || hasCommerceCategory(goal) || /涔皘鎺ㄨ崘|閫夎喘|鍟嗗搧|涓嬪崟/.test(goal)) {
     return "commerce_search";
   }
 
@@ -231,137 +228,6 @@ export async function detectTaskTypeWithLiteModel(
   };
 }
 
-export function buildPlanSteps(taskType: TaskType): PlanStep[] {
-  if (taskType === "direct_answer") {
-    return [
-      {
-        stepId: "compile-task-spec",
-        goal: "判断当前问题是否可以直接回答并整理上下文",
-        allowedTools: ["compileTaskSpec"],
-        successCriteria: ["确定 direct_answer 路由", "整理当前时间和历史对话证据"],
-        status: "pending",
-      },
-      {
-        stepId: "finalize-direct-answer",
-        goal: "直接生成最终回答",
-        allowedTools: ["finalizeDirectAnswer"],
-        successCriteria: ["输出结构化最终结果"],
-        status: "pending",
-      },
-    ];
-  }
-
-  if (taskType === "commerce_search") {
-    return [
-      {
-        stepId: "compile-task-spec",
-        goal: "识别购物目标并生成京东搜索词",
-        allowedTools: ["compileTaskSpec"],
-        successCriteria: ["得到稳定搜索词", "确定候选数量和提取限制"],
-        status: "pending",
-      },
-      {
-        stepId: "open-search-results",
-        goal: "打开京东搜索结果页",
-        allowedTools: ["openSearchResults"],
-        successCriteria: ["当前页面进入京东搜索结果页"],
-        status: "pending",
-      },
-      {
-        stepId: "collect-commerce-candidates",
-        goal: "提取、过滤并收集商品候选",
-        allowedTools: ["collectCommerceCandidates"],
-        successCriteria: ["保留至少一个可用商品候选"],
-        status: "pending",
-      },
-      {
-        stepId: "finalize-commerce-result",
-        goal: "统一汇总最终推荐结果",
-        allowedTools: ["finalizeCommerceResult"],
-        successCriteria: ["输出结构化最终结果"],
-        status: "pending",
-      },
-    ];
-  }
-
-  if (taskType === "site_overview") {
-    return [
-      {
-        stepId: "compile-task-spec",
-        goal: "识别单站概况目标并整理站点入口信息",
-        allowedTools: ["compileTaskSpec"],
-        successCriteria: ["确定 site_overview 路由", "确定入口模式和读取预算"],
-        status: "pending",
-      },
-      {
-        stepId: "resolve-entry-point",
-        goal: "解析并打开可信站点入口",
-        allowedTools: ["resolveEntryPoint"],
-        successCriteria: ["进入可信主页或确认入口受阻"],
-        status: "pending",
-      },
-      {
-        stepId: "collect-research-candidates",
-        goal: "从主页导航中筛选高价值次页候选",
-        allowedTools: ["collectResearchCandidates"],
-        successCriteria: ["得到主页和一跳高价值候选列表"],
-        status: "pending",
-      },
-      {
-        stepId: "read-research-source-facts",
-        goal: "读取主页与高价值次页正文",
-        allowedTools: ["readResearchSourceFacts"],
-        successCriteria: ["读到主页与目标数量次页，或确认候选耗尽"],
-        status: "pending",
-      },
-      {
-        stepId: "finalize-research-result",
-        goal: "统一汇总站点概况和覆盖边界",
-        allowedTools: ["finalizeResearchResult"],
-        successCriteria: ["输出站点概况、来源和未覆盖区域"],
-        status: "pending",
-      },
-    ];
-  }
-
-  return [
-    {
-      stepId: "compile-task-spec",
-      goal: "识别调研目标并生成 Google 查询词",
-      allowedTools: ["compileTaskSpec"],
-      successCriteria: ["得到稳定查询词", "确定候选来源数量"],
-      status: "pending",
-    },
-    {
-      stepId: "open-search-results",
-      goal: "打开 Google 搜索结果页",
-      allowedTools: ["openSearchResults"],
-      successCriteria: ["进入 Google 第一页搜索结果"],
-      status: "pending",
-    },
-    {
-      stepId: "collect-research-candidates",
-      goal: "提取并筛选来源候选",
-      allowedTools: ["collectResearchCandidates"],
-      successCriteria: ["得到可读取的来源候选列表"],
-      status: "pending",
-    },
-    {
-      stepId: "read-research-source-facts",
-      goal: "串行读取来源页并提取事实",
-      allowedTools: ["readResearchSourceFacts"],
-      successCriteria: ["得到目标来源数或确认候选耗尽"],
-      status: "pending",
-    },
-    {
-      stepId: "finalize-research-result",
-      goal: "统一汇总调研输出",
-      allowedTools: ["finalizeResearchResult"],
-      successCriteria: ["输出结论、来源概览和未解决问题"],
-      status: "pending",
-    },
-  ];
-}
 
 function normalizeDomainFromUrl(url: string | undefined) {
   if (!url) {
@@ -376,10 +242,10 @@ function normalizeDomainFromUrl(url: string | undefined) {
 }
 
 function extractSiteName(goal: string) {
-  const withoutUrl = goal.replace(/https?:\/\/[^\s"'，。！？、；：)）]+/gi, " ");
+  const withoutUrl = goal.replace(/https?:\/\/[^\s\"'，。！？、】【；：）]+/gi, " ");
   const normalizedGoal = withoutUrl.replace(/^\s*(?:帮我|请|麻烦你)?\s*(?:看一下|了解一下|介绍一下|调研一下|研究一下)?\s*/u, "");
   const matched =
-    normalizedGoal.match(/([A-Za-z0-9\u4e00-\u9fff][A-Za-z0-9\u4e00-\u9fff ._-]{1,40}?)\s*(?:的)?(?:官网|官方网站|官方站点|站点|网站|official website|official site|website|site|产品|平台|功能|文档|价格|pricing|docs|product|products|platform)/i) ??
+    normalizedGoal.match(/([A-Za-z0-9\u4e00-\u9fff][A-Za-z0-9\u4e00-\u9fff ._-]{1,40}?)\s*(?:的\s*)?(?:官网|官方网站|官方站点|站点|网站|official website|official site|website|site|产品|平台|功能|文档|价格|pricing|docs|product|products|platform)/i) ??
     normalizedGoal.match(/([A-Za-z0-9\u4e00-\u9fff][A-Za-z0-9\u4e00-\u9fff ._-]{1,40})/);
   return matched?.[1]?.trim().replace(/\s+/g, " ");
 }
@@ -403,7 +269,7 @@ export function compileSiteOverviewTask(goal: string): SiteOverviewTaskSpec {
     pageReadLimit: 5,
     maxLinkDepth: 1,
     minReadableTextLength: LIMITS.PAGE_TEXT_MIN_LENGTH,
-    notes: [entryUrl ? "用户提供明确 URL，优先直达站点入口" : "用户未提供 URL，需有界解析官网入口"],
+    notes: [entryUrl ? "用户提供了明确 URL，优先直达站点入口" : "用户未提供 URL，需要先解析官网入口"],
   };
 }
 
@@ -460,7 +326,7 @@ export async function compileCommerceTask(
     extractLimit,
     searchQuery,
     querySource: "llm-lite",
-    notes: [refined?.reason ?? "小模型生成搜索词"],
+    notes: [refined?.reason ?? "灏忔ā鍨嬬敓鎴愭悳绱㈣瘝"],
   };
 }
 
@@ -500,13 +366,13 @@ export async function compilePublicResearchTask(
       outputMode: detectOutputMode(goal),
       searchQuery,
       querySource: "llm-lite",
-      notes: [refined?.reason ?? "小模型生成 Google 查询词"],
+      notes: [refined?.reason ?? "lite model generated the Google query"],
       searchEngine: "google",
       candidateLimit: 5,
       sourceTargetCount: 3,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "小模型生成查询词失败";
+    const message = error instanceof Error ? error.message : "灏忔ā鍨嬬敓鎴愭煡璇㈣瘝澶辫触";
     return {
       taskType: "public_research",
       originalGoal: goal,
@@ -538,7 +404,6 @@ export async function compileTaskSpec(
 ): Promise<{
   taskType: TaskType;
   taskSpec: TaskSpec;
-  plan: PlanStep[];
 }> {
   const taskType =
     options.taskType ??
@@ -561,7 +426,6 @@ export async function compileTaskSpec(
     return {
       taskType,
       taskSpec,
-      plan: buildPlanSteps(taskType),
     };
   }
 
@@ -572,7 +436,6 @@ export async function compileTaskSpec(
     return {
       taskType,
       taskSpec,
-      plan: buildPlanSteps(taskType),
     };
   }
 
@@ -581,7 +444,6 @@ export async function compileTaskSpec(
     return {
       taskType,
       taskSpec,
-      plan: buildPlanSteps(taskType),
     };
   }
 
@@ -591,6 +453,5 @@ export async function compileTaskSpec(
   return {
     taskType,
     taskSpec,
-    plan: buildPlanSteps(taskType),
   };
 }

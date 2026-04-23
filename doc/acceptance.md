@@ -191,3 +191,12 @@ Current snapshot note:
 | L6 | provider live request 可用 | 配置 key 后验证 | NOT_RUN | Gemini / DeepSeek 均待联调 |
 
 Updated: 2026-04-20
+
+## 2026-04-22 Checkpoint - Chain Unification
+
+- Active code path no longer uses the legacy runtime loop or old tool chooser.
+- Current acceptance for the new chain now assumes Browser Core V2 adapters are the bridge for finalization and candidate preparation.
+- Validation green at this checkpoint:
+  - `npm test -- tests/query-compiler.test.ts tests/runtime.test.ts tests/browser-core-v2/runtime-v2-loop.test.ts tests/llm-client.test.ts tests/public-research.test.ts tests/site-overview.test.ts tests/runtime-bootstrap.test.ts tests/sidepanel.test.ts tests/research-search-quality.test.ts tests/runtime-tools.test.ts`
+  - `npm run build`
+  - `npx tsc --noEmit`

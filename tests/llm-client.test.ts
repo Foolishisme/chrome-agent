@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildGeminiRequestBody,
   buildOpenAiCompatibleRequestBody,
-  chooseNextTool,
   decideRoundAction,
   extractOpenAiCompatibleJsonText,
   extractFirstJsonBlock,
@@ -72,25 +71,6 @@ describe("llm client helpers", () => {
     });
 
     expect(text).toBe('{"ok":true}');
-  });
-
-  it("falls back to the first allowed tool when tool selection cannot call the model", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network unavailable")));
-
-    const result = await chooseNextTool({
-      goal: "Research the difference between Playwright and Selenium",
-      taskType: "public_research",
-      currentStep: {
-        stepId: "open-search-results",
-        goal: "Open the Google search results page.",
-        allowedTools: ["openSearchResults", "collectResearchCandidates"],
-        successCriteria: ["The search results page is open."],
-        status: "running",
-      },
-    });
-
-    expect(result.toolName).toBe("openSearchResults");
-    expect(result.source).toBe("rule");
   });
 
   it("falls back to a rule-based round decision when the model is unavailable", async () => {

@@ -164,3 +164,14 @@
   - `replan` only patches the current task type; it does not freely rewrite the task into another task family.
   - The first implementation keeps `maxRounds = 2`.
 - Follow-up: If this stabilizes in real-browser use, the next step is to lift round planning itself into an explicit bounded `RoundPlanSchema` instead of keeping the first round executor-fixed.
+## 2026-04-22 - Chain unification by adapters instead of legacy tool shells
+
+- Question: After Browser Core V2 became the default runtime path, should legacy finalizers and candidate filters stay as standalone `background/tools/*` runtime-facing pieces, or be absorbed into the new chain boundary.
+- Decision: Absorb the five legacy pieces into two Browser Core V2 adapter modules beside the new runner: `finalize-task-result` and `prepare-task-candidates`.
+- Why: The remaining gap was no longer "new runtime vs old runtime", but "new runtime still depending on legacy-shaped tool shells". Collapsing them into two adapter modules makes the active path easier to understand and clears the way for a later generic `RoundPlanSchema` runner.
+- Scope:
+  - remove the legacy runtime loop and old chooser path from active code
+  - route direct/research/commerce final synthesis through `finalizeTaskResult`
+  - route research/site/commercial candidate preparation through `prepare-task-candidates`
+  - keep legacy open-search and some helper files only where the new chain still needs them as internal helpers
+- Revisit Trigger: once the generic round runner lands, re-evaluate whether the remaining legacy helper files should move into a dedicated `legacy/` or Browser Core V2 adapter folder, or be deleted entirely.

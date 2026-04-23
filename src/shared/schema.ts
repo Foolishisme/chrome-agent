@@ -124,21 +124,6 @@ export const taskRouteSchema = z.object({
   decisionSignals: z.array(z.string().min(1)).default([]),
 });
 
-export const nextToolSelectionSchema = z.object({
-  toolName: z.union([
-    z.literal("compileTaskSpec"),
-    z.literal("finalizeDirectAnswer"),
-    z.literal("resolveEntryPoint"),
-    z.literal("openSearchResults"),
-    z.literal("collectCommerceCandidates"),
-    z.literal("collectResearchCandidates"),
-    z.literal("readResearchSourceFacts"),
-    z.literal("finalizeCommerceResult"),
-    z.literal("finalizeResearchResult"),
-  ]),
-  reason: z.string().min(1),
-});
-
 export const researchCandidateReorderSchema = z.object({
   orderedIndexes: z.array(z.number().int().nonnegative()),
   reason: z.string().min(1).optional(),

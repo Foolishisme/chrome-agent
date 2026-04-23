@@ -3,7 +3,7 @@ import {
   actionResultSchema,
   agentActionSchema,
   finalResultSynthesisSchema,
-  nextToolSelectionSchema,
+  roundDecisionSchema,
   sourceFactCardSchema,
   taskRouteSchema,
 } from "../src/shared/schema";
@@ -26,25 +26,29 @@ describe("schema contracts", () => {
     expect(parsed.type).toBe("RECOVER_CLOSE_DIALOG");
   });
 
-  it("accepts a canonical next-tool selection", () => {
-    const parsed = nextToolSelectionSchema.parse({
-      toolName: "readResearchSourceFacts",
-      reason: "The current step allows reading candidate sources.",
+  it("accepts a round-end finalize decision", () => {
+    const parsed = roundDecisionSchema.parse({
+      decision: "finalize",
+      reason: "Current evidence is already enough.",
     });
 
-    expect(parsed.toolName).toBe("readResearchSourceFacts");
+    expect(parsed.decision).toBe("finalize");
   });
 
-  it("accepts the direct-answer finalization tool", () => {
-    const parsed = nextToolSelectionSchema.parse({
-      toolName: "finalizeDirectAnswer",
-      reason: "The task has enough context and only needs a direct final answer.",
+  it("accepts a replan decision with a minimal patch", () => {
+    const parsed = roundDecisionSchema.parse({
+      decision: "replan",
+      reason: "Need another round.",
+      taskSpecPatch: {
+        searchQuery: "OpenAI pricing official",
+        candidateLimit: 5,
+      },
     });
 
-    expect(parsed.toolName).toBe("finalizeDirectAnswer");
+    expect(parsed.taskSpecPatch?.searchQuery).toBe("OpenAI pricing official");
   });
 
-  it("accepts the site overview route and entry resolver tool", () => {
+  it("accepts the site overview route", () => {
     expect(taskRouteSchema.parse({
       taskType: "site_overview",
       confidence: 0.82,
@@ -56,13 +60,6 @@ describe("schema contracts", () => {
       taskType: "direct_answer",
       reason: "The user asked for stable knowledge.",
     }).decisionSignals).toEqual([]);
-
-    const parsed = nextToolSelectionSchema.parse({
-      toolName: "resolveEntryPoint",
-      reason: "The current step resolves the site entry point.",
-    });
-
-    expect(parsed.toolName).toBe("resolveEntryPoint");
   });
 
   it("accepts the final-result synthesis payload", () => {

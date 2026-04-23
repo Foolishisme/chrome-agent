@@ -173,3 +173,20 @@
   - `npx tsc --noEmit` still fails, but remaining errors are in pre-existing unrelated files/tests: `read-research-source-facts.ts`, `session-archive.test.ts`, and `sidepanel.test.ts`.
 - Result: The main runtime path now supports a simple bounded two-round loop for non-direct tasks without adding per-tool special-case replanning code.
 - Risk: Replan currently patches only the existing task type and still depends on coarse task executors; it is not yet a fully generic `RoundPlanSchema` runner.
+## 2026-04-22 - Chain unification cleanup
+
+- Action: Removed the inactive legacy runtime execution path, collapsed five legacy finalizer/filter pieces into two Browser Core V2 adapter modules, and rewired the active runner/tests around the new adapter surface.
+- Changed:
+  - Added `src/browser-core-v2/background/adapters/finalize-task-result.ts` and `src/browser-core-v2/background/adapters/prepare-task-candidates.ts`, plus adapter exports.
+  - Updated Browser Core V2 task executors and display-plan wiring to use `prepareTaskCandidates` and `finalizeTaskResult` instead of legacy tool shells.
+  - Removed inactive legacy execution pieces: `src/background/runtime/loop.ts`, `src/background/tools/registry.ts`, `src/background/tools/compile-task-spec.ts`, `src/background/tools/collect-commerce-candidates.ts`, `src/background/tools/finalize-*.ts`.
+  - Removed the old chooser path from `llm-client.ts`, `prompting.ts`, and shared schema/type literals.
+  - Reworked affected tests to validate the adapter path instead of the old runtime/tool-registry path.
+- Validation:
+  - `npm test -- tests/query-compiler.test.ts tests/runtime.test.ts tests/browser-core-v2/runtime-v2-loop.test.ts tests/llm-client.test.ts tests/public-research.test.ts tests/site-overview.test.ts tests/runtime-bootstrap.test.ts tests/sidepanel.test.ts tests/research-search-quality.test.ts tests/runtime-tools.test.ts`
+  - `npm run build`
+  - `npx tsc --noEmit`
+- Result: The active chain now runs through Browser Core V2 adapters and no longer depends on the old runtime loop or legacy chooser path; build and typecheck are green again.
+- Risk:
+  - `skill.commerceResearch` still relies on a legacy helper through the current delegate path.
+  - The runner is still task-family-specific and has not yet been lifted into a fully generic `RoundPlanSchema` runner.

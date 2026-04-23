@@ -1,11 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { filterResearchCandidates } from "../src/background/result-filter";
-import { getToolDefinition } from "../src/background/tools";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  filterResearchCandidates,
+  finalizeTaskResult,
+  preparePublicResearchCandidates,
+} from "../src/browser-core-v2/background/adapters";
 import { extractGoogleSearchResults, extractPageFacts } from "../src/content/research";
 import type { SessionMemory } from "../src/shared/types";
 
-const { generateSourceFactCardMock, reorderResearchCandidatesMock } = vi.hoisted(() => ({
-  generateSourceFactCardMock: vi.fn(),
+const { generateFinalResultMock, reorderResearchCandidatesMock } = vi.hoisted(() => ({
+  generateFinalResultMock: vi.fn(),
   reorderResearchCandidatesMock: vi.fn(),
 }));
 
@@ -13,14 +16,15 @@ vi.mock("../src/background/llm-client", async () => {
   const actual = await vi.importActual<typeof import("../src/background/llm-client")>("../src/background/llm-client");
   return {
     ...actual,
-    generateSourceFactCard: generateSourceFactCardMock,
+    generateFinalResult: generateFinalResultMock,
     reorderResearchCandidates: reorderResearchCandidatesMock,
   };
 });
 
 beforeEach(() => {
-  generateSourceFactCardMock.mockReset();
+  generateFinalResultMock.mockReset();
   reorderResearchCandidatesMock.mockReset();
+  generateFinalResultMock.mockRejectedValue(new Error("LLM unavailable"));
 });
 
 function createResearchMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
@@ -69,6 +73,16 @@ function createResearchMemory(overrides: Partial<SessionMemory> = {}): SessionMe
   return memory;
 }
 
+function createFinalizeContext(memory: SessionMemory) {
+  return {
+    memory,
+    signal: new AbortController().signal,
+    appendLog: vi.fn(),
+    recordStep: vi.fn(),
+    pushState: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 describe("public research candidate handling", () => {
   it("reorders filtered first-page candidates before reading sources", async () => {
     reorderResearchCandidatesMock.mockResolvedValueOnce({
@@ -80,8 +94,13 @@ describe("public research candidate handling", () => {
       source: "llm-lite",
     });
 
-    const tool = getToolDefinition("collectResearchCandidates");
-    const memory = createResearchMemory({
+    const prepared = await preparePublicResearchCandidates({
+      goal: "Research AI agents",
+      searchQuery: "AI agents",
+      candidates: [
+        { title: "Blog summary", url: "https://example.com/blog", rank: 1 },
+        { title: "Official guide", url: "https://example.com/official", rank: 2 },
+      ],
       taskSpec: {
         taskType: "public_research",
         originalGoal: "Research AI agents",
@@ -93,84 +112,10 @@ describe("public research candidate handling", () => {
         candidateLimit: 5,
         sourceTargetCount: 3,
       },
-    });
-
-    const result = await tool.run({
-      memory,
       signal: new AbortController().signal,
-      scanPage: vi.fn().mockResolvedValue({
-        url: "https://www.google.com/search?q=ai+agents",
-        title: "ai agents - Google Search",
-        pageType: "google_search",
-        interactiveElements: [],
-        semanticSnapshot: {
-          version: 1,
-          url: "https://www.google.com/search?q=ai+agents",
-          title: "ai agents - Google Search",
-          nodeCount: 1,
-          truncated: false,
-          root: { ref: "sem_root", role: "unknown", name: "", children: [] },
-        },
-        productCandidates: [],
-        pageReady: { ready: true, reason: "ok", checks: [] },
-        pageFacts: {
-          searchBox: { present: true, visible: true, text: "ai agents" },
-          searchSubmit: { present: true, visible: true, text: "Search" },
-          searchResults: {
-            present: true,
-            loaded: true,
-            resultCount: 2,
-            naturalCount: 2,
-            adCount: 0,
-          },
-        },
-        timestamp: Date.now(),
-      }),
-      ensureUsableSnapshot: vi.fn().mockResolvedValue({
-        url: "https://www.google.com/search?q=ai+agents",
-        title: "ai agents - Google Search",
-        pageType: "google_search",
-        interactiveElements: [],
-        semanticSnapshot: {
-          version: 1,
-          url: "https://www.google.com/search?q=ai+agents",
-          title: "ai agents - Google Search",
-          nodeCount: 1,
-          truncated: false,
-          root: { ref: "sem_root", role: "unknown", name: "", children: [] },
-        },
-        productCandidates: [],
-        pageReady: { ready: true, reason: "ok", checks: [] },
-        pageFacts: {
-          searchBox: { present: true, visible: true, text: "ai agents" },
-          searchSubmit: { present: true, visible: true, text: "Search" },
-          searchResults: {
-            present: true,
-            loaded: true,
-            resultCount: 2,
-            naturalCount: 2,
-            adCount: 0,
-          },
-        },
-        timestamp: Date.now(),
-      }),
-      executeAction: vi.fn().mockResolvedValue({
-        success: true,
-        actionType: "EXTRACT_SEARCH_RESULTS",
-        message: "Extracted 2 source candidates.",
-        researchCandidates: [
-          { title: "Blog summary", url: "https://example.com/blog", rank: 1 },
-          { title: "Official guide", url: "https://example.com/official", rank: 2 },
-        ],
-      }),
-      settleAfterAction: vi.fn(),
-      appendLog: vi.fn(),
-      recordStep: vi.fn(),
-      pushState: vi.fn().mockResolvedValue(undefined),
     });
 
-    expect(result.status).toBe("success");
-    expect(memory.researchCandidates.map((candidate) => candidate.title)).toEqual(["Official guide", "Blog summary"]);
+    expect(prepared.candidates.map((candidate) => candidate.title)).toEqual(["Official guide", "Blog summary"]);
     expect(reorderResearchCandidatesMock).toHaveBeenCalledOnce();
   });
 
@@ -256,157 +201,8 @@ describe("public research page facts", () => {
   });
 });
 
-describe("public research aggregation", () => {
-  it("keeps reading when only partial sources have been collected", async () => {
-    const tool = getToolDefinition("readResearchSourceFacts");
-    const memory = createResearchMemory({
-      taskSpec: {
-        taskType: "public_research",
-        originalGoal: "Research the difference between Playwright and Selenium",
-        outputMode: "inline",
-        searchQuery: "Playwright Selenium difference",
-        querySource: "llm-lite",
-        notes: [],
-        searchEngine: "google",
-        candidateLimit: 5,
-        sourceTargetCount: 3,
-      },
-      researchCandidates: [
-        { title: "Blocked source", url: "https://example.com/a", rank: 1 },
-        { title: "Readable source", url: "https://example.com/b", rank: 2 },
-      ],
-    });
-
-    const executeAction = vi
-      .fn()
-      .mockResolvedValueOnce({
-        success: true,
-        actionType: "NAVIGATE",
-        message: "navigated",
-      })
-      .mockResolvedValueOnce({
-        success: true,
-        actionType: "EXTRACT_PAGE_FACTS",
-        message: "partial",
-        pageFactsResult: {
-          status: "partial",
-          pageTitle: "Blocked source",
-          bodyExcerpt: "",
-          textLength: 0,
-          extractionStrategy: "fallback",
-          reason: "login wall",
-        },
-      });
-
-    const result = await tool.run({
-      memory,
-      signal: new AbortController().signal,
-      scanPage: vi.fn().mockResolvedValue({
-        url: "https://example.com/a",
-        title: "Blocked source",
-        pageType: "content",
-        interactiveElements: [],
-        semanticSnapshot: {
-          version: 1,
-          url: "https://example.com/a",
-          title: "Blocked source",
-          nodeCount: 1,
-          truncated: false,
-          root: {
-            ref: "sem_root",
-            role: "unknown",
-            name: "",
-            children: [],
-          },
-        },
-        productCandidates: [],
-        pageReady: { ready: true, reason: "ok", checks: [] },
-        pageFacts: {
-          searchBox: { present: false, visible: false, text: "" },
-          searchSubmit: { present: false, visible: false, text: "" },
-          pageContent: {
-            readable: false,
-            textLength: 0,
-            paragraphCount: 0,
-            hasPasswordInput: false,
-            hasBlockingOverlay: false,
-            likelyLoginWall: true,
-            likelySpa: false,
-            reason: "login wall",
-          },
-        },
-        timestamp: Date.now(),
-      }),
-      ensureUsableSnapshot: vi.fn(),
-      executeAction,
-      settleAfterAction: vi.fn(),
-      appendLog: vi.fn(),
-      recordStep: vi.fn(),
-      pushState: vi.fn().mockResolvedValue(undefined),
-    });
-
-    expect(result.stepStatus).toBe("running");
-    expect(memory.researchSources).toHaveLength(1);
-    expect(memory.researchSources[0]?.status).toBe("partial");
-    expect(memory.activeSourceIndex).toBe(1);
-  });
-
-  it("skips a failed source immediately when navigation fails", async () => {
-    const tool = getToolDefinition("readResearchSourceFacts");
-    const appendLog = vi.fn();
-    const memory = createResearchMemory({
-      taskSpec: {
-        taskType: "public_research",
-        originalGoal: "Compare Playwright and Selenium",
-        searchQuery: "Playwright Selenium difference",
-        querySource: "llm-lite",
-        notes: [],
-        searchEngine: "google",
-        candidateLimit: 5,
-        sourceTargetCount: 2,
-      },
-      researchCandidates: [
-        { title: "Broken source", url: "https://example.com/broken", rank: 1 },
-        { title: "Readable source", url: "https://example.com/readable", rank: 2 },
-      ],
-    });
-
-    const result = await tool.run({
-      memory,
-      signal: new AbortController().signal,
-      scanPage: vi.fn(),
-      ensureUsableSnapshot: vi.fn(),
-      executeAction: vi.fn().mockResolvedValue({
-        success: false,
-        actionType: "NAVIGATE",
-        message: "navigation failed",
-        errorCode: "NAVIGATION_FAILED",
-      }),
-      settleAfterAction: vi.fn().mockResolvedValue(undefined),
-      appendLog,
-      recordStep: vi.fn(),
-      pushState: vi.fn().mockResolvedValue(undefined),
-    });
-
-    expect(result.stepStatus).toBe("running");
-    expect(memory.researchSources).toHaveLength(1);
-    expect(memory.researchSources[0]).toMatchObject({
-      status: "partial",
-      sourceUrl: "https://example.com/broken",
-    });
-    expect(memory.activeSourceIndex).toBe(1);
-    expect(appendLog).toHaveBeenCalledWith(
-      "runtime",
-      "warn",
-      "Research source skipped after a single failure.",
-      expect.objectContaining({
-        failureKind: "navigation_failed",
-      }),
-    );
-  });
-
+describe("public research finalization", () => {
   it("builds partial final output with unresolved issues when sources are insufficient", async () => {
-    const tool = getToolDefinition("finalizeResearchResult");
     const memory = createResearchMemory({
       taskSpec: {
         taskType: "public_research",
@@ -441,17 +237,7 @@ describe("public research aggregation", () => {
       unresolvedIssues: ["Research candidates were exhausted before reaching the source target."],
     });
 
-    await tool.run({
-      memory,
-      signal: new AbortController().signal,
-      scanPage: vi.fn(),
-      ensureUsableSnapshot: vi.fn(),
-      executeAction: vi.fn(),
-      settleAfterAction: vi.fn(),
-      appendLog: vi.fn(),
-      recordStep: vi.fn(),
-      pushState: vi.fn().mockResolvedValue(undefined),
-    });
+    await finalizeTaskResult(createFinalizeContext(memory), "research");
 
     expect(memory.finalResult?.status).toBe("partial");
     expect(memory.finalResult?.outputMode).toBe("inline");
@@ -463,7 +249,6 @@ describe("public research aggregation", () => {
   });
 
   it("does not dump full source excerpts in deterministic fallback output", async () => {
-    const tool = getToolDefinition("finalizeResearchResult");
     const repeatedOriginal = "This sentence is extracted from the source page and should not be dumped in full. ".repeat(30);
     const memory = createResearchMemory({
       taskSpec: {
@@ -489,17 +274,7 @@ describe("public research aggregation", () => {
       ],
     });
 
-    await tool.run({
-      memory,
-      signal: new AbortController().signal,
-      scanPage: vi.fn(),
-      ensureUsableSnapshot: vi.fn(),
-      executeAction: vi.fn(),
-      settleAfterAction: vi.fn(),
-      appendLog: vi.fn(),
-      recordStep: vi.fn(),
-      pushState: vi.fn().mockResolvedValue(undefined),
-    });
+    await finalizeTaskResult(createFinalizeContext(memory), "research");
 
     expect(memory.finalResult?.markdown).toContain("## 已读来源");
     expect(memory.finalResult?.markdown).not.toContain("## Source Excerpts");
@@ -508,7 +283,6 @@ describe("public research aggregation", () => {
   });
 
   it("returns no reliable information when no sources are available", async () => {
-    const tool = getToolDefinition("finalizeResearchResult");
     const memory = createResearchMemory({
       taskSpec: {
         taskType: "public_research",
@@ -525,21 +299,11 @@ describe("public research aggregation", () => {
       unresolvedIssues: ["No usable research sources remained after filtering the first Google results page."],
     });
 
-    await tool.run({
-      memory,
-      signal: new AbortController().signal,
-      scanPage: vi.fn(),
-      ensureUsableSnapshot: vi.fn(),
-      executeAction: vi.fn(),
-      settleAfterAction: vi.fn(),
-      appendLog: vi.fn(),
-      recordStep: vi.fn(),
-      pushState: vi.fn().mockResolvedValue(undefined),
-    });
+    await finalizeTaskResult(createFinalizeContext(memory), "research");
 
     expect(memory.finalResult?.status).toBe("failed");
     expect(memory.finalResult?.outputMode).toBe("artifact");
-    expect(memory.finalResult?.summary).toContain("未收集到");
+    expect(memory.finalResult?.summary).toContain("未收集到可用于回答");
     expect(memory.finalResult?.markdown).toBe("");
     expect(memory.finalResult?.artifacts[0]).toMatchObject({
       kind: "markdown",

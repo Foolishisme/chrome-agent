@@ -201,7 +201,7 @@ describe("query compiler", () => {
     expect(task.timezone).toBe("Asia/Shanghai");
   });
 
-  it("builds a two-step plan for direct answers", async () => {
+  it("builds a direct-answer task spec without a legacy workflow plan", async () => {
     const compiled = await compileTaskSpec("解释一下事件循环是什么", {
       taskType: "direct_answer",
       currentTimeIso: "2026-04-08T08:00:00.000Z",
@@ -209,22 +209,25 @@ describe("query compiler", () => {
     });
 
     expect(compiled.taskType).toBe("direct_answer");
-    expect(compiled.plan).toHaveLength(2);
-    expect(compiled.plan[1]?.allowedTools).toEqual(["finalizeDirectAnswer"]);
+    expect(compiled.taskSpec).toMatchObject({
+      taskType: "direct_answer",
+      currentTimeIso: "2026-04-08T08:00:00.000Z",
+      timezone: "Asia/Shanghai",
+    });
   });
 
-  it("builds a site overview plan with entry resolution", async () => {
+  it("builds a site overview task spec with entry resolution", async () => {
     const compiled = await compileTaskSpec("OpenAI 的产品有哪些", {
       taskType: "site_overview",
     });
 
     expect(compiled.taskType).toBe("site_overview");
-    expect(compiled.plan.map((step) => step.allowedTools[0])).toEqual([
-      "compileTaskSpec",
-      "resolveEntryPoint",
-      "collectResearchCandidates",
-      "readResearchSourceFacts",
-      "finalizeResearchResult",
-    ]);
+    expect(compiled.taskSpec).toMatchObject({
+      taskType: "site_overview",
+      entryMode: "resolve_official_home",
+      siteName: "OpenAI",
+      candidateLimit: 6,
+      sourceTargetCount: 3,
+    });
   });
 });

@@ -4,23 +4,10 @@ import { RuntimeError } from "../src/shared/errors";
 import type { SessionMemory } from "../src/shared/types";
 import type { ActiveSession } from "../src/background/runtime/shared";
 
-const { chooseNextToolMock } = vi.hoisted(() => ({
-  chooseNextToolMock: vi.fn(),
-}));
-
 const { createInitialSessionMock, runBrowserCoreV2LoopMock } = vi.hoisted(() => ({
   createInitialSessionMock: vi.fn(),
   runBrowserCoreV2LoopMock: vi.fn(),
 }));
-
-vi.mock("../src/background/llm-client", async () => {
-  const actual = await vi.importActual<typeof import("../src/background/llm-client")>("../src/background/llm-client");
-  return {
-    ...actual,
-    chooseNextTool: chooseNextToolMock,
-    classifyTaskType: vi.fn(),
-  };
-});
 
 vi.mock("../src/background/runtime/bootstrap", async () => {
   const actual = await vi.importActual<typeof import("../src/background/runtime/bootstrap")>("../src/background/runtime/bootstrap");
@@ -107,7 +94,6 @@ function createSession(memory: SessionMemory) {
 describe("runtime messaging recovery", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
-    chooseNextToolMock.mockReset();
     createInitialSessionMock.mockReset();
     runBrowserCoreV2LoopMock.mockReset();
   });

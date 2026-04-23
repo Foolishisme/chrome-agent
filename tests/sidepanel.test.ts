@@ -219,8 +219,8 @@ function createStoppedState(): SessionPublicState {
     goal: "Will source reading fail?",
     status: "done",
     currentStep: 2,
-    currentStepId: "filterResearchCandidates",
-    currentTool: "filterResearchCandidates",
+    currentStepId: "prepare-task-candidates",
+    currentTool: "prepareTaskCandidates",
     stepSummary: "Session stopped.",
     plan: [],
     items: [],
@@ -228,7 +228,7 @@ function createStoppedState(): SessionPublicState {
     timeline: [
       {
         step: 2,
-        status: "failed",
+        status: "error",
         stepSummary: "Session stopped.",
         timestamp: Date.now(),
       },

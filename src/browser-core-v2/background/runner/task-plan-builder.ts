@@ -12,14 +12,14 @@ function createPlanStep(stepId: string, goal: string, toolName: ToolName): PlanS
 
 export function buildBrowserCoreV2DisplayPlan(taskSpec: TaskSpec): PlanStep[] {
   if (taskSpec.taskType === "direct_answer") {
-    return [createPlanStep("finalize-direct-answer", "Generate the direct answer.", "finalizeDirectAnswer")];
+    return [createPlanStep("finalize-direct-answer", "Generate the direct answer.", "finalizeTaskResult")];
   }
 
   if (taskSpec.taskType === "commerce_search") {
     return [
       createPlanStep("commerce-research", "Collect shortlisted commerce candidates.", "skill.commerceResearch"),
       createPlanStep("decide-round-action", "Decide whether to finalize or run another round.", "decideRoundAction"),
-      createPlanStep("finalize-commerce-result", "Summarize the commerce shortlist.", "finalizeCommerceResult"),
+      createPlanStep("finalize-commerce-result", "Summarize the commerce shortlist.", "finalizeTaskResult"),
     ];
   }
 
@@ -30,14 +30,15 @@ export function buildBrowserCoreV2DisplayPlan(taskSpec: TaskSpec): PlanStep[] {
     }
     steps.push(createPlanStep("browser-site-overview", "Read the site entry and same-site key pages.", "browser.siteOverview"));
     steps.push(createPlanStep("decide-round-action", "Decide whether to finalize or run another round.", "decideRoundAction"));
-    steps.push(createPlanStep("finalize-research-result", "Summarize the site overview coverage.", "finalizeResearchResult"));
+    steps.push(createPlanStep("finalize-research-result", "Summarize the site overview coverage.", "finalizeTaskResult"));
     return steps;
   }
 
   return [
     createPlanStep("browser-search", "Collect first-page source candidates.", "browser.search"),
+    createPlanStep("prepare-task-candidates", "Filter and rank the source candidates.", "prepareTaskCandidates"),
     createPlanStep("browser-web-detail", "Read the selected candidate pages.", "browser.webDetail"),
     createPlanStep("decide-round-action", "Decide whether to finalize or run another round.", "decideRoundAction"),
-    createPlanStep("finalize-research-result", "Summarize the research sources.", "finalizeResearchResult"),
+    createPlanStep("finalize-research-result", "Summarize the research sources.", "finalizeTaskResult"),
   ];
 }

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionPublicState } from "../src/shared/types";
 
 const storageState: Record<string, unknown> = {};
@@ -33,6 +33,17 @@ function createStoredState(sessionId: string, goal: string, summary: string): Se
       artifacts: [],
       suggestedNextAction: "",
     },
+  };
+}
+
+function createArchiveInput(state: SessionPublicState, conversationId: string, conversationTitle: string) {
+  return {
+    sessionId: state.sessionId!,
+    goal: state.goal!,
+    finalResult: state.finalResult!,
+    timeline: state.timeline,
+    conversationId,
+    conversationTitle,
   };
 }
 
@@ -92,16 +103,17 @@ describe("session archive", () => {
       updatedAt: Date.now(),
     };
 
-    const conversation = await createConversation("近期黄金");
-    await saveSuccessfulSessionArchive(createStoredState("session-1", "近期黄金", "黄金近期波动上行。"), {
-      conversationId: conversation.conversationId,
-      conversationTitle: conversation.title,
-    });
-    await saveSuccessfulSessionArchive(createStoredState("session-2", "黄金是否与近期战争有关", "战争是避险情绪因素之一。"), {
-      conversationId: conversation.conversationId,
-      conversationTitle: conversation.title,
-    });
-
+    const conversation = await createConversation("Recent gold");
+    await saveSuccessfulSessionArchive(
+      createArchiveInput(createStoredState("session-1", "Recent gold", "Gold moved up recently"), conversation.conversationId, conversation.title),
+    );
+    await saveSuccessfulSessionArchive(
+      createArchiveInput(
+        createStoredState("session-2", "Is gold tied to recent wars?", "War is one of the risk-off factors"),
+        conversation.conversationId,
+        conversation.title,
+      ),
+    );
     const current = await loadConversationBackfillState(emptyFallback);
     expect(current.conversationId).toBe(conversation.conversationId);
     expect(current.conversationTurns).toHaveLength(2);
@@ -109,12 +121,12 @@ describe("session archive", () => {
     expect(current.conversationTurns?.[1]?.turnId).toBe(2);
     expect(current.conversationTurns?.[0]?.timeline).toHaveLength(1);
     expect(current.conversationTurns?.[1]?.timeline?.[0]?.stepSummary).toContain("timeline");
-    expect(current.finalResult?.summary).toBe("战争是避险情绪因素之一。");
+    expect(current.finalResult?.summary).toBe("War is one of the risk-off factors");
 
     const rolledBack = await rollbackConversationState(conversation.conversationId, 1, emptyFallback);
     expect(rolledBack.conversationTurns).toHaveLength(1);
     expect(rolledBack.conversationTurns?.[0]?.turnId).toBe(1);
-    expect(rolledBack.finalResult?.summary).toBe("黄金近期波动上行。");
+    expect(rolledBack.finalResult?.summary).toBe("Gold moved up recently");
 
     const deleted = await deleteConversationState(conversation.conversationId, emptyFallback);
     expect(deleted.conversationId).toBeUndefined();

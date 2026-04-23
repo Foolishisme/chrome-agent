@@ -281,7 +281,7 @@ describe("Browser Core V2 runtime loop", () => {
 
     expect(session.memory.finalResult?.summary).toContain("OpenAI provides products");
     expect(session.memory.researchSources).toHaveLength(2);
-    expect(session.memory.plan.map((step) => step.status)).toEqual(["succeeded", "succeeded", "succeeded", "succeeded"]);
+    expect(session.memory.plan.map((step) => step.status)).toEqual(["succeeded", "succeeded", "succeeded", "succeeded", "succeeded"]);
     expect(driver.calls.map((call) => call.method)).toEqual([
       "openTab",
       "waitForStable",

@@ -2,11 +2,6 @@ import type { BrowserDriver } from "../../../background/browser-capability/types
 import { decideRoundAction, type RoundDecisionResult } from "../../../background/llm-client";
 import { appendLog } from "../../../background/runtime/shared";
 import { ensureTerminalResult } from "../../../background/runtime/public-state";
-import { filterResearchCandidates } from "../../../background/result-filter";
-import { collectCommerceCandidatesTool } from "../../../background/tools/collect-commerce-candidates";
-import { finalizeCommerceResultTool } from "../../../background/tools/finalize-commerce-result";
-import { finalizeDirectAnswerTool } from "../../../background/tools/finalize-direct-answer";
-import { finalizeResearchResultTool } from "../../../background/tools/finalize-research-result";
 import { openSearchResultsTool } from "../../../background/tools/open-search-results";
 import type { AgentToolDefinition, StepOptions } from "../../../background/tools/shared";
 import type {
@@ -35,6 +30,11 @@ import type {
   ToolResult,
 } from "../../../shared/types";
 import type { ActiveSession } from "../../../background/runtime/shared";
+import {
+  finalizeTaskResult,
+  prepareCommerceCandidates,
+  preparePublicResearchCandidates,
+} from "../adapters";
 import { buildBrowserCoreV2DisplayPlan } from "./task-plan-builder";
 
 export interface BrowserCoreRunnerDeps {
@@ -59,6 +59,21 @@ const MAX_RUNTIME_ROUNDS = 2;
 
 function getPlanStep(memory: SessionMemory, stepId: string) {
   return memory.plan.find((step) => step.stepId === stepId);
+}
+
+function createAdapterContext(context: BrowserCoreTaskExecutorContext) {
+  return {
+    memory: context.session.memory,
+    signal: context.session.abortController.signal,
+    scanPage: () => context.deps.scanPage(),
+    ensureUsableSnapshot: () => context.deps.ensureUsableSnapshot(),
+    executeAction: (action: AgentAction, stepSummary: string) => context.deps.executeAction(action, stepSummary),
+    settleAfterAction: (action: AgentAction) => context.deps.settleAfterAction(action),
+    appendLog: (source: "runtime" | "llm" | "content", level: "info" | "warn" | "error", message: string, detail?: unknown) =>
+      appendLog(context.session, source, level, message, detail),
+    recordStep: (options: StepOptions) => context.deps.recordStep(options),
+    pushState: (stepSummary?: string) => context.deps.pushState(stepSummary),
+  };
 }
 
 async function beginPlanStep(
@@ -331,44 +346,11 @@ function toCommerceEvidence(memory: SessionMemory) {
   return evidence;
 }
 
-function mapLegacyToolStatus(result: ToolResult): CommerceResearchToolOutput["status"] {
-  if (result.stepStatus === "blocked") {
-    return "blocked";
-  }
-  if (result.status === "retryable_error" || result.status === "fatal_error") {
-    return "failed";
-  }
-  if (result.status === "partial") {
-    return "partial";
-  }
-  return "success";
-}
-
 async function runLegacyTool(
   context: BrowserCoreTaskExecutorContext,
   tool: AgentToolDefinition,
 ): Promise<ToolResult> {
-  return tool.run({
-    memory: context.session.memory,
-    signal: context.session.abortController.signal,
-    scanPage: () => context.deps.scanPage(),
-    ensureUsableSnapshot: () => context.deps.ensureUsableSnapshot(),
-    executeAction: (action, stepSummary) => context.deps.executeAction(action, stepSummary),
-    settleAfterAction: (action) => context.deps.settleAfterAction(action),
-    appendLog: (source, level, message, detail) => appendLog(context.session, source, level, message, detail),
-    recordStep: (options) => context.deps.recordStep(options),
-    pushState: (stepSummary) => context.deps.pushState(stepSummary),
-  });
-}
-
-async function finalizeAndPublish(context: BrowserCoreTaskExecutorContext, stepId: string, tool: AgentToolDefinition) {
-  await beginPlanStep(context, stepId, tool.name, getPlanStep(context.session.memory, stepId)?.goal ?? tool.name);
-  const result = await runLegacyTool(context, tool);
-  await finishPlanStep(context, stepId, result.stepStatus, result.summary);
-  context.session.memory.runtimeMeta.status = "done";
-  context.session.memory.runtimeMeta.currentTool = undefined;
-  context.session.memory.liveStepSummary = "Final result is ready.";
-  await context.deps.publishState(context.session);
+  return tool.run(createAdapterContext(context));
 }
 
 async function executeSearchStep(
@@ -444,10 +426,7 @@ async function executeWebDetailBatch(context: BrowserCoreTaskExecutorContext, st
     throw new Error("Public research detail execution requires a public research task spec.");
   }
 
-  const filtered = filterResearchCandidates(context.session.memory.researchCandidates, taskSpec.candidateLimit);
-  const candidates = filtered.candidates.slice(0, taskSpec.sourceTargetCount);
-  context.session.memory.researchCandidates = filtered.candidates;
-  context.session.memory.filterDiagnostics = filtered.diagnostics;
+  const candidates = context.session.memory.researchCandidates.slice(0, taskSpec.sourceTargetCount);
 
   await context.ensureBudget();
   await beginPlanStep(context, stepId, "browser.webDetail", getPlanStep(context.session.memory, stepId)?.goal ?? "Read pages");
@@ -491,6 +470,67 @@ async function executeWebDetailBatch(context: BrowserCoreTaskExecutorContext, st
     stepId,
     status,
     sources.length > 0 ? `Read ${sources.length} candidate page(s).` : "No readable candidate pages were collected.",
+  );
+}
+
+async function executePrepareTaskCandidatesStep(context: BrowserCoreTaskExecutorContext, stepId: string) {
+  const taskSpec = context.session.memory.taskSpec;
+  if (!taskSpec || taskSpec.taskType !== "public_research") {
+    throw new Error("Prepare-task-candidates currently requires a public research task spec.");
+  }
+
+  await context.ensureBudget();
+  await beginPlanStep(
+    context,
+    stepId,
+    "prepareTaskCandidates",
+    getPlanStep(context.session.memory, stepId)?.goal ?? "Prepare candidates",
+  );
+
+  const prepared = await preparePublicResearchCandidates({
+    goal: context.session.memory.goal,
+    searchQuery: taskSpec.searchQuery,
+    candidates: context.session.memory.researchCandidates,
+    taskSpec,
+    signal: context.session.abortController.signal,
+  });
+
+  context.session.memory.researchCandidates = prepared.candidates;
+  context.session.memory.filterDiagnostics = prepared.diagnostics;
+  if (prepared.candidates.length === 0) {
+    context.session.memory.unresolvedIssues = dedupeStrings([
+      ...context.session.memory.unresolvedIssues,
+      "No usable research sources remained after filtering the first Google results page.",
+    ]);
+  }
+
+  appendLog(
+    context.session,
+    prepared.source === "llm-lite" ? "llm" : "runtime",
+    prepared.source === "llm-lite" ? "info" : "warn",
+    prepared.source === "llm-lite"
+      ? "Prepared first-page research candidates with the adapter."
+      : "Kept the rule-filtered research candidate order.",
+    {
+      reason: prepared.reason,
+      candidateCount: prepared.candidates.length,
+    },
+  );
+
+  context.deps.recordStep({
+    stepSummary: "Research candidates filtered and reordered.",
+    nextIntent: prepared.candidates.length > 0 ? "Read the selected source pages." : "Stop after the current round.",
+    expectedOutcome: "A ranked source list is available.",
+    snapshotSummary: JSON.stringify(prepared.diagnostics),
+  });
+
+  await finishPlanStep(
+    context,
+    stepId,
+    prepared.candidates.length > 0 ? "succeeded" : "failed",
+    prepared.candidates.length > 0
+      ? `Prepared ${prepared.candidates.length} research candidates.`
+      : "No usable research candidates remained after filtering.",
   );
 }
 
@@ -654,6 +694,22 @@ async function executeRoundDecisionStep(context: BrowserCoreTaskExecutorContext,
   return decision;
 }
 
+async function executeFinalizeTaskResultStep(context: BrowserCoreTaskExecutorContext, stepId: string) {
+  await context.ensureBudget();
+  await beginPlanStep(
+    context,
+    stepId,
+    "finalizeTaskResult",
+    getPlanStep(context.session.memory, stepId)?.goal ?? "Generate the final result",
+  );
+  const result = await finalizeTaskResult(createAdapterContext(context));
+  await finishPlanStep(context, stepId, "succeeded", result.summary);
+  context.session.memory.runtimeMeta.status = "done";
+  context.session.memory.runtimeMeta.currentTool = undefined;
+  context.session.memory.liveStepSummary = "Final result is ready.";
+  await context.deps.publishState(context.session);
+}
+
 async function runCommerceDelegate(
   context: BrowserCoreTaskExecutorContext,
   _input: CommerceResearchToolInput,
@@ -661,8 +717,14 @@ async function runCommerceDelegate(
 ): Promise<CommerceResearchToolOutput> {
   const openResult = await runLegacyTool(context, openSearchResultsTool);
   if (openResult.stepStatus !== "succeeded") {
+    const openStatus: CommerceResearchToolOutput["status"] =
+      openResult.stepStatus === "blocked"
+        ? "blocked"
+        : openResult.status === "partial"
+          ? "partial"
+          : "failed";
     return {
-      status: mapLegacyToolStatus(openResult),
+      status: openStatus,
       shortlist: [],
       evidence: [],
       gaps: [openResult.summary],
@@ -679,19 +741,30 @@ async function runCommerceDelegate(
     };
   }
 
-  const collectResult = await runLegacyTool(context, collectCommerceCandidatesTool);
+  const taskSpec = context.session.memory.taskSpec;
+  if (!taskSpec || taskSpec.taskType !== "commerce_search") {
+    throw new Error("Commerce candidate preparation requires a commerce task spec.");
+  }
+
+  const collectResult = await prepareCommerceCandidates(createAdapterContext(context), taskSpec);
   const shortlist = toCommerceShortlist(context.session.memory);
   const evidence = toCommerceEvidence(context.session.memory);
   const gaps = shortlist.length > 0 ? [] : [collectResult.summary];
+  const collectStatus: CommerceResearchToolOutput["status"] =
+    collectResult.status === "success"
+      ? "success"
+      : collectResult.status === "partial"
+        ? "partial"
+        : "failed";
 
   return {
-    status: shortlist.length > 0 ? (collectResult.status === "partial" ? "partial" : "success") : mapLegacyToolStatus(collectResult),
+    status: shortlist.length > 0 ? collectStatus : collectStatus,
     shortlist,
     evidence,
     gaps,
     coverage: {
-      scope: "Legacy commerce helper path inside Browser Core V2 runtime.",
-      limitations: shortlist.length > 0 ? [] : ["No shortlisted items were preserved by the legacy commerce helper path."],
+      scope: "Browser Core V2 adapter commerce path.",
+      limitations: shortlist.length > 0 ? [] : ["No shortlisted items were preserved after adapter candidate preparation."],
     },
     problems:
       shortlist.length > 0
@@ -735,7 +808,7 @@ function finishTerminalState(context: BrowserCoreTaskExecutorContext, summary: s
 }
 
 export async function executeDirectAnswerTask(context: BrowserCoreTaskExecutorContext) {
-  await finalizeAndPublish(context, "finalize-direct-answer", finalizeDirectAnswerTool);
+  await executeFinalizeTaskResultStep(context, "finalize-direct-answer");
 }
 
 export async function executePublicResearchTask(context: BrowserCoreTaskExecutorContext) {
@@ -760,10 +833,17 @@ export async function executePublicResearchTask(context: BrowserCoreTaskExecutor
       return;
     }
 
+    await executePrepareTaskCandidatesStep(context, "prepare-task-candidates");
+    if (context.session.memory.researchCandidates.length === 0) {
+      finishTerminalState(context, "No usable research candidates remained after filtering.", "failed");
+      await context.deps.publishState(context.session);
+      return;
+    }
+
     await executeWebDetailBatch(context, "browser-web-detail");
     const decision = await executeRoundDecisionStep(context, "decide-round-action");
     if (decision.decision === "finalize") {
-      await finalizeAndPublish(context, "finalize-research-result", finalizeResearchResultTool);
+      await executeFinalizeTaskResultStep(context, "finalize-research-result");
       return;
     }
     if (decision.decision === "abort") {
@@ -830,7 +910,7 @@ export async function executeSiteOverviewTask(context: BrowserCoreTaskExecutorCo
 
     const decision = await executeRoundDecisionStep(context, "decide-round-action");
     if (decision.decision === "finalize") {
-      await finalizeAndPublish(context, "finalize-research-result", finalizeResearchResultTool);
+      await executeFinalizeTaskResultStep(context, "finalize-research-result");
       return;
     }
     if (decision.decision === "abort") {
@@ -860,7 +940,7 @@ export async function executeCommerceTask(context: BrowserCoreTaskExecutorContex
 
     const decision = await executeRoundDecisionStep(context, "decide-round-action");
     if (decision.decision === "finalize") {
-      await finalizeAndPublish(context, "finalize-commerce-result", finalizeCommerceResultTool);
+      await executeFinalizeTaskResultStep(context, "finalize-commerce-result");
       return;
     }
     if (decision.decision === "abort") {

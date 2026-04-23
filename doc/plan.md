@@ -288,3 +288,11 @@ ChromeClaw 参考仓库：
 - 并发开发导致 contract 反复变更，集成成本高于收益。
 
 Updated: 2026-04-20
+
+## 2026-04-22 Checkpoint - Chain Unification
+
+- Legacy runtime loop and old chooser path are removed from the active code path.
+- Legacy finalizers and candidate filters are now funneled through two Browser Core V2 adapter modules:
+  - `finalize-task-result`
+  - `prepare-task-candidates`
+- The next planned step is still the same: lift task-family executors into a generic bounded `RoundPlanSchema` runner instead of adding more adapter-specific branches.

@@ -95,7 +95,7 @@ async function dehydrateSourceFactCard(options: {
       url: response.url,
       summary: response.summary,
       facts: response.facts,
-      caveats: response.caveats,
+      caveats: response.caveats ?? [],
       status: options.status === "partial" ? "partial" : response.status,
     };
   } catch (error) {

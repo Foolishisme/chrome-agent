@@ -2,7 +2,6 @@ import type {
   ConversationTurn,
   DirectAnswerTaskSpec,
   ExtractedItem,
-  PlanStep,
   PublicResearchTaskSpec,
   SearchPreference,
   SearchTaskSpec,
@@ -106,33 +105,6 @@ export function buildResearchQueryRefinementPrompt(goal: string, conversationCon
     "- Keep the query short enough for a normal Google search box.",
     ...(conversationContext ? [`Recent conversation context:\n${conversationContext}`] : []),
     `User goal: ${goal}`,
-  ].join("\n");
-}
-
-export function buildNextToolPrompt(options: {
-  goal: string;
-  taskType: TaskType;
-  currentStep: PlanStep;
-  budgetLow?: boolean;
-  currentFacts?: Record<string, unknown>;
-  unresolvedIssues?: string[];
-}) {
-  return [
-    "You choose the next high-level tool for a browser agent.",
-    "Return JSON only.",
-    'Schema: {"toolName":"...","reason":"..."}',
-    "Rules:",
-    "- Choose exactly one tool from allowedTools.",
-    "- Do not invent a tool name outside allowedTools.",
-    "- Prefer the tool that most directly advances the current plan step.",
-    "- If budgetLow is true, prefer the tool that helps the task converge safely.",
-    "- Do not mention raw DOM actions, selectors, or waits.",
-    `User goal: ${options.goal}`,
-    `Task type: ${options.taskType}`,
-    `Current step: ${JSON.stringify(options.currentStep, null, 2)}`,
-    `Budget low: ${options.budgetLow ? "true" : "false"}`,
-    `Known facts: ${JSON.stringify(options.currentFacts ?? {}, null, 2)}`,
-    `Unresolved issues: ${JSON.stringify(options.unresolvedIssues ?? [], null, 2)}`,
   ].join("\n");
 }
 

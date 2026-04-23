@@ -8,16 +8,13 @@ export type LlmProfile = "external" | "local";
 export type PlanStepStatus = "pending" | "running" | "succeeded" | "failed" | "blocked";
 
 export type ToolName =
-  | "compileTaskSpec"
-  | "finalizeDirectAnswer"
+  | "finalizeTaskResult"
+  | "prepareTaskCandidates"
   | "decideRoundAction"
   | "resolveEntryPoint"
   | "openSearchResults"
-  | "collectCommerceCandidates"
   | "collectResearchCandidates"
   | "readResearchSourceFacts"
-  | "finalizeCommerceResult"
-  | "finalizeResearchResult"
   | "browser.search"
   | "browser.webDetail"
   | "browser.siteOverview"

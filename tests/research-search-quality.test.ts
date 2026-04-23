@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getToolDefinition } from "../src/background/tools";
+import { preparePublicResearchCandidates } from "../src/browser-core-v2/background/adapters";
 import { extractGoogleSearchResults, extractPageFacts } from "../src/content/research";
-import type { SessionMemory, SnapshotData } from "../src/shared/types";
+import type { PublicResearchTaskSpec, SessionMemory, SnapshotData } from "../src/shared/types";
 
 const { reorderResearchCandidatesMock } = vi.hoisted(() => ({
   reorderResearchCandidatesMock: vi.fn(),
@@ -107,7 +107,6 @@ describe("research search quality pipeline", () => {
       source: "llm-lite",
     });
 
-    const tool = getToolDefinition("collectResearchCandidates");
     const memory = createResearchMemory({
       taskSpec: {
         taskType: "public_research",
@@ -121,36 +120,29 @@ describe("research search quality pipeline", () => {
         sourceTargetCount: 3,
       },
     });
+    const taskSpec = memory.taskSpec as PublicResearchTaskSpec;
 
-    const result = await tool.run({
-      memory,
+    const result = await preparePublicResearchCandidates({
+      goal: memory.goal,
+      searchQuery: taskSpec.searchQuery,
+      candidates: [
+        { title: "Research blog", url: "https://example.com/blog", rank: 1, snippet: "A broad summary of AI agents." },
+        { title: "Official AI guide", url: "https://example.org/official", rank: 2, snippet: "Official technical documentation." },
+        { title: "Google cache", url: "https://www.google.com/search?q=ai+agents", rank: 3 },
+        { title: "Pdf whitepaper", url: "https://example.net/whitepaper.pdf", rank: 4 },
+      ],
+      taskSpec,
       signal: new AbortController().signal,
-      scanPage: vi.fn().mockResolvedValue(createGoogleSnapshot()),
-      ensureUsableSnapshot: vi.fn().mockResolvedValue(createGoogleSnapshot()),
-      executeAction: vi.fn().mockResolvedValue({
-        success: true,
-        actionType: "EXTRACT_SEARCH_RESULTS",
-        message: "Extracted 4 source candidates.",
-        researchCandidates: [
-          { title: "Research blog", url: "https://example.com/blog", rank: 1, snippet: "A broad summary of AI agents." },
-          { title: "Official AI guide", url: "https://example.org/official", rank: 2, snippet: "Official technical documentation." },
-          { title: "Google cache", url: "https://www.google.com/search?q=ai+agents", rank: 3 },
-          { title: "Pdf whitepaper", url: "https://example.net/whitepaper.pdf", rank: 4 },
-        ],
-      }),
-      settleAfterAction: vi.fn(),
-      appendLog: vi.fn(),
-      recordStep: vi.fn(),
-      pushState: vi.fn().mockResolvedValue(undefined),
     });
 
-    expect(result.status).toBe("success");
-    expect(result.outputs.keptCount).toBe(2);
+    memory.researchCandidates = result.candidates;
+
+    expect(result.diagnostics.finalCount).toBe(2);
     expect(memory.researchCandidates.map((candidate) => candidate.title)).toEqual([
       "Official AI guide",
       "Research blog",
     ]);
-    expect(result.outputs.reorderReason).toContain("official source");
+    expect(result.reason).toContain("official source");
   });
 
   it("falls back to filtered order when reorder fails", async () => {
@@ -163,7 +155,6 @@ describe("research search quality pipeline", () => {
       source: "rule",
     });
 
-    const tool = getToolDefinition("collectResearchCandidates");
     const memory = createResearchMemory({
       taskSpec: {
         taskType: "public_research",
@@ -177,26 +168,20 @@ describe("research search quality pipeline", () => {
         sourceTargetCount: 3,
       },
     });
+    const taskSpec = memory.taskSpec as PublicResearchTaskSpec;
 
-    await tool.run({
-      memory,
+    const result = await preparePublicResearchCandidates({
+      goal: memory.goal,
+      searchQuery: taskSpec.searchQuery,
+      candidates: [
+        { title: "Research blog", url: "https://example.com/blog", rank: 1, snippet: "A broad summary of AI agents." },
+        { title: "Official AI guide", url: "https://example.org/official", rank: 2, snippet: "Official technical documentation." },
+      ],
+      taskSpec,
       signal: new AbortController().signal,
-      scanPage: vi.fn().mockResolvedValue(createGoogleSnapshot()),
-      ensureUsableSnapshot: vi.fn().mockResolvedValue(createGoogleSnapshot()),
-      executeAction: vi.fn().mockResolvedValue({
-        success: true,
-        actionType: "EXTRACT_SEARCH_RESULTS",
-        message: "Extracted 2 source candidates.",
-        researchCandidates: [
-          { title: "Research blog", url: "https://example.com/blog", rank: 1, snippet: "A broad summary of AI agents." },
-          { title: "Official AI guide", url: "https://example.org/official", rank: 2, snippet: "Official technical documentation." },
-        ],
-      }),
-      settleAfterAction: vi.fn(),
-      appendLog: vi.fn(),
-      recordStep: vi.fn(),
-      pushState: vi.fn().mockResolvedValue(undefined),
     });
+
+    memory.researchCandidates = result.candidates;
 
     expect(memory.researchCandidates.map((candidate) => candidate.title)).toEqual([
       "Research blog",

@@ -1,3 +1,4 @@
+export * from "./adapters";
 export * from "./drivers/content-script-client";
 export * from "./drivers/store-safe-driver";
 export * from "./facade/browser-tool";
