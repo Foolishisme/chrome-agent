@@ -74,10 +74,12 @@ function render() {
       <section class="hero">
         <div class="hero-layout">
           <div class="hero-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M2 12h20"></path>
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            <svg style="position: absolute; top: -2px; left: -8px; width: 14px; height: 14px; color: #d6cab8;" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4L12 2z"/></svg>
+            <svg style="position: absolute; top: 14px; left: -14px; width: 10px; height: 10px; color: #e2dcd2;" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4L12 2z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              <circle cx="10" cy="11" r="1.5" fill="#fbf5e9"></circle>
+              <circle cx="16" cy="11" r="1.5" fill="#fbf5e9"></circle>
             </svg>
           </div>
           <div class="hero-copy">

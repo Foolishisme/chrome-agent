@@ -1,9 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "智能浏览助手",
+  "name": "浏览器 Agent",
   "version": "0.2.0",
   "description": "AI 驱动的浏览器助手，智能搜索、阅读与汇总。",
   "icons": {
+    "16": "icon-16.png",
+    "48": "icon-48.png",
     "128": "icon-128.png"
   },
   "permissions": [
@@ -25,8 +27,10 @@
     "default_path": "sidepanel.html"
   },
   "action": {
-    "default_title": "打开智能浏览助手",
+    "default_title": "打开浏览器 Agent",
     "default_icon": {
+      "16": "icon-16.png",
+      "48": "icon-48.png",
       "128": "icon-128.png"
     }
   },

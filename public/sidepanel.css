@@ -134,21 +134,22 @@ body {
 }
 
 .hero-icon {
+  position: relative;
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #fbf5e9;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(31, 111, 120, 0.18);
+  box-shadow: 0 4px 12px rgba(120, 93, 66, 0.08);
 }
 
-.hero-icon svg {
-  width: 22px;
-  height: 22px;
-  color: #fff;
+.hero-icon > svg:last-child {
+  width: 28px;
+  height: 28px;
+  color: #4a3e31;
 }
 
 .hero-copy {
@@ -366,8 +367,9 @@ body {
   gap: 6px;
   padding: 8px;
   border-radius: var(--radius-md);
-  background: var(--color-surface-warm);
-  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border: none;
+  box-shadow: 0 4px 12px rgba(120, 93, 66, 0.05);
   animation: fadeInUp var(--duration-slow) var(--ease-out);
   overflow: hidden;
   max-height: 360px;
@@ -380,9 +382,9 @@ body {
   justify-content: space-between;
   font-size: 12px;
   font-weight: 700;
-  color: var(--color-heading);
-  padding: 4px 4px 6px;
-  border-bottom: 1px solid var(--color-border);
+  color: #5c4e40; /* 深咖色 */
+  padding: 4px 4px 10px;
+  border-bottom: 1px solid rgba(120, 93, 66, 0.08);
 }
 
 .conversation-drawer-list {
@@ -426,7 +428,17 @@ body {
 }
 
 .conversation-list-item-active {
-  background: var(--color-accent-bg);
+  background: #eef5f4;
+  color: #165f66;
+}
+
+.conversation-list-item-active .conversation-list-title {
+  color: #165f66;
+}
+
+.conversation-list-item-active .conversation-list-icon {
+  background: transparent;
+  color: #165f66;
 }
 
 .conversation-list-item:disabled {
@@ -440,15 +452,12 @@ body {
   height: 28px;
   border-radius: var(--radius-sm);
   background: rgba(120, 93, 66, 0.06);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-muted);
+  color: #7b6e62;
 }
 
 .conversation-list-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .conversation-list-content {
@@ -500,17 +509,14 @@ body {
 }
 
 .conversation-turn {
-  padding: 12px 14px;
+  padding: 12px 16px;
   border-radius: var(--radius-xl);
-  border: 1px solid var(--color-border);
   animation: fadeInUp var(--duration-normal) var(--ease-out);
 }
 
 .conversation-turn-user {
-  width: min(78%, 520px);
-  background: linear-gradient(180deg, #e8eef6 0%, #e0e8f2 100%);
-  border-color: rgba(113, 139, 168, 0.18);
-  box-shadow: 0 4px 16px rgba(76, 98, 125, 0.06);
+  width: min(85%, 520px);
+  background: #f0ece6;
   position: relative;
   padding-right: 36px;
 }
@@ -524,9 +530,7 @@ body {
 
 .conversation-turn-assistant {
   width: 100%;
-  background: rgba(255, 253, 248, 0.85);
-  border-color: rgba(120, 93, 66, 0.08);
-  box-shadow: var(--shadow-sm);
+  background: transparent;
 }
 
 .conversation-turn-assistant-footer {
@@ -562,8 +566,7 @@ body {
 }
 
 .conversation-turn-pair-live .conversation-turn-assistant {
-  border-color: var(--color-border-accent);
-  box-shadow: 0 0 0 1px rgba(31, 111, 120, 0.06);
+  background: transparent;
 }
 
 .conversation-turn-actions {
@@ -615,12 +618,11 @@ body {
   min-height: 88px;
   padding: 12px;
   padding-bottom: 48px;
-  border: 1px solid rgba(125, 84, 45, 0.14);
-  border-radius: var(--radius-md);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: var(--radius-lg);
   resize: vertical;
-  background: rgba(255, 253, 248, 0.8);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: #ffffff;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
   font: inherit;
   font-size: 13px;
   line-height: 1.5;
@@ -678,15 +680,16 @@ body {
 }
 
 .goal-input-start-button {
-  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
-  color: #fff;
+  background: transparent;
+  color: #8b7967;
   border-radius: var(--radius-sm);
   transition: all var(--duration-fast) var(--ease-out);
 }
 
 .goal-input-start-button:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: var(--shadow-accent);
+  color: var(--color-accent);
+  background: rgba(120, 93, 66, 0.06);
 }
 
 .goal-input-start-button:active:not(:disabled) {
@@ -829,6 +832,9 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .timeline-body {

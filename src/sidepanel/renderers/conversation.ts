@@ -74,11 +74,16 @@ export function renderConversationTurnTimeline(records: StepRecord[], renderStat
     : isRunning
       ? `Thinking ${compact}`
       : `Thought for ${compact}`;
+  const sparklesSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #928171;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>`;
 
   return `
     <details class="timeline-details"${open ? " open" : ""} style="margin-bottom: 12px;">
-      <summary style="cursor: pointer; color: #7b6e62; font-weight: 600; font-size: 12px; margin-bottom: 8px; display: list-item;">
-        ${spinnerHtml}<span>${escapeHtml(customizedTitle)}</span>
+      <summary style="cursor: pointer; color: #8b7967; font-weight: 600; font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; list-style: none;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          ${isRunning ? spinnerHtml : sparklesSvg}
+          <span>${escapeHtml(customizedTitle)}</span>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: ${open ? 'rotate(90deg)' : 'none'}; transition: transform 0.2s;"><polyline points="9 18 15 12 9 6"></polyline></svg>
       </summary>
       <div class="section-body">${renderTimelineList(records, renderState)}</div>
     </details>
@@ -216,7 +221,7 @@ export function renderConversationSection(renderState: RenderState) {
   const actionButton =
     renderState.currentState.status === "running" || Boolean(renderState.pendingSessionSubmission)
       ? `<button id="stop-button" type="button" class="goal-input-action-button goal-input-stop-button" title="${escapeHtml(renderState.messages.stop)}">◼</button>`
-      : `<button id="start-button" type="button" class="goal-input-action-button goal-input-start-button" title="${escapeHtml(renderState.messages.start)}">→</button>`;
+      : `<button id="start-button" type="button" class="goal-input-action-button goal-input-start-button" title="${escapeHtml(renderState.messages.start)}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>`;
   const currentConversationTitle = renderState.currentState.conversationTitle ?? renderState.archiveUiText.untitledConversation;
   const conversationHistory =
     (renderState.currentState.availableConversations ?? []).length > 0
@@ -229,8 +234,8 @@ export function renderConversationSection(renderState: RenderState) {
                 data-select-conversation-id="${escapeHtml(conversation.conversationId)}"
                 ${conversationActionsDisabled ? "disabled" : ""}
               >
-                <span class="conversation-list-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                <span class="conversation-list-icon" style="display: flex; align-items: center; justify-content: center;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                 </span>
                 <span class="conversation-list-content">
                   <span class="conversation-list-title">${escapeHtml(conversation.title)}</span>
@@ -251,7 +256,7 @@ export function renderConversationSection(renderState: RenderState) {
               <div class="conversation-drawer-head">
                 <span>历史会话</span>
                 <button id="create-conversation-button" type="button" class="conversation-drawer-create-button" ${conversationActionsDisabled ? "disabled" : ""}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                   ${escapeHtml(renderState.archiveUiText.newConversation)}
                 </button>
               </div>
@@ -266,7 +271,7 @@ export function renderConversationSection(renderState: RenderState) {
                         class="conversation-drawer-delete-button"
                         ${conversationActionsDisabled ? "disabled" : ""}
                       >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                         ${escapeHtml(renderState.archiveUiText.deleteConversation)}
                       </button>
                     `
