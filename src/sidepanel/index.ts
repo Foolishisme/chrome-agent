@@ -66,14 +66,30 @@ function render() {
     (renderState.currentState.finalResult?.outputMode === "artifact" || renderState.documentArtifacts.length > 0);
   const showRuntimeSection = hasFailureState(renderState);
 
+  const isRunning = renderState.currentState.status === "running" || Boolean(renderState.pendingSessionSubmission);
+
   app.innerHTML = `
+    ${isRunning ? '<div class="global-progress-bar"></div>' : ''}
     <div class="panel-shell">
       <section class="hero">
         <div class="hero-layout">
+          <div class="hero-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M2 12h20"></path>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            </svg>
+          </div>
           <div class="hero-copy">
             <h1>${renderState.messages.heroTitle}</h1>
             <p>${renderState.messages.heroDescription}</p>
           </div>
+          <button id="toggle-conversations-button" type="button" class="hero-action-button" title="历史记录">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+          </button>
         </div>
       </section>
 

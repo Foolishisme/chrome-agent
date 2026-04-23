@@ -39,17 +39,13 @@ function renderPlanStep(step: PlanStep, detailRecords: StepRecord[], renderState
 }
 
 export function renderTimelineStep(step: StepRecord, renderState: RenderState) {
+  const resultText = step.actionResult?.message ?? "";
+  const summary = resultText || step.stepSummary;
   return `
     <div class="timeline-item">
       <div class="timeline-head">
-        <span>#${step.step} ${escapeHtml(step.stepSummary)}</span>
+        <span>#${step.step} ${escapeHtml(summary)}</span>
         <span>${new Date(step.timestamp).toLocaleTimeString()}</span>
-      </div>
-      <div class="timeline-body">
-        <div><strong>${escapeHtml(renderState.messages.timelineAction)}:</strong> ${escapeHtml(step.action?.type ?? renderState.messages.emptyValue)}</div>
-        <div><strong>${escapeHtml(renderState.messages.timelineResult)}:</strong> ${escapeHtml(step.actionResult?.message ?? renderState.messages.emptyValue)}</div>
-        <div><strong>${escapeHtml(renderState.messages.timelineExpected)}:</strong> ${escapeHtml(step.expectedOutcome ?? renderState.messages.emptyValue)}</div>
-        <div><strong>${escapeHtml(renderState.messages.timelineSnapshot)}:</strong> ${escapeHtml(step.snapshotSummary ?? renderState.messages.emptyValue)}</div>
       </div>
     </div>
   `;
@@ -70,6 +66,7 @@ export function renderConversationTurnTimeline(records: StepRecord[], renderStat
 
   const durationMs = isRunning ? renderState.displayedElapsedMs : getTimelineDurationMs(records);
   const compact = durationMs !== undefined ? formatCompactDuration(durationMs, renderState.messages) : "";
+  const spinnerHtml = isRunning ? '<span class="thinking-spinner"></span>' : '';
   const customizedTitle = navigator.language.startsWith("zh")
     ? isRunning
       ? `思考中 ${compact}`
@@ -81,7 +78,7 @@ export function renderConversationTurnTimeline(records: StepRecord[], renderStat
   return `
     <details class="timeline-details"${open ? " open" : ""} style="margin-bottom: 12px;">
       <summary style="cursor: pointer; color: #7b6e62; font-weight: 600; font-size: 12px; margin-bottom: 8px; display: list-item;">
-        <span>${escapeHtml(customizedTitle)}</span>
+        ${spinnerHtml}<span>${escapeHtml(customizedTitle)}</span>
       </summary>
       <div class="section-body">${renderTimelineList(records, renderState)}</div>
     </details>
@@ -232,7 +229,12 @@ export function renderConversationSection(renderState: RenderState) {
                 data-select-conversation-id="${escapeHtml(conversation.conversationId)}"
                 ${conversationActionsDisabled ? "disabled" : ""}
               >
-                <span>${escapeHtml(conversation.title)}</span>
+                <span class="conversation-list-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                </span>
+                <span class="conversation-list-content">
+                  <span class="conversation-list-title">${escapeHtml(conversation.title)}</span>
+                </span>
                 <span class="conversation-meta">${escapeHtml(conversation.turnCount)}</span>
               </button>
             `,
@@ -242,19 +244,17 @@ export function renderConversationSection(renderState: RenderState) {
 
   return `
     <div class="controls">
-      <div class="conversation-toolbar">
-        <button id="toggle-conversations-button" type="button" class="button-secondary action-button">
-          ${escapeHtml(renderState.archiveUiText.currentConversation)}: ${escapeHtml(currentConversationTitle)}
-        </button>
-        <button id="create-conversation-button" type="button" class="button-secondary action-button" ${conversationActionsDisabled ? "disabled" : ""}>
-          ${escapeHtml(renderState.archiveUiText.newConversation)}
-        </button>
-      </div>
       ${
         renderState.showConversationDrawer
           ? `
             <div class="conversation-drawer">
-              <div class="conversation-drawer-head">历史会话</div>
+              <div class="conversation-drawer-head">
+                <span>历史会话</span>
+                <button id="create-conversation-button" type="button" class="conversation-drawer-create-button" ${conversationActionsDisabled ? "disabled" : ""}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  ${escapeHtml(renderState.archiveUiText.newConversation)}
+                </button>
+              </div>
               <div class="conversation-drawer-list">${conversationHistory}</div>
               <div class="conversation-drawer-actions">
                 ${
@@ -263,9 +263,10 @@ export function renderConversationSection(renderState: RenderState) {
                       <button
                         id="delete-conversation-button"
                         type="button"
-                        class="button-secondary action-button"
+                        class="conversation-drawer-delete-button"
                         ${conversationActionsDisabled ? "disabled" : ""}
                       >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                         ${escapeHtml(renderState.archiveUiText.deleteConversation)}
                       </button>
                     `
@@ -280,7 +281,7 @@ export function renderConversationSection(renderState: RenderState) {
       <div class="goal-input-shell">
         <textarea id="goal-input" class="goal-input" placeholder="${escapeHtml(conversationInputPlaceholder)}">${escapeHtml(renderState.draftGoal)}</textarea>
         <div class="goal-input-actions">
-          <div style="display: flex; gap: 8px; align-items: center;">
+          <div style="display: flex; gap: 6px; align-items: center;">
             <button
               id="search-preference-toggle"
               type="button"
@@ -290,9 +291,9 @@ export function renderConversationSection(renderState: RenderState) {
               title="${escapeHtml(renderState.activeSearchPreference === "prefer_search" ? renderState.messages.searchToggleHintPreferSearch : renderState.messages.searchToggleHintAuto)}"
               ${conversationActionsDisabled ? "disabled" : ""}
             >
-              <span style="display: flex; align-items: center; gap: 4px; font-size: 13px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path><path d="M2 12h20"></path></svg>
-                <span>联网搜索</span>
+              <span style="display: flex; align-items: center; gap: 4px; font-size: 12px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path><path d="M2 12h20"></path></svg>
+                <span>联网</span>
               </span>
             </button>
             ${renderLlmProfileSelector(renderState)}
@@ -300,6 +301,7 @@ export function renderConversationSection(renderState: RenderState) {
           ${actionButton}
         </div>
       </div>
+      <div class="input-disclaimer">内容由 AI 生成，仅供参考，请注意甄别</div>
     </div>
   `;
 }
