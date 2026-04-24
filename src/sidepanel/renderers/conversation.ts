@@ -41,11 +41,23 @@ function renderPlanStep(step: PlanStep, detailRecords: StepRecord[], renderState
 export function renderTimelineStep(step: StepRecord, renderState: RenderState) {
   const resultText = step.actionResult?.message ?? "";
   const summary = resultText || step.stepSummary;
+  
+  const lowerSummary = summary.toLowerCase();
+  let statusClass = "timeline-item-default";
+  if (lowerSummary.includes("decision: replan")) {
+    statusClass = "timeline-item-warning";
+  } else if (lowerSummary.includes("decision: finalize") || lowerSummary.includes("final output")) {
+    statusClass = "timeline-item-success";
+  } else if (lowerSummary.includes("已跳转") || lowerSummary.includes("http")) {
+    statusClass = "timeline-item-info";
+  }
+
   return `
-    <div class="timeline-item">
+    <div class="timeline-item ${statusClass}" title="${escapeHtml(summary)}">
       <div class="timeline-head">
-        <span>#${step.step} ${escapeHtml(summary)}</span>
-        <span>${new Date(step.timestamp).toLocaleTimeString()}</span>
+        <span class="timeline-step-number">#${step.step}</span>
+        <span class="timeline-content">${escapeHtml(summary)}</span>
+        <span class="timeline-timestamp">${new Date(step.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
       </div>
     </div>
   `;
@@ -74,11 +86,11 @@ export function renderConversationTurnTimeline(records: StepRecord[], renderStat
     : isRunning
       ? `Thinking ${compact}`
       : `Thought for ${compact}`;
-  const sparklesSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #928171;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>`;
+  const sparklesSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-accent);"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>`;
 
   return `
     <details class="timeline-details"${open ? " open" : ""} style="margin-bottom: 12px;">
-      <summary style="cursor: pointer; color: #8b7967; font-weight: 600; font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; list-style: none;">
+      <summary style="cursor: pointer; color: var(--color-text-muted); font-weight: 600; font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; list-style: none;">
         <div style="display: flex; align-items: center; gap: 6px;">
           ${isRunning ? spinnerHtml : sparklesSvg}
           <span>${escapeHtml(customizedTitle)}</span>
