@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MockBrowserDriver } from "../../src/background/browser-capability/mock-driver";
+import { MockBrowserDriver } from "../../src/background/browser/capability/mock-driver";
 import { defaultPublicState } from "../../src/background/runtime/public-state";
 import type { ActiveSession } from "../../src/background/runtime/shared";
 import type { BrowserObservation } from "../../src/shared/browser-capability";
@@ -12,7 +12,7 @@ import type {
   SiteOverviewTaskSpec,
   SnapshotData,
 } from "../../src/shared/types";
-import { buildBrowserCoreV2DisplayPlan, runBrowserCoreV2Loop } from "../../src/browser-core-v2/background/runner";
+import { buildBrowserCoreV2DisplayPlan, runBrowserCoreV2Loop } from "../../src/background/runner";
 
 const { decideRoundActionMock, generateDirectAnswerResultMock, generateFinalResultMock } = vi.hoisted(() => ({
   decideRoundActionMock: vi.fn(),
@@ -20,8 +20,8 @@ const { decideRoundActionMock, generateDirectAnswerResultMock, generateFinalResu
   generateFinalResultMock: vi.fn(),
 }));
 
-vi.mock("../../src/background/llm-client", async () => {
-  const actual = await vi.importActual<typeof import("../../src/background/llm-client")>("../../src/background/llm-client");
+vi.mock("../../src/background/llm/llm-client", async () => {
+  const actual = await vi.importActual<typeof import("../../src/background/llm/llm-client")>("../../src/background/llm/llm-client");
   return {
     ...actual,
     decideRoundAction: decideRoundActionMock,

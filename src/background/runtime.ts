@@ -3,4 +3,4 @@ export {
   evaluateRuntimeBudget,
   isReceiverMissingError,
   sendMessageToTab,
-} from "./runtime-core";
+} from "./runtime/runtime-core";

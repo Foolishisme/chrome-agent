@@ -17,8 +17,8 @@ vi.mock("../src/background/runtime/bootstrap", async () => {
   };
 });
 
-vi.mock("../src/browser-core-v2/background/runner", async () => {
-  const actual = await vi.importActual<typeof import("../src/browser-core-v2/background/runner")>("../src/browser-core-v2/background/runner");
+vi.mock("../src/background/runner", async () => {
+  const actual = await vi.importActual<typeof import("../src/background/runner")>("../src/background/runner");
   return {
     ...actual,
     runBrowserCoreV2Loop: runBrowserCoreV2LoopMock,

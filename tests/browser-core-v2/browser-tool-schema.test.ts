@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BROWSER_CORE_V2_ACTIONS, BrowserCoreV2ToolInputSchema } from "../../src/browser-core-v2/background/facade/browser-tool-schema";
+import { BROWSER_CORE_V2_ACTIONS, BrowserCoreV2ToolInputSchema } from "../../src/background/browser/facade/browser-tool-schema";
 
 describe("Browser Core V2 browser tool schema", () => {
   it("allows only the store-safe first action set", () => {

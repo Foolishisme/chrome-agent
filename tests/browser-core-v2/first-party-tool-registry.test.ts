@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { MockBrowserDriver } from "../../src/background/browser-capability/mock-driver";
+import { MockBrowserDriver } from "../../src/background/browser/capability/mock-driver";
 import type { BrowserObservation } from "../../src/shared/browser-capability";
 import {
   createDefaultFirstPartyToolRegistry,
   createFirstPartyToolRegistry,
   executeFirstPartyTool,
   validateFirstPartyToolRegistry,
-} from "../../src/browser-core-v2/background/tools";
+} from "../../src/background/tools";
 
 function createObservation(overrides: Partial<BrowserObservation> = {}): BrowserObservation {
   return {

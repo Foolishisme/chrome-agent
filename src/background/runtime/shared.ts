@@ -1,5 +1,6 @@
 import { RuntimeError } from "../../shared/errors";
 import type { DebugLogEntry, DebugLogLevel, SessionMemory, SessionPublicState, ToolName, ToolResult } from "../../shared/types";
+import { appendSessionRunLogEntry } from "./run-log-store";
 
 export const MAX_LOG_ENTRIES = 80;
 export const MAX_FAILURE_ENTRIES = 12;
@@ -66,8 +67,12 @@ export function appendLog(
     level,
     message,
     detail: formatDetail(detail),
+    stepId: session.memory.runtimeMeta.currentStepId,
+    toolName: session.memory.runtimeMeta.currentTool,
+    round: session.memory.runtimeMeta.currentRound,
   };
   session.memory.logs = [...session.memory.logs, entry].slice(-MAX_LOG_ENTRIES);
+  void appendSessionRunLogEntry(session.memory.runtimeMeta.sessionId, entry);
 }
 
 export function captureProgressSnapshot(memory: SessionMemory): ProgressSnapshot {

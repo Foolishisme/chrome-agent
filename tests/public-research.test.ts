@@ -3,7 +3,7 @@ import {
   filterResearchCandidates,
   finalizeTaskResult,
   preparePublicResearchCandidates,
-} from "../src/browser-core-v2/background/adapters";
+} from "../src/background/tools/adapters";
 import { extractGoogleSearchResults, extractPageFacts } from "../src/content/research";
 import type { SessionMemory } from "../src/shared/types";
 
@@ -12,8 +12,8 @@ const { generateFinalResultMock, reorderResearchCandidatesMock } = vi.hoisted(()
   reorderResearchCandidatesMock: vi.fn(),
 }));
 
-vi.mock("../src/background/llm-client", async () => {
-  const actual = await vi.importActual<typeof import("../src/background/llm-client")>("../src/background/llm-client");
+vi.mock("../src/background/llm/llm-client", async () => {
+  const actual = await vi.importActual<typeof import("../src/background/llm/llm-client")>("../src/background/llm/llm-client");
   return {
     ...actual,
     generateFinalResult: generateFinalResultMock,

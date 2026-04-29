@@ -11,10 +11,6 @@ export type ToolName =
   | "finalizeTaskResult"
   | "prepareTaskCandidates"
   | "decideRoundAction"
-  | "resolveEntryPoint"
-  | "openSearchResults"
-  | "collectResearchCandidates"
-  | "readResearchSourceFacts"
   | "browser.search"
   | "browser.webDetail"
   | "browser.siteOverview"
@@ -429,6 +425,9 @@ export interface DebugLogEntry {
   source: "runtime" | "llm" | "content";
   message: string;
   detail?: string;
+  stepId?: string;
+  toolName?: ToolName;
+  round?: number;
 }
 
 export interface ToolCallRecord {
@@ -534,4 +533,16 @@ export interface SessionPublicState {
   unresolvedIssues?: string[];
   finalResult?: FinalResult;
   updatedAt: number;
+}
+
+export interface SessionDebugBundle {
+  sessionId: string;
+  goal?: string;
+  taskType?: TaskType;
+  taskSpec?: TaskSpec;
+  timeline: StepRecord[];
+  finalResult?: FinalResult;
+  runLogs: DebugLogEntry[];
+  filterDiagnostics?: FilterDiagnostics;
+  unresolvedIssues: string[];
 }

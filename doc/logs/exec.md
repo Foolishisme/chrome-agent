@@ -203,3 +203,24 @@
   - `git diff -- doc/spec.md doc/constraints.md doc/plan.md doc/status.md doc/logs/design.md doc/logs/exec.md`
 - Result: the main docs now say less about how the repo got here and more about what matters for the next execution step.
 - Risk: this is a docs-only cleanup; it does not re-verify runtime behavior.
+## 2026-04-29 - Single-root cutover and backend log/archive unification
+
+- Action: Folded the active Browser Core V2 source into canonical roots, removed the parallel `src/browser-core-v2/` tree, converted remaining open-search usage into an internal legacy-support helper, and split conversation archive from backend debug run logs.
+- Changed:
+  - moved Browser Core V2 runner/browser/tools/adapters into `src/background/`, moved content helpers into `src/content/core/`, and moved shared Browser Core contracts into `src/shared/browser-core/`
+  - removed `src/browser-core-v2/` and `src/background/browser-capability/` from the source tree
+  - moved `llm-client.ts` / `prompting.ts` / `query-compiler.ts` into `src/background/llm/`
+  - moved runtime core and session archive modules into `src/background/runtime/` and kept `src/background/runtime.ts` / `src/background/session-archive.ts` as thin re-export shims
+  - downgraded `open-search-results` into `src/background/tools/legacy-support/open-search-results.ts` with a plain helper entry, and deleted inactive legacy runtime-visible helper shells
+  - added `src/background/runtime/run-log-store.ts`, new debug bundle/session run-log protocol handlers, and persistence for all terminal archive states
+  - rewrote `doc/status.md`, updated `doc/plan.md` / `doc/acceptance.md`, and appended single-root notes to design/exec logs
+- Validation:
+  - `Get-ChildItem -Path src -Recurse -Include *.ts,*.tsx | Select-String -Pattern '[/\\]browser-core-v2[/\\]'`
+  - `npm test -- tests/runtime.test.ts tests/public-research.test.ts tests/site-overview.test.ts tests/runtime-bootstrap.test.ts tests/session-archive.test.ts tests/sidepanel.test.ts tests/runtime-tools.test.ts tests/run-log-store.test.ts tests/browser-core-v2/runtime-v2-loop.test.ts tests/browser-core-v2/first-party-tool-contracts.test.ts tests/browser-core-v2/first-party-tool-registry.test.ts`
+  - `npm run build`
+  - `npx tsc --noEmit`
+- Result: the active chain now lives under one canonical source-tree layout, runtime-visible tool naming is narrowed to the new chain, archive persists all terminal states, and developer-facing run logs/debug bundles are stored in the backend instead of being frontend-only state.
+- Risk:
+  - `skill.commerceResearch` still depends on `tools/legacy-support/open-search-results.ts`
+  - the executor is still task-family-specific, not yet a generic `RoundPlanSchema` runner
+  - the runtime browser adapter is still not the final `StoreSafeDriver` chrome wiring

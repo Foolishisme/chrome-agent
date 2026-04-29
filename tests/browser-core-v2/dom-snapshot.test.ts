@@ -1,6 +1,6 @@
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
-import { buildBrowserCoreSnapshot } from "../../src/browser-core-v2/content/dom-snapshot";
+import { buildBrowserCoreSnapshot } from "../../src/content/core/dom-snapshot";
 
 describe("Browser Core V2 DOM snapshot", () => {
   it("extracts visible links, controls, and stable refs with vanilla DOM", () => {

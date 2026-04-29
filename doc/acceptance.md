@@ -8,9 +8,12 @@
 
 `LLM-driven bounded plan + thin runner over Store-safe Browser Core V2`
 
-Current snapshot note:
-- default runtime path is `START_SESSION -> BrowserAgentRuntime shell -> Browser Core V2 runtime loop`
+当前快照：
+
+- default runtime path is `START_SESSION -> BrowserAgentRuntime shell -> src/background/runner`
 - non-`direct_answer` tasks now use `execute round -> decideRoundAction -> finalize | replan | abort`
+- source tree no longer contains `src/browser-core-v2/`
+- conversation archive 与 run log 已在后台持久层分离
 
 旧 `direct_answer / commerce_search / public_research / site_overview` 不再作为新主线验收目标；它们保留为回归、对照、fallback 或 harness。
 
@@ -27,18 +30,37 @@ Current snapshot note:
 - `FAIL`
 - `NOT_RUN`
 
-## 3. 当前验收分层
+## 3. 结构归一完成判据
+
+以下条件满足时，才算“执行链路与文件架构归一”完成：
+
+- source tree 中不存在 `src/browser-core-v2/`
+- runtime 主链不再 import legacy tool shell
+- runtime-visible tool 名称只保留当前主链所需集合
+- conversation archive 与 run log 按后台持久层分离
+- `SessionPublicState.logs` 只作为 live tail，不承担历史排查职责
+
+当前状态：`PARTIAL`
+
+备注：
+
+- 目录与主链切换已完成
+- archive / run-log 分层已完成
+- commerce 路径内部仍保留一层 legacy support helper
+- 通用 `RoundPlanSchema` runner 尚未完成
+
+## 4. 当前验收分层
 
 | 编号 | 场景 | 定位 | 状态 | 备注 |
 |---|---|---|---|---|
-| S0 | 直答不误触浏览器 | 回归基线，验证明确可直接回答的问题不会强制启动 browser tool | PASS | 旧 query/runtime/sidepanel 单测已有覆盖，后续保持回归 |
+| S0 | 直答不误触浏览器 | 回归基线，验证明确可直接回答的问题不会强制启动 browser tool | PASS | query/runtime/sidepanel 单测已有覆盖，后续保持回归 |
 | S1 | explicit URL overview | 当前第一主验收，验证 bounded plan runner + Browser Core V2 + StoreSafeDriver 独立读页、裁剪、结构化总结 | NOT_RUN | StoreSafeDriver chrome wiring 与真机闭环验证尚未完成 |
 | S2 | explicit URL + 一跳读取 | 下一步主验收，基于 links/controls 选择少量高价值链接继续读 | NOT_RUN | 依赖 S1、受限 action 数、受限并发和读取预算 |
 | S3 | 开放问题浏览调研 | 后续验收，用户不给 URL 时搜索、打开候选、读多页、汇总 | NOT_RUN | 不复用旧 `public_research` 作为产品边界 |
 | S4 | 低风险页面操作 | 后续验收，搜索框输入、点击链接、展开菜单、滚动、普通草稿填写 | NOT_RUN | 必须接 action risk gate |
 | S5 | advanced / CDP driver | 高级、本地或企业验收，不是大众商店默认路径 | NOT_RUN | Store-safe 主链通过后再实现 |
 
-## 4. S0 - 直答回归
+## 5. S0 - 直答回归
 
 目标：
 
@@ -62,7 +84,7 @@ Current snapshot note:
 
 当前状态：`PASS`。
 
-## 5. S1 - explicit URL overview
+## 6. S1 - explicit URL overview
 
 目标：
 
@@ -103,7 +125,7 @@ Current snapshot note:
 - 通用 `RoundPlanSchema` runner 尚未落地；当前仍是 task-family-specific executor + round-end decision gate。
 - 新主链下的 explicit URL overview 尚未完成真机闭环验证。
 
-## 6. S2 - explicit URL + 一跳读取
+## 7. S2 - explicit URL + 一跳读取
 
 目标：
 
@@ -120,7 +142,7 @@ Current snapshot note:
 
 当前状态：`NOT_RUN`。
 
-## 7. S3 - 开放问题浏览调研
+## 8. S3 - 开放问题浏览调研
 
 目标：
 
@@ -137,7 +159,7 @@ Current snapshot note:
 
 当前状态：`NOT_RUN`。
 
-## 8. S4 - 低风险页面操作
+## 9. S4 - 低风险页面操作
 
 目标：
 
@@ -154,7 +176,7 @@ Current snapshot note:
 
 当前状态：`NOT_RUN`。
 
-## 9. S5 - advanced / CDP driver
+## 10. S5 - advanced / CDP driver
 
 目标：
 
@@ -169,17 +191,18 @@ Current snapshot note:
 
 当前状态：`NOT_RUN`。
 
-## 10. 基础回归
+## 11. 基础回归
 
 | 编号 | 验收项 | 验证方式 | 状态 | 备注 |
 |---|---|---|---|---|
 | B1 | 项目可构建 | `npm.cmd run build` | PASS | 最近记录见 `doc/status.md` |
-| B2 | Browser Core V2 最小单测通过 | `npm.cmd test -- tests/browser-capability.test.ts tests/browser-core-v2/readable-content.test.ts tests/browser-core-v2/dom-snapshot.test.ts tests/browser-core-v2/browser-tool-schema.test.ts` | PASS | 最近记录为 4 个测试文件、12 个测试 |
+| B2 | Browser Core 最小单测通过 | `npm.cmd test -- tests/browser-capability.test.ts tests/browser-core-v2/readable-content.test.ts tests/browser-core-v2/dom-snapshot.test.ts tests/browser-core-v2/browser-tool-schema.test.ts` | PASS | 最近记录为 4 个测试文件、12 个测试 |
 | B3 | browser tool schema 拒绝 raw 高危能力 | `tests/browser-core-v2/browser-tool-schema.test.ts` | PASS | `debugger`、`cdp`、raw `evaluate` 不暴露 |
-| B4 | 旧 workflow 回归不破坏现有 UI/provider 基线 | 相关旧单测或最小测试集 | PARTIAL | 旧模块不再是新主验收，但仍需避免无意破坏 |
-| B5 | bounded plan runner 基础行为 | 后续 runner mock 单测 | NOT_RUN | 需覆盖 action 上限、工具白名单、schema 校验、依赖跳过、partial success、串并行调度 |
+| B4 | 单系统 source tree 已成立 | `Test-Path src/browser-core-v2` | PASS | 当前 source tree 已不再保留第二套后台主目录 |
+| B5 | archive 保存所有终态且 run log 后台持久化 | `tests/session-archive.test.ts`、`tests/run-log-store.test.ts` | PASS | archive 与开发排查日志职责已分离 |
+| B6 | bounded plan runner 基础行为 | 后续 runner mock 单测 | NOT_RUN | 需覆盖 action 上限、工具白名单、schema 校验、依赖跳过、partial success、串并行调度 |
 
-## 11. 真机与联调
+## 12. 真机与联调
 
 | 编号 | 验收项 | 验证方式 | 状态 | 备注 |
 |---|---|---|---|---|
@@ -190,13 +213,4 @@ Current snapshot note:
 | L5 | stop / error / budget 护栏在 UI 中可见 | Chrome 手动制造路径 | NOT_RUN | 仍需真机样本 |
 | L6 | provider live request 可用 | 配置 key 后验证 | NOT_RUN | Gemini / DeepSeek 均待联调 |
 
-Updated: 2026-04-20
-
-## 2026-04-22 Checkpoint - Chain Unification
-
-- Active code path no longer uses the legacy runtime loop or old tool chooser.
-- Current acceptance for the new chain now assumes Browser Core V2 adapters are the bridge for finalization and candidate preparation.
-- Validation green at this checkpoint:
-  - `npm test -- tests/query-compiler.test.ts tests/runtime.test.ts tests/browser-core-v2/runtime-v2-loop.test.ts tests/llm-client.test.ts tests/public-research.test.ts tests/site-overview.test.ts tests/runtime-bootstrap.test.ts tests/sidepanel.test.ts tests/research-search-quality.test.ts tests/runtime-tools.test.ts`
-  - `npm run build`
-  - `npx tsc --noEmit`
+Updated: 2026-04-29

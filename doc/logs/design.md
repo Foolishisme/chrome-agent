@@ -185,3 +185,18 @@
   - `doc/plan.md` now records only the active migration path and next steps
   - `doc/status.md` now records only the live checkpoint, gaps, risks, and validation
 - Non-goal: this cleanup does not change architecture decisions or acceptance targets; it only narrows what belongs in the main docs.
+## 2026-04-29 - Single-root cutover and archive/log split
+
+- Question: After the new runtime path became the default, should `src/browser-core-v2/` remain as a parallel code island, and should session history/debug logs stay mixed into frontend-facing state.
+- Decision: Collapse the active source tree to canonical roots only: `src/background`, `src/content/core`, and `src/shared/browser-core`. At the same time, keep conversation archive and developer run logs as two separate backend persistence concerns.
+- Structure Decision:
+  - move runner, browser, tools, adapters, llm, content, and shared Browser Core V2 code into canonical roots
+  - delete `src/browser-core-v2/` from the source tree after import cutover
+  - keep only thin shims where compatibility is still needed at module boundaries such as `src/background/runtime.ts`
+- Runtime Boundary:
+  - runtime-visible tool names stay limited to the new main-chain set
+  - remaining legacy open-search behavior is downgraded to `tools/legacy-support/open-search-results.ts` as an internal helper, not a runtime-visible tool shell
+  - `conversation archive` stores user-facing terminal results for all terminal states
+  - `run-log-store` stores backend debug logs and debug bundles by `sessionId`
+- Why: the active path was already new, but the repo shape still suggested two systems. Removing the code island and separating archive from run logs makes the repo easier to reason about and makes failure/history handling consistent with the new runtime.
+- Revisit Trigger: once the generic `RoundPlanSchema` runner and final `StoreSafeDriver` land, re-evaluate whether the remaining legacy-support helpers can be deleted entirely.

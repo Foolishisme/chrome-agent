@@ -7,8 +7,8 @@ const { detectTaskTypeWithLiteModelMock, compileTaskSpecMock } = vi.hoisted(() =
   compileTaskSpecMock: vi.fn(),
 }));
 
-vi.mock("../src/background/query-compiler", async () => {
-  const actual = await vi.importActual<typeof import("../src/background/query-compiler")>("../src/background/query-compiler");
+vi.mock("../src/background/llm/query-compiler", async () => {
+  const actual = await vi.importActual<typeof import("../src/background/llm/query-compiler")>("../src/background/llm/query-compiler");
   return {
     ...actual,
     detectTaskTypeWithLiteModel: detectTaskTypeWithLiteModelMock,
@@ -16,8 +16,8 @@ vi.mock("../src/background/query-compiler", async () => {
   };
 });
 
-vi.mock("../src/background/llm-client", async () => {
-  const actual = await vi.importActual<typeof import("../src/background/llm-client")>("../src/background/llm-client");
+vi.mock("../src/background/llm/llm-client", async () => {
+  const actual = await vi.importActual<typeof import("../src/background/llm/llm-client")>("../src/background/llm/llm-client");
   return {
     ...actual,
     classifyTaskType: vi.fn(),

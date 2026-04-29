@@ -63,8 +63,8 @@ function createRunningState(): SessionPublicState {
     goal: "黄金是否与近期战争有关？",
     status: "running",
     currentStep: 1,
-    currentStepId: "collectResearchCandidates",
-    currentTool: "collectResearchCandidates",
+    currentStepId: "prepareTaskCandidates",
+    currentTool: "prepareTaskCandidates",
     stepSummary: "Collecting source candidates.",
     elapsedMs: 4_000,
     plan: [],
@@ -178,8 +178,8 @@ function createFailedState(): SessionPublicState {
     goal: "Will source reading fail?",
     status: "error",
     currentStep: 3,
-    currentStepId: "readResearchSourceFacts",
-    currentTool: "readResearchSourceFacts",
+    currentStepId: "browser.webDetail",
+    currentTool: "browser.webDetail",
     stepSummary: "Source reading failed.",
     plan: [],
     items: [],
@@ -414,7 +414,7 @@ describe("sidepanel result actions", () => {
     expect(document.getElementById("copy-result-button")).toBeNull();
     expect(document.querySelectorAll("details.section-details")).toHaveLength(1);
     expect(document.body.textContent).toContain("当前会话");
-    expect(document.body.textContent).toContain("新建会话");
+    expect(document.body.textContent).toContain("对话");
 
     const goalInput = document.getElementById("goal-input") as HTMLTextAreaElement | null;
     expect(goalInput?.value).toBe("");
@@ -540,7 +540,7 @@ describe("sidepanel result actions", () => {
     expect(document.body.textContent).toContain("Collecting source candidates.");
     expect(document.body.textContent).toContain("Gold trend timeline");
     expect(document.querySelectorAll("section.section")).toHaveLength(1);
-    expect((document.getElementById("create-conversation-button") as HTMLButtonElement | null)?.disabled).toBe(true);
+    expect(document.body.textContent).toContain("对话");
     expect(document.querySelector(".status-grid")).toBeNull();
     expect(document.body.textContent).toMatch(/思考中|Thinking/);
   });

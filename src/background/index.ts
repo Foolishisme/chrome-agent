@@ -4,12 +4,17 @@ import type {
   CreateConversationMessage,
   DeleteConversationMessage,
   DeleteSessionArchiveMessage,
+  DeleteSessionRunLogMessage,
+  ExportSessionDebugBundleMessage,
   ExtractCurrentPageMessage,
   ManualExtractionResponse,
   RollbackConversationTurnMessage,
+  RequestSessionRunLogMessage,
   RequestSessionStateMessage,
   RequestManualExtractionHistoryMessage,
   SelectConversationMessage,
+  SessionDebugBundleResponse,
+  SessionRunLogResponse,
   SessionStateResponse,
   StartSessionMessage,
   StartSessionResponse,
@@ -107,7 +112,10 @@ chrome.runtime.onMessage.addListener(
       | DeleteSessionArchiveMessage
       | ExtractCurrentPageMessage
       | RequestManualExtractionHistoryMessage
-      | ClearManualExtractionHistoryMessage,
+      | ClearManualExtractionHistoryMessage
+      | RequestSessionRunLogMessage
+      | ExportSessionDebugBundleMessage
+      | DeleteSessionRunLogMessage,
     _sender,
     sendResponse,
   ) => {
@@ -161,6 +169,62 @@ chrome.runtime.onMessage.addListener(
             error: error instanceof Error ? error.message : "Failed to load the current session state.",
             payload: runtime.getState(),
           } satisfies SessionStateResponse),
+        );
+      return true;
+    }
+
+    if (message.type === "REQUEST_SESSION_RUN_LOG") {
+      void runtime
+        .getSessionRunLog(message.sessionId)
+        .then((logs) =>
+          sendResponse({
+            ok: true,
+            sessionId: message.sessionId ?? runtime.getState().sessionId,
+            logs,
+          } satisfies SessionRunLogResponse),
+        )
+        .catch((error) =>
+          sendResponse({
+            ok: false,
+            error: error instanceof Error ? error.message : "Failed to load the session run log.",
+          } satisfies SessionRunLogResponse),
+        );
+      return true;
+    }
+
+    if (message.type === "EXPORT_SESSION_DEBUG_BUNDLE") {
+      void runtime
+        .exportSessionDebugBundle(message.sessionId)
+        .then((bundle) =>
+          sendResponse({
+            ok: true,
+            bundle,
+          } satisfies SessionDebugBundleResponse),
+        )
+        .catch((error) =>
+          sendResponse({
+            ok: false,
+            error: error instanceof Error ? error.message : "Failed to export the session debug bundle.",
+          } satisfies SessionDebugBundleResponse),
+        );
+      return true;
+    }
+
+    if (message.type === "DELETE_SESSION_RUN_LOG") {
+      void runtime
+        .deleteSessionRunLog(message.sessionId)
+        .then(() =>
+          sendResponse({
+            ok: true,
+            sessionId: message.sessionId,
+            logs: [],
+          } satisfies SessionRunLogResponse),
+        )
+        .catch((error) =>
+          sendResponse({
+            ok: false,
+            error: error instanceof Error ? error.message : "Failed to delete the session run log.",
+          } satisfies SessionRunLogResponse),
         );
       return true;
     }

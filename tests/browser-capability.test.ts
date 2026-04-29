@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BrowserCapabilityLayer, MockBrowserDriver } from "../src/background/browser-capability";
+import { BrowserCapabilityLayer, MockBrowserDriver } from "../src/background/browser/capability";
 import type {
   BrowserObservation,
   BrowserScreenshot,

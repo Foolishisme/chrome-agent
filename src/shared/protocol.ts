@@ -1,4 +1,14 @@
-import type { ActionResult, AgentAction, LlmProfile, ManualExtractionRecord, SearchPreference, SessionPublicState, SnapshotData } from "./types";
+import type {
+  ActionResult,
+  AgentAction,
+  DebugLogEntry,
+  LlmProfile,
+  ManualExtractionRecord,
+  SearchPreference,
+  SessionDebugBundle,
+  SessionPublicState,
+  SnapshotData,
+} from "./types";
 
 export type StartSessionMessage = {
   type: "START_SESSION";
@@ -52,6 +62,21 @@ export type ClearManualExtractionHistoryMessage = {
   type: "CLEAR_MANUAL_EXTRACTION_HISTORY";
 };
 
+export type RequestSessionRunLogMessage = {
+  type: "REQUEST_SESSION_RUN_LOG";
+  sessionId?: string;
+};
+
+export type ExportSessionDebugBundleMessage = {
+  type: "EXPORT_SESSION_DEBUG_BUNDLE";
+  sessionId?: string;
+};
+
+export type DeleteSessionRunLogMessage = {
+  type: "DELETE_SESSION_RUN_LOG";
+  sessionId: string;
+};
+
 export type RequestSnapshotMessage = {
   type: "REQUEST_SNAPSHOT";
 };
@@ -83,6 +108,9 @@ export type RuntimeMessage =
   | ExtractCurrentPageMessage
   | RequestManualExtractionHistoryMessage
   | ClearManualExtractionHistoryMessage
+  | RequestSessionRunLogMessage
+  | ExportSessionDebugBundleMessage
+  | DeleteSessionRunLogMessage
   | RequestSnapshotMessage
   | ExecuteActionMessage
   | SessionUpdateMessage
@@ -116,5 +144,18 @@ export interface ManualExtractionResponse {
   ok: boolean;
   record?: ManualExtractionRecord;
   history?: ManualExtractionRecord[];
+  error?: string;
+}
+
+export interface SessionRunLogResponse {
+  ok: boolean;
+  sessionId?: string;
+  logs?: DebugLogEntry[];
+  error?: string;
+}
+
+export interface SessionDebugBundleResponse {
+  ok: boolean;
+  bundle?: SessionDebugBundle;
   error?: string;
 }

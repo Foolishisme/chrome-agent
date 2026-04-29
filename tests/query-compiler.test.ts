@@ -8,7 +8,7 @@ import {
   detectOutputMode,
   detectTaskType,
   detectTaskTypeWithLiteModel,
-} from "../src/background/query-compiler";
+} from "../src/background/llm/query-compiler";
 
 describe("query compiler", () => {
   it("builds the search query directly from the lite model", async () => {

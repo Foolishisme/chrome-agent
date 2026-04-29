@@ -90,7 +90,7 @@ describe("session archive", () => {
       deleteConversationState,
       loadConversationBackfillState,
       rollbackConversationState,
-      saveSuccessfulSessionArchive,
+      saveSessionArchive,
     } = await import("../src/background/session-archive");
 
     const emptyFallback: SessionPublicState = {
@@ -104,10 +104,10 @@ describe("session archive", () => {
     };
 
     const conversation = await createConversation("Recent gold");
-    await saveSuccessfulSessionArchive(
+    await saveSessionArchive(
       createArchiveInput(createStoredState("session-1", "Recent gold", "Gold moved up recently"), conversation.conversationId, conversation.title),
     );
-    await saveSuccessfulSessionArchive(
+    await saveSessionArchive(
       createArchiveInput(
         createStoredState("session-2", "Is gold tied to recent wars?", "War is one of the risk-off factors"),
         conversation.conversationId,
@@ -132,6 +132,35 @@ describe("session archive", () => {
     expect(deleted.conversationId).toBeUndefined();
     expect(deleted.conversationTurns).toEqual([]);
     expect(deleted.availableConversations).toEqual([]);
+  });
+
+  it("stores terminal non-success turns in the conversation archive", async () => {
+    const { createConversation, loadConversationBackfillState, saveSessionArchive } = await import("../src/background/session-archive");
+
+    const fallback: SessionPublicState = {
+      status: "idle",
+      currentStep: 0,
+      plan: [],
+      items: [],
+      logs: [],
+      timeline: [],
+      updatedAt: Date.now(),
+    };
+
+    const conversation = await createConversation("Partial research");
+    const partialState = createStoredState("session-partial", "Partial research", "Need another round");
+    partialState.finalResult = {
+      ...partialState.finalResult!,
+      status: "partial",
+      errorsOrBlockers: ["Coverage was insufficient."],
+    };
+
+    await saveSessionArchive(createArchiveInput(partialState, conversation.conversationId, conversation.title));
+
+    const current = await loadConversationBackfillState(fallback);
+    expect(current.conversationTurns).toHaveLength(1);
+    expect(current.finalResult?.status).toBe("partial");
+    expect(current.finalResult?.summary).toBe("Need another round");
   });
 
   it("ignores legacy V1 archive keys after the V2 storage upgrade", async () => {

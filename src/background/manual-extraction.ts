@@ -1,6 +1,6 @@
 import type { ExecuteActionResponse, SnapshotResponse } from "../shared/protocol";
 import type { ManualExtractionRecord } from "../shared/types";
-import { sendMessageToTab } from "./runtime-core";
+import { sendMessageToTab } from "./runtime";
 
 // Deprecated internal QA helper.
 // Keep the backend path available temporarily for local debugging and offline review,

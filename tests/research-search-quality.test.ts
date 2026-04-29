@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { preparePublicResearchCandidates } from "../src/browser-core-v2/background/adapters";
+import { preparePublicResearchCandidates } from "../src/background/tools/adapters";
 import { extractGoogleSearchResults, extractPageFacts } from "../src/content/research";
 import type { PublicResearchTaskSpec, SessionMemory, SnapshotData } from "../src/shared/types";
 
@@ -7,8 +7,8 @@ const { reorderResearchCandidatesMock } = vi.hoisted(() => ({
   reorderResearchCandidatesMock: vi.fn(),
 }));
 
-vi.mock("../src/background/llm-client", async () => {
-  const actual = await vi.importActual<typeof import("../src/background/llm-client")>("../src/background/llm-client");
+vi.mock("../src/background/llm/llm-client", async () => {
+  const actual = await vi.importActual<typeof import("../src/background/llm/llm-client")>("../src/background/llm/llm-client");
   return {
     ...actual,
     reorderResearchCandidates: reorderResearchCandidatesMock,

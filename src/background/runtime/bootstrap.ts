@@ -1,8 +1,8 @@
 import type { SearchPreference } from "../../shared/types";
-import { classifyTaskType } from "../llm-client";
-import { compileTaskSpec, detectTaskTypeWithLiteModel } from "../query-compiler";
-import { refineCommerceSearchQuery, refineResearchQuery } from "../llm-client";
-import { buildBrowserCoreV2DisplayPlan } from "../../browser-core-v2/background/runner/task-plan-builder";
+import { classifyTaskType } from "../llm/llm-client";
+import { compileTaskSpec, detectTaskTypeWithLiteModel } from "../llm/query-compiler";
+import { refineCommerceSearchQuery, refineResearchQuery } from "../llm/llm-client";
+import { buildBrowserCoreV2DisplayPlan } from "../runner/task-plan-builder";
 import { toPublicState } from "./public-state";
 import type { ActiveSession } from "./shared";
 import { appendLog, createSessionId } from "./shared";

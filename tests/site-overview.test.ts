@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   filterSiteNavCandidates,
   prepareSiteOverviewCandidates,
-} from "../src/browser-core-v2/background/adapters";
+} from "../src/background/tools/adapters";
 import { extractSiteNavLinks } from "../src/content/research";
 import type { SessionMemory, SiteOverviewTaskSpec, SnapshotData } from "../src/shared/types";
 
@@ -10,8 +10,8 @@ const { reorderSiteCandidatesMock } = vi.hoisted(() => ({
   reorderSiteCandidatesMock: vi.fn(),
 }));
 
-vi.mock("../src/background/llm-client", async () => {
-  const actual = await vi.importActual<typeof import("../src/background/llm-client")>("../src/background/llm-client");
+vi.mock("../src/background/llm/llm-client", async () => {
+  const actual = await vi.importActual<typeof import("../src/background/llm/llm-client")>("../src/background/llm/llm-client");
   return {
     ...actual,
     reorderSiteCandidates: reorderSiteCandidatesMock,

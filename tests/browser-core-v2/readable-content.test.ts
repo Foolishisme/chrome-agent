@@ -1,6 +1,6 @@
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
-import { extractReadableContent } from "../../src/browser-core-v2/content/readable-content";
+import { extractReadableContent } from "../../src/content/core/readable-content";
 
 describe("Browser Core V2 readable content", () => {
   it("extracts a markdown excerpt with Readability and Turndown", () => {

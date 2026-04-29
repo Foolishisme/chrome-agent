@@ -5,7 +5,7 @@ import {
   buildFirstPartyToolPromptCatalog,
   getFirstPartyToolContract,
   listFirstPartyToolContracts,
-} from "../../src/browser-core-v2/background/tools";
+} from "../../src/background/tools";
 
 describe("Browser Core V2 first-party tool contracts", () => {
   it("freezes the first LLM-visible tool set without exposing internal actions", () => {

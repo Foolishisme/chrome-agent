@@ -10,7 +10,7 @@ import {
   parseModelJson,
   reorderResearchCandidates,
   reorderSiteCandidates,
-} from "../src/background/llm-client";
+} from "../src/background/llm/llm-client";
 
 afterEach(() => {
   vi.unstubAllGlobals();
