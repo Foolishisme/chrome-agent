@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SessionMemory } from "../src/shared/types";
+import type { DebugLogEntry, SessionMemory } from "../src/shared/types";
 
 const storageState: Record<string, unknown> = {};
 
@@ -160,5 +160,43 @@ describe("run log store", () => {
 
     await deleteSessionRunLog(memory.runtimeMeta.sessionId);
     expect(await loadSessionRunLog(memory.runtimeMeta.sessionId)).toBeUndefined();
+  });
+
+  it("merges stored logs with live memory logs when saving a terminal snapshot", async () => {
+    const {
+      appendSessionRunLogEntry,
+      loadSessionRunLog,
+      saveSessionRunDebugSnapshot,
+    } = await import("../src/background/runtime/run-log-store");
+
+    const memory = createMemory();
+    const storedEntry: DebugLogEntry = {
+      timestamp: 1_000,
+      source: "runtime",
+      level: "info",
+      message: "Stored before snapshot.",
+      stepId: "browser-search",
+      toolName: "browser.search",
+      round: 1,
+    };
+    const liveEntry: DebugLogEntry = {
+      timestamp: 1_001,
+      source: "llm",
+      level: "warn",
+      message: "Live tail before terminal snapshot.",
+      stepId: "decide-round-action",
+      toolName: "decideRoundAction",
+      round: 1,
+    };
+
+    await appendSessionRunLogEntry(memory.runtimeMeta.sessionId, storedEntry);
+    memory.logs = [storedEntry, liveEntry];
+    await saveSessionRunDebugSnapshot(memory);
+
+    const stored = await loadSessionRunLog(memory.runtimeMeta.sessionId);
+    expect(stored?.runLogs.map((entry) => entry.message)).toEqual([
+      "Stored before snapshot.",
+      "Live tail before terminal snapshot.",
+    ]);
   });
 });

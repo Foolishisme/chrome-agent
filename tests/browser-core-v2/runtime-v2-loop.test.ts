@@ -646,4 +646,73 @@ describe("Browser Core V2 runtime loop", () => {
       "observe",
     ]);
   });
+
+  it("finalizes instead of starting a third round when maxRounds is reached", async () => {
+    const taskSpec: PublicResearchTaskSpec = {
+      taskType: "public_research",
+      originalGoal: "Research OpenAI pricing",
+      outputMode: "inline",
+      searchQuery: "OpenAI pricing official",
+      querySource: "rule",
+      notes: [],
+      searchEngine: "google",
+      candidateLimit: 4,
+      sourceTargetCount: 1,
+    };
+    generateFinalResultMock.mockResolvedValue({
+      summary: "Use the current pricing source instead of replanning again.",
+      markdown: "Use the current pricing source instead of replanning again.",
+      keyResults: ["Pricing page"],
+      suggestedNextAction: "Review the current source before retrying.",
+      model: "mock-model",
+      provider: "openai-compatible",
+    });
+    decideRoundActionMock.mockResolvedValue({
+      decision: "replan",
+      reason: "LLM requested another round even though the max round is already reached.",
+      nextRoundSummary: "Try a third round.",
+      taskSpecPatch: {
+        searchQuery: "OpenAI pricing third round",
+        notesAppend: ["Should not be applied."],
+      },
+      source: "llm-lite",
+      model: "mock-model",
+      provider: "openai-compatible",
+    });
+
+    const memory = createBaseMemory(taskSpec);
+    memory.runtimeMeta.currentRound = 2;
+    memory.runtimeMeta.maxRounds = 2;
+    const session = createSession(memory);
+    const deps = createDeps();
+    const driver = new MockBrowserDriver({
+      observations: {
+        1: createObservation({
+          tab: { tabId: 1, url: "https://www.google.com/search?q=OpenAI+pricing+official", title: "Search", active: true, status: "complete" },
+          url: "https://www.google.com/search?q=OpenAI+pricing+official",
+          title: "Search",
+          mainText: "Search results page",
+          links: [{ text: "Pricing", url: "https://openai.com/pricing" }],
+        }),
+        2: createObservation({
+          tab: { tabId: 2, url: "https://openai.com/pricing", title: "Pricing", active: true, status: "complete" },
+          url: "https://openai.com/pricing",
+          title: "Pricing",
+          mainText: "Pricing page with enough information to summarize the current source.",
+          links: [],
+        }),
+      },
+    });
+
+    await runBrowserCoreV2Loop(session, deps, { driver });
+
+    expect(decideRoundActionMock).toHaveBeenCalledTimes(1);
+    expect((session.memory.taskSpec as PublicResearchTaskSpec).searchQuery).toBe("OpenAI pricing official");
+    expect(session.memory.runtimeMeta.currentRound).toBe(2);
+    expect(session.memory.finalResult?.summary).toContain("current pricing source");
+    expect(session.memory.unresolvedIssues).toContain(
+      "Max runtime rounds reached; ignored an extra replan request. LLM requested another round even though the max round is already reached.",
+    );
+    expect(driver.calls.filter((call) => call.method === "openTab")).toHaveLength(2);
+  });
 });

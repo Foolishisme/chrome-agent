@@ -11,6 +11,7 @@ import {
   deleteSessionRunLog as deleteStoredSessionRunLog,
   exportSessionDebugBundle as exportStoredSessionDebugBundle,
   loadSessionRunLog,
+  mergeSessionRunLogs,
   saveSessionRunDebugSnapshot,
 } from "./run-log-store";
 import type { ActiveSession } from "./shared";
@@ -214,7 +215,7 @@ export class BrowserAgentRuntime {
 
     const stored = await loadSessionRunLog(targetSessionId);
     if (this.activeSession?.memory.runtimeMeta.sessionId === targetSessionId) {
-      return stored?.runLogs ?? this.activeSession.memory.logs;
+      return mergeSessionRunLogs(stored?.runLogs, this.activeSession.memory.logs);
     }
     return stored?.runLogs ?? [];
   }
@@ -234,7 +235,7 @@ export class BrowserAgentRuntime {
         taskSpec: this.activeSession.memory.taskSpec,
         timeline: [...this.activeSession.memory.stepHistory],
         finalResult: this.activeSession.memory.finalResult,
-        runLogs: stored?.runLogs ?? [...this.activeSession.memory.logs],
+        runLogs: mergeSessionRunLogs(stored?.runLogs, this.activeSession.memory.logs),
         filterDiagnostics: this.activeSession.memory.filterDiagnostics,
         unresolvedIssues: [...this.activeSession.memory.unresolvedIssues],
       };

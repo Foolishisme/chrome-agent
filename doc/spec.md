@@ -13,8 +13,12 @@
 代码级协议以实现为准，优先查看：
 - `src/shared/types.ts`
 - `src/shared/schema.ts`
-- `src/background/runtime-core.ts`
-- `src/browser-core-v2/background/`
+- `src/shared/browser-capability.ts`
+- `src/background/runtime/runtime-core.ts`
+- `src/background/runner/`
+- `src/background/browser/`
+- `src/content/core/`
+- `src/shared/browser-core/`
 
 ## 2. 当前目标
 

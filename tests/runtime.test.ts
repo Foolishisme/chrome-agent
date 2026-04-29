@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LIMITS } from "../src/shared/constants";
 import { RuntimeError } from "../src/shared/errors";
-import type { SessionMemory } from "../src/shared/types";
+import type { DebugLogEntry, SessionDebugBundle, SessionMemory } from "../src/shared/types";
 import type { ActiveSession } from "../src/background/runtime/shared";
 
 const { createInitialSessionMock, runBrowserCoreV2LoopMock } = vi.hoisted(() => ({
@@ -185,6 +185,85 @@ describe("runtime messaging recovery", () => {
     );
 
     expect(budget.hardStopCode).toBe("MAX_ELAPSED_REACHED");
+  });
+});
+
+describe("runtime run log export", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("merges persisted run logs with the active session live tail", async () => {
+    const storageState: Record<string, unknown> = {};
+    vi.stubGlobal("chrome", {
+      storage: {
+        local: {
+          get: vi.fn(async (keys: string | string[]) => {
+            if (typeof keys === "string") {
+              return { [keys]: storageState[keys] };
+            }
+
+            return keys.reduce<Record<string, unknown>>((acc, key) => {
+              acc[key] = storageState[key];
+              return acc;
+            }, {});
+          }),
+          set: vi.fn(async (value: Record<string, unknown>) => {
+            Object.assign(storageState, value);
+          }),
+          remove: vi.fn(async (keys: string | string[]) => {
+            for (const key of Array.isArray(keys) ? keys : [keys]) {
+              delete storageState[key];
+            }
+          }),
+        },
+      },
+    });
+
+    const { appendSessionRunLogEntry } = await import("../src/background/runtime/run-log-store");
+    const storedEntry: DebugLogEntry = {
+      timestamp: 2_000,
+      source: "runtime",
+      level: "info",
+      message: "Stored log.",
+      stepId: "browser-search",
+      toolName: "browser.search",
+      round: 1,
+    };
+    const liveEntry: DebugLogEntry = {
+      timestamp: 2_001,
+      source: "llm",
+      level: "warn",
+      message: "Live log.",
+      stepId: "decide-round-action",
+      toolName: "decideRoundAction",
+      round: 1,
+    };
+
+    const memory = createMemory({
+      logs: [storedEntry, liveEntry],
+      runtimeMeta: {
+        ...createMemory().runtimeMeta,
+        sessionId: "active-session",
+      },
+    });
+    await appendSessionRunLogEntry(memory.runtimeMeta.sessionId, storedEntry);
+
+    const runtime = new BrowserAgentRuntime() as unknown as {
+      activeSession?: ActiveSession;
+      getSessionRunLog(sessionId?: string): Promise<DebugLogEntry[]>;
+      exportSessionDebugBundle(sessionId?: string): Promise<SessionDebugBundle | undefined>;
+    };
+    runtime.activeSession = createSession(memory);
+
+    await expect(runtime.getSessionRunLog(memory.runtimeMeta.sessionId)).resolves.toEqual([
+      storedEntry,
+      liveEntry,
+    ]);
+    await expect(runtime.exportSessionDebugBundle(memory.runtimeMeta.sessionId)).resolves.toMatchObject({
+      sessionId: "active-session",
+      runLogs: [storedEntry, liveEntry],
+    });
   });
 });
 

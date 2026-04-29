@@ -800,6 +800,37 @@ function finishTerminalState(context: BrowserCoreTaskExecutorContext, summary: s
   context.session.memory.liveStepSummary = status === "blocked" ? "Session stopped after a blocked step." : "Session completed with a terminal result.";
 }
 
+function hasFinalizableEvidence(memory: SessionMemory) {
+  return memory.extractedItems.length > 0 || memory.researchSources.some((source) => source.status !== "failed");
+}
+
+async function finishInsteadOfReplanAtMaxRounds(
+  context: BrowserCoreTaskExecutorContext,
+  decision: RoundDecisionResult,
+  finalizeStepId: string,
+) {
+  if (context.session.memory.runtimeMeta.currentRound < context.session.memory.runtimeMeta.maxRounds) {
+    return false;
+  }
+
+  const summary = `Max runtime rounds reached; ignored an extra replan request. ${decision.reason}`;
+  appendLog(context.session, "runtime", "warn", "Max runtime rounds reached; finishing instead of replanning.", {
+    round: context.session.memory.runtimeMeta.currentRound,
+    maxRounds: context.session.memory.runtimeMeta.maxRounds,
+    decision,
+  });
+  context.session.memory.unresolvedIssues = dedupeStrings([...context.session.memory.unresolvedIssues, summary]);
+
+  if (hasFinalizableEvidence(context.session.memory)) {
+    await executeFinalizeTaskResultStep(context, finalizeStepId);
+    return true;
+  }
+
+  finishTerminalState(context, summary, "failed");
+  await context.deps.publishState(context.session);
+  return true;
+}
+
 export async function executeDirectAnswerTask(context: BrowserCoreTaskExecutorContext) {
   await executeFinalizeTaskResultStep(context, "finalize-direct-answer");
 }
@@ -845,6 +876,9 @@ export async function executePublicResearchTask(context: BrowserCoreTaskExecutor
       return;
     }
 
+    if (await finishInsteadOfReplanAtMaxRounds(context, decision, "finalize-research-result")) {
+      return;
+    }
     applyRoundDecisionPatch(context, decision);
     clearRoundStateForReplan(context);
     context.session.memory.liveStepSummary = decision.nextRoundSummary ?? `Round ${context.session.memory.runtimeMeta.currentRound} is starting.`;
@@ -912,6 +946,9 @@ export async function executeSiteOverviewTask(context: BrowserCoreTaskExecutorCo
       return;
     }
 
+    if (await finishInsteadOfReplanAtMaxRounds(context, decision, "finalize-research-result")) {
+      return;
+    }
     applyRoundDecisionPatch(context, decision);
     clearRoundStateForReplan(context);
     context.session.memory.liveStepSummary = decision.nextRoundSummary ?? `Round ${context.session.memory.runtimeMeta.currentRound} is starting.`;
@@ -942,6 +979,9 @@ export async function executeCommerceTask(context: BrowserCoreTaskExecutorContex
       return;
     }
 
+    if (await finishInsteadOfReplanAtMaxRounds(context, decision, "finalize-commerce-result")) {
+      return;
+    }
     applyRoundDecisionPatch(context, decision);
     clearRoundStateForReplan(context);
     context.session.memory.liveStepSummary = decision.nextRoundSummary ?? `Round ${context.session.memory.runtimeMeta.currentRound} is starting.`;

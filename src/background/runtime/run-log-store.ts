@@ -15,6 +15,37 @@ function getRunLogStorageKey(sessionId: string) {
   return `${RUN_LOG_PREFIX}${sessionId}`;
 }
 
+function getRunLogEntryKey(entry: DebugLogEntry) {
+  return [
+    entry.timestamp,
+    entry.source,
+    entry.level,
+    entry.message,
+    entry.detail ?? "",
+    entry.stepId ?? "",
+    entry.toolName ?? "",
+    entry.round ?? "",
+  ].join("\u001f");
+}
+
+export function mergeSessionRunLogs(...batches: Array<DebugLogEntry[] | undefined>) {
+  const seen = new Set<string>();
+  const merged: DebugLogEntry[] = [];
+
+  for (const batch of batches) {
+    for (const entry of batch ?? []) {
+      const key = getRunLogEntryKey(entry);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      merged.push(entry);
+    }
+  }
+
+  return merged.slice(-MAX_PERSISTED_RUN_LOGS);
+}
+
 function normalizeStoredRunLog(value: unknown): StoredSessionRunLog | undefined {
   if (!value || typeof value !== "object") {
     return undefined;
@@ -66,7 +97,7 @@ export async function appendSessionRunLogEntry(sessionId: string, entry: DebugLo
     taskSpec: current?.taskSpec,
     timeline: current?.timeline ?? [],
     finalResult: current?.finalResult,
-    runLogs: [...(current?.runLogs ?? []), entry].slice(-MAX_PERSISTED_RUN_LOGS),
+    runLogs: mergeSessionRunLogs(current?.runLogs, [entry]),
     filterDiagnostics: current?.filterDiagnostics,
     unresolvedIssues: current?.unresolvedIssues ?? [],
     updatedAt: Date.now(),
@@ -91,7 +122,7 @@ export async function saveSessionRunDebugSnapshot(memory: SessionMemory) {
     taskSpec: memory.taskSpec,
     timeline: [...memory.stepHistory],
     finalResult: memory.finalResult,
-    runLogs: current?.runLogs ?? [...memory.logs],
+    runLogs: mergeSessionRunLogs(current?.runLogs, memory.logs),
     filterDiagnostics: memory.filterDiagnostics,
     unresolvedIssues: [...memory.unresolvedIssues],
     updatedAt: Date.now(),
