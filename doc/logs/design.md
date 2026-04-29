@@ -175,3 +175,13 @@
   - route research/site/commercial candidate preparation through `prepare-task-candidates`
   - keep legacy open-search and some helper files only where the new chain still needs them as internal helpers
 - Revisit Trigger: once the generic round runner lands, re-evaluate whether the remaining legacy helper files should move into a dedicated `legacy/` or Browser Core V2 adapter folder, or be deleted entirely.
+## 2026-04-29 - Main doc dedupe and noise reduction
+
+- Question: The main docs were carrying repeated historical narration and some stale entry-point wording, which made execution guidance noisier than necessary.
+- Decision: Keep main docs focused on current truth only, and push migration narration to `history/` and `logs/`.
+- Scope:
+  - `doc/spec.md` now records only current architecture truth, boundaries, and invariants
+  - `doc/constraints.md` now records only hard red lines
+  - `doc/plan.md` now records only the active migration path and next steps
+  - `doc/status.md` now records only the live checkpoint, gaps, risks, and validation
+- Non-goal: this cleanup does not change architecture decisions or acceptance targets; it only narrows what belongs in the main docs.

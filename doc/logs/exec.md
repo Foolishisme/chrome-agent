@@ -190,3 +190,16 @@
 - Risk:
   - `skill.commerceResearch` still relies on a legacy helper through the current delegate path.
   - The runner is still task-family-specific and has not yet been lifted into a fully generic `RoundPlanSchema` runner.
+## 2026-04-29 - Main doc dedupe
+
+- Action: Rewrote the four main docs to remove repeated historical narration, reduce migration-story noise, and keep execution guidance centered on the current chain.
+- Changed:
+  - Rewrote `doc/spec.md` as current architecture truth only.
+  - Rewrote `doc/constraints.md` as red lines only.
+  - Rewrote `doc/plan.md` as active migration path and next steps only.
+  - Rewrote `doc/status.md` as live checkpoint, gaps, risks, and validation only.
+- Validation:
+  - manual cross-check of `spec / constraints / plan / status`
+  - `git diff -- doc/spec.md doc/constraints.md doc/plan.md doc/status.md doc/logs/design.md doc/logs/exec.md`
+- Result: the main docs now say less about how the repo got here and more about what matters for the next execution step.
+- Risk: this is a docs-only cleanup; it does not re-verify runtime behavior.
