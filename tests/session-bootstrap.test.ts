@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createInitialSession } from "../src/background/runtime/bootstrap";
-import type { CommerceTaskSpec } from "../src/shared/types";
+import { createInitialSession } from "../src/background/runtime/session-bootstrap";
+import type { CommerceTaskSpec } from "../src/shared/agent-domain-model";
 
 const { detectTaskTypeWithLiteModelMock, compileTaskSpecMock } = vi.hoisted(() => ({
   detectTaskTypeWithLiteModelMock: vi.fn(),

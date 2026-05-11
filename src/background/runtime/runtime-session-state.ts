@@ -1,5 +1,5 @@
-import { RuntimeError } from "../../shared/errors";
-import type { DebugLogEntry, DebugLogLevel, SessionMemory, SessionPublicState, ToolName, ToolResult } from "../../shared/types";
+import { RuntimeError } from "../../shared/runtime-error";
+import type { DebugLogEntry, DebugLogLevel, SessionMemory, SessionPublicState, ToolName, ToolResult } from "../../shared/agent-domain-model";
 import { appendSessionRunLogEntry } from "./run-log-store";
 
 export const MAX_LOG_ENTRIES = 80;

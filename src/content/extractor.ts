@@ -1,5 +1,5 @@
-import { JD_SELECTORS } from "../shared/selectors";
-import type { ExtractedItem, ExtractionDiagnostics, ResultListState } from "../shared/types";
+import { JD_SELECTORS } from "../shared/jd-search-selectors";
+import type { ExtractedItem, ExtractionDiagnostics, ResultListState } from "../shared/agent-domain-model";
 
 const PRODUCT_LINK_SELECTOR = [
   "a[href*='item.jd.com/']",

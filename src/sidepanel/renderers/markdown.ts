@@ -1,4 +1,4 @@
-import { escapeHtml } from "./common";
+import { escapeHtml } from "./sidepanel-rendering-primitives";
 
 function renderInlineMarkdown(text: unknown) {
   let html = escapeHtml(text);

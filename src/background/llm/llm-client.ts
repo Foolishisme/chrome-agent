@@ -1,6 +1,6 @@
-﻿import { z } from "zod";
-import { LIMITS } from "../../shared/constants";
-import { RuntimeError } from "../../shared/errors";
+import { z } from "zod";
+import { LIMITS } from "../../shared/agent-runtime-config";
+import { RuntimeError } from "../../shared/runtime-error";
 import {
   finalResultSynthesisSchema,
   queryRefinementSchema,
@@ -8,7 +8,7 @@ import {
   roundDecisionSchema,
   sourceFactCardSchema,
   taskRouteSchema,
-} from "../../shared/schema";
+} from "../../shared/llm-runtime-contract-schemas";
 import type {
   ConversationTurn,
   DirectAnswerTaskSpec,
@@ -21,7 +21,7 @@ import type {
   SiteOverviewTaskSpec,
   SourceFactCard,
   TaskType,
-} from "../../shared/types";
+} from "../../shared/agent-domain-model";
 import {
   buildDirectAnswerPrompt,
   buildFinalResultPrompt,
@@ -32,7 +32,7 @@ import {
   buildSourceFactCardPrompt,
   buildSiteCandidateReorderPrompt,
   buildTaskRoutePromptWithContext,
-} from "./prompting";
+} from "./llm-prompt-builders";
 
 type ProviderName = "gemini" | "openai-compatible";
 

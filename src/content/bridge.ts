@@ -1,5 +1,5 @@
-import type { ActionResult, AgentAction, SnapshotData } from "../shared/types";
-import { executeAction } from "./actions";
+import type { ActionResult, AgentAction, SnapshotData } from "../shared/agent-domain-model";
+import { executeAction } from "./content-action-executor";
 import { scanPage } from "./scanner";
 
 export function scanCurrentPage(): SnapshotData {

@@ -13,8 +13,8 @@ import type {
   BrowserScrollInput,
   BrowserTabRef,
   BrowserTypeInput,
-} from "../../src/shared/browser-capability";
-import type { BrowserDriver } from "../../src/background/browser/capability/types";
+} from "../../src/shared/browser-capability-contract";
+import type { BrowserDriver } from "../../src/background/browser/capability/browser-driver-contract";
 
 type BrowserDriverMethod = keyof BrowserDriver;
 

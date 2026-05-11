@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { filterExtractedItems } from "../src/background/tools/adapters/prepare-task-candidates";
-import type { SearchTaskSpec } from "../src/shared/types";
+import type { SearchTaskSpec } from "../src/shared/agent-domain-model";
 
 const taskSpec: SearchTaskSpec = {
   taskType: "commerce_search",

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { collectResultListState, extractStructuredProducts } from "../src/content/extractor";
 import { scanPageAtUrl } from "../src/content/scanner";
-import type { SemanticNode } from "../src/shared/types";
+import type { SemanticNode } from "../src/shared/agent-domain-model";
 
 function mockVisibleRect() {
   return vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(

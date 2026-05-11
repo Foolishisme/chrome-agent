@@ -1,5 +1,5 @@
-﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConversationSummary, ConversationTurn, LlmProfile, SessionPublicState } from "../src/shared/types";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ConversationSummary, ConversationTurn, LlmProfile, SessionPublicState } from "../src/shared/agent-domain-model";
 
 type RuntimeMessage = {
   type: string;
@@ -174,7 +174,7 @@ function createRunningStateWithTransientError(): SessionPublicState {
 
 async function loadSidepanel() {
   vi.resetModules();
-  await import("../src/sidepanel/index");
+  await import("../src/sidepanel/sidepanel-app");
 }
 
 describe("sidepanel result actions", () => {

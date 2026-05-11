@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MockBrowserDriver } from "../test-support/mock-browser-driver";
 import { defaultPublicState } from "../../src/background/runtime/public-state";
-import type { ActiveSession } from "../../src/background/runtime/shared";
-import type { BrowserObservation } from "../../src/shared/browser-capability";
+import type { ActiveSession } from "../../src/background/runtime/runtime-session-state";
+import type { BrowserObservation } from "../../src/shared/browser-capability-contract";
 import type {
   AgentAction,
   CommerceTaskSpec,
@@ -11,8 +11,9 @@ import type {
   SessionMemory,
   SiteOverviewTaskSpec,
   SnapshotData,
-} from "../../src/shared/types";
-import { buildRuntimeTaskPlan, runRuntimeToolLoop } from "../../src/background/runner";
+} from "../../src/shared/agent-domain-model";
+import { runRuntimeToolLoop } from "../../src/background/runner/run-runtime-tool-loop";
+import { buildRuntimeTaskPlan } from "../../src/background/runner/task-plan-builder";
 
 const { decideRoundActionMock, generateDirectAnswerResultMock, generateFinalResultMock } = vi.hoisted(() => ({
   decideRoundActionMock: vi.fn(),

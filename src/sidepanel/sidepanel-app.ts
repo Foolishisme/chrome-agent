@@ -1,4 +1,4 @@
-import type { SessionPublicState } from "../shared/types";
+import type { SessionPublicState } from "../shared/agent-domain-model";
 import {
   copyArtifact,
   copyLiveResult,
@@ -13,9 +13,9 @@ import {
   startSession,
   stopSession,
   toggleConversationPanel,
-} from "./actions";
+} from "./sidepanel-command-handlers";
 import { renderConversationSection } from "./renderers/conversation";
-import { renderTopLevelSection } from "./renderers/common";
+import { renderTopLevelSection } from "./renderers/sidepanel-rendering-primitives";
 import { renderResultsSection } from "./renderers/results";
 import {
   getCurrentState,
@@ -25,7 +25,7 @@ import {
   setDraftGoal,
   persistDraftLlmProfile,
   toggleDraftSearchPreference,
-} from "./state";
+} from "./sidepanel-ui-state";
 
 const app = document.getElementById("app")!;
 

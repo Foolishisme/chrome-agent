@@ -7,7 +7,7 @@ import type {
   SessionDebugBundle,
   SessionPublicState,
   SnapshotData,
-} from "./types";
+} from "./agent-domain-model";
 
 export type StartSessionMessage = {
   type: "START_SESSION";

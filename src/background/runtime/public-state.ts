@@ -1,5 +1,5 @@
-import type { ConversationTurn, SessionMemory, SessionPublicState } from "../../shared/types";
-import { buildFallbackFinalResult } from "../tools/result-builders";
+import type { ConversationTurn, SessionMemory, SessionPublicState } from "../../shared/agent-domain-model";
+import { buildFallbackFinalResult } from "../tools/final-result-builders";
 
 export function defaultPublicState(): SessionPublicState {
   return {

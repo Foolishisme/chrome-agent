@@ -1,5 +1,5 @@
-﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SessionPublicState } from "../src/shared/types";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { SessionPublicState } from "../src/shared/agent-domain-model";
 
 const storageState: Record<string, unknown> = {};
 

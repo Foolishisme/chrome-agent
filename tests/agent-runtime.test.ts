@@ -1,31 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LIMITS } from "../src/shared/constants";
-import { RuntimeError } from "../src/shared/errors";
-import type { DebugLogEntry, SessionDebugBundle, SessionMemory } from "../src/shared/types";
-import type { ActiveSession } from "../src/background/runtime/shared";
+import { LIMITS } from "../src/shared/agent-runtime-config";
+import { RuntimeError } from "../src/shared/runtime-error";
+import type { DebugLogEntry, SessionDebugBundle, SessionMemory } from "../src/shared/agent-domain-model";
+import type { ActiveSession } from "../src/background/runtime/runtime-session-state";
 
 const { createInitialSessionMock, runRuntimeToolLoopMock } = vi.hoisted(() => ({
   createInitialSessionMock: vi.fn(),
   runRuntimeToolLoopMock: vi.fn(),
 }));
 
-vi.mock("../src/background/runtime/bootstrap", async () => {
-  const actual = await vi.importActual<typeof import("../src/background/runtime/bootstrap")>("../src/background/runtime/bootstrap");
+vi.mock("../src/background/runtime/session-bootstrap", async () => {
+  const actual = await vi.importActual<typeof import("../src/background/runtime/session-bootstrap")>("../src/background/runtime/session-bootstrap");
   return {
     ...actual,
     createInitialSession: createInitialSessionMock,
   };
 });
 
-vi.mock("../src/background/runner", async () => {
-  const actual = await vi.importActual<typeof import("../src/background/runner")>("../src/background/runner");
+vi.mock("../src/background/runner/run-runtime-tool-loop", async () => {
+  const actual = await vi.importActual<typeof import("../src/background/runner/run-runtime-tool-loop")>("../src/background/runner/run-runtime-tool-loop");
   return {
     ...actual,
     runRuntimeToolLoop: runRuntimeToolLoopMock,
   };
 });
 
-import { BrowserAgentRuntime, evaluateRuntimeBudget, isReceiverMissingError, sendMessageToTab } from "../src/background/runtime/runtime-core";
+import { BrowserAgentRuntime, evaluateRuntimeBudget, isReceiverMissingError, sendMessageToTab } from "../src/background/runtime/agent-runtime";
 
 function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
   const memory: SessionMemory = {

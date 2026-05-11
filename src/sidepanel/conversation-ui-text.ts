@@ -1,4 +1,4 @@
-import { getMessages } from "./i18n";
+import { getMessages } from "./sidepanel-message-catalog";
 
 export const messages = getMessages();
 

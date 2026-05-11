@@ -1,4 +1,4 @@
-import type { ActionResult, AgentAction } from "../shared/types";
+import type { ActionResult, AgentAction } from "../shared/agent-domain-model";
 import { extractStructuredProducts } from "./extractor";
 import { extractGoogleSearchResults, extractPageFacts, extractSiteNavLinks } from "./research";
 import { resolveAgentElement } from "./scanner";

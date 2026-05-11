@@ -6,7 +6,7 @@ import {
   roundDecisionSchema,
   sourceFactCardSchema,
   taskRouteSchema,
-} from "../src/shared/schema";
+} from "../src/shared/llm-runtime-contract-schemas";
 
 describe("schema contracts", () => {
   it("accepts a valid NAVIGATE action", () => {

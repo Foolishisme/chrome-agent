@@ -1,19 +1,21 @@
-import type { BrowserDriver } from "../browser/capability/types";
+import type { BrowserDriver } from "../browser/capability/browser-driver-contract";
 import { decideRoundAction, type RoundDecisionResult } from "../llm/llm-client";
-import { appendLog } from "../runtime/shared";
+import { appendLog } from "../runtime/runtime-session-state";
 import { ensureTerminalResult } from "../runtime/public-state";
 import { openCommerceSearchResults } from "../tools/commerce/open-commerce-search-results";
-import type { StepOptions } from "../tools/shared";
+import type { StepOptions } from "../tools/tool-execution-context";
 import type {
-  FirstPartyToolHandlerContext,
   BrowserSearchResult,
   BrowserSiteOverviewToolOutput,
   BrowserWebDetailToolOutput,
   CommerceResearchToolInput,
   CommerceResearchToolOutput,
+} from "../tools/first-party-tool-contracts";
+import type {
+  FirstPartyToolHandlerContext,
   FirstPartyToolRegistry,
-} from "../tools";
-import { executeFirstPartyTool } from "../tools";
+} from "../tools/first-party-tool-registry";
+import { executeFirstPartyTool } from "../tools/first-party-tool-registry";
 import type {
   ActionResult,
   AgentAction,
@@ -28,13 +30,15 @@ import type {
   SiteOverviewTaskSpec,
   ToolName,
   ToolResult,
-} from "../../shared/types";
-import type { ActiveSession } from "../runtime/shared";
+} from "../../shared/agent-domain-model";
+import type { ActiveSession } from "../runtime/runtime-session-state";
 import {
   finalizeTaskResult,
+} from "../tools/adapters/finalize-task-result";
+import {
   prepareCommerceCandidates,
   preparePublicResearchCandidates,
-} from "../tools/adapters";
+} from "../tools/adapters/prepare-task-candidates";
 import { buildRuntimeTaskPlan } from "./task-plan-builder";
 
 export interface RuntimeToolLoopDeps {

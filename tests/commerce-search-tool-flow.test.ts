@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { buildRuleBasedSummary } from "../src/background/tools";
+import { buildRuleBasedSummary } from "../src/background/tools/final-result-builders";
 import { openCommerceSearchResults } from "../src/background/tools/commerce/open-commerce-search-results";
 import { compileSearchTask } from "../src/background/llm/query-compiler";
-import { finalizeTaskResult, prepareCommerceCandidates } from "../src/background/tools/adapters";
-import type { ActionResult, CommerceTaskSpec, SessionMemory, SnapshotData } from "../src/shared/types";
+import { finalizeTaskResult } from "../src/background/tools/adapters/finalize-task-result";
+import { prepareCommerceCandidates } from "../src/background/tools/adapters/prepare-task-candidates";
+import type { ActionResult, CommerceTaskSpec, SessionMemory, SnapshotData } from "../src/shared/agent-domain-model";
 
 function createSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
   return {

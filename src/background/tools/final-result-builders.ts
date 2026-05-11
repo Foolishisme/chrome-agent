@@ -9,7 +9,7 @@ import type {
   SessionMemory,
   SiteOverviewTaskSpec,
   TaskSpec,
-} from "../../shared/types";
+} from "../../shared/agent-domain-model";
 
 export function buildRuleBasedSummary(goal: string, items: ExtractedItem[]) {
   const first = items[0];

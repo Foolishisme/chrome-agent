@@ -1,4 +1,4 @@
-import type { PlanStep, TaskSpec, ToolName } from "../../shared/types";
+import type { PlanStep, TaskSpec, ToolName } from "../../shared/agent-domain-model";
 
 function createPlanStep(stepId: string, goal: string, toolName: ToolName): PlanStep {
   return {

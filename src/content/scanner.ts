@@ -1,6 +1,6 @@
 import { computeAccessibleName } from "dom-accessibility-api";
 import { roles } from "aria-query";
-import { JD_SELECTORS } from "../shared/selectors";
+import { JD_SELECTORS } from "../shared/jd-search-selectors";
 import type {
   ElementRect,
   InteractiveElement,
@@ -12,7 +12,7 @@ import type {
   SemanticRole,
   SemanticSnapshot,
   SnapshotData,
-} from "../shared/types";
+} from "../shared/agent-domain-model";
 import { collectResultListState } from "./extractor";
 import { collectGoogleSearchResultsState, collectPageContentState } from "./research";
 

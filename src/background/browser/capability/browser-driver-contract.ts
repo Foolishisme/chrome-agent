@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   BrowserActionResult,
   BrowserClickInput,
   BrowserEvaluateInput,
@@ -13,7 +13,7 @@
   BrowserScrollInput,
   BrowserTabRef,
   BrowserTypeInput,
-} from "../../../shared/browser-capability";
+} from "../../../shared/browser-capability-contract";
 
 export interface BrowserDriver {
   listTabs(options?: BrowserOperationOptions): Promise<BrowserTabRef[]>;

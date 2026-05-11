@@ -1,6 +1,6 @@
-import type { ConversationUiText, Messages } from "../i18n-conversation";
-import type { PendingSessionSubmission, UiNoticeTone } from "../state";
-import type { LlmProfile, ResultArtifact, SearchPreference, SessionPublicState } from "../../shared/types";
+import type { ConversationUiText, Messages } from "../conversation-ui-text";
+import type { PendingSessionSubmission, UiNoticeTone } from "../sidepanel-ui-state";
+import type { LlmProfile, ResultArtifact, SearchPreference, SessionPublicState } from "../../shared/agent-domain-model";
 
 export interface RenderState {
   currentState: SessionPublicState;

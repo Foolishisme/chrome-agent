@@ -1,6 +1,6 @@
-import { SENSITIVE_KEYWORDS } from "../shared/constants";
-import { RuntimeError } from "../shared/errors";
-import type { ActionResult, AgentAction, SessionMemory, SnapshotData } from "../shared/types";
+import { SENSITIVE_KEYWORDS } from "../shared/agent-runtime-config";
+import { RuntimeError } from "../shared/runtime-error";
+import type { ActionResult, AgentAction, SessionMemory, SnapshotData } from "../shared/agent-domain-model";
 
 const FALLBACK_AGENT_IDS = new Set(["el_search_input", "el_search_submit"]);
 

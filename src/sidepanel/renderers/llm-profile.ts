@@ -1,6 +1,6 @@
-import type { LlmProfile } from "../../shared/types";
-import type { RenderState } from "./common";
-import { escapeHtml } from "./common";
+import type { LlmProfile } from "../../shared/agent-domain-model";
+import type { RenderState } from "./sidepanel-rendering-primitives";
+import { escapeHtml } from "./sidepanel-rendering-primitives";
 
 function getProfileLabel(profile: LlmProfile) {
   if (profile === "local") {

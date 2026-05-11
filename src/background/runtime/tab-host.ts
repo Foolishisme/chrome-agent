@@ -1,11 +1,11 @@
-import { LIMITS } from "../../shared/constants";
-import { RuntimeError } from "../../shared/errors";
-import type { ExecuteActionResponse, RequestSnapshotMessage, SnapshotResponse } from "../../shared/protocol";
-import { actionResultSchema } from "../../shared/schema";
-import type { ActionResult, AgentAction, SnapshotData, TaskType } from "../../shared/types";
-import { summarizeSnapshot } from "../guards";
-import type { ActiveSession } from "./shared";
-import { appendLog, sleep, throwIfStopped } from "./shared";
+import { LIMITS } from "../../shared/agent-runtime-config";
+import { RuntimeError } from "../../shared/runtime-error";
+import type { ExecuteActionResponse, RequestSnapshotMessage, SnapshotResponse } from "../../shared/extension-message-protocol";
+import { actionResultSchema } from "../../shared/llm-runtime-contract-schemas";
+import type { ActionResult, AgentAction, SnapshotData, TaskType } from "../../shared/agent-domain-model";
+import { summarizeSnapshot } from "../runtime-action-guards";
+import type { ActiveSession } from "./runtime-session-state";
+import { appendLog, sleep, throwIfStopped } from "./runtime-session-state";
 
 const JD_HOME_URL = "https://www.jd.com/";
 const GOOGLE_HOME_URL = "https://www.google.com/";

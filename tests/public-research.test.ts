@@ -1,11 +1,11 @@
-﻿import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   filterResearchCandidates,
-  finalizeTaskResult,
   preparePublicResearchCandidates,
-} from "../src/background/tools/adapters";
+} from "../src/background/tools/adapters/prepare-task-candidates";
+import { finalizeTaskResult } from "../src/background/tools/adapters/finalize-task-result";
 import { extractGoogleSearchResults, extractPageFacts } from "../src/content/research";
-import type { SessionMemory } from "../src/shared/types";
+import type { SessionMemory } from "../src/shared/agent-domain-model";
 
 const { generateFinalResultMock, reorderResearchCandidatesMock } = vi.hoisted(() => ({
   generateFinalResultMock: vi.fn(),

@@ -1,4 +1,4 @@
-import type { CommerceTaskSpec, DirectAnswerTaskSpec, PublicResearchTaskSpec, SiteOverviewTaskSpec, TaskSpec } from "../../shared/types";
+import type { CommerceTaskSpec, DirectAnswerTaskSpec, PublicResearchTaskSpec, SiteOverviewTaskSpec, TaskSpec } from "../../shared/agent-domain-model";
 
 export function isCommerceTask(taskSpec: TaskSpec | undefined): taskSpec is CommerceTaskSpec {
   return !!taskSpec && taskSpec.taskType === "commerce_search";

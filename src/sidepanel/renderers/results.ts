@@ -1,4 +1,4 @@
-import { escapeHtml, RenderState } from "./common";
+import { escapeHtml, RenderState } from "./sidepanel-rendering-primitives";
 
 function renderArtifactDetail(title: string, content: string, open = false) {
   return `

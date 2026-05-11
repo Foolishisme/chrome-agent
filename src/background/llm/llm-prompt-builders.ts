@@ -8,7 +8,7 @@ import type {
   SiteOverviewTaskSpec,
   SourceFactCard,
   TaskType,
-} from "../../shared/types";
+} from "../../shared/agent-domain-model";
 
 export function buildTaskRoutePrompt(goal: string) {
   return buildTaskRoutePromptWithContext(goal);

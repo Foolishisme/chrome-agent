@@ -5,7 +5,7 @@ import {
   buildFirstPartyToolPromptCatalog,
   getFirstPartyToolContract,
   listFirstPartyToolContracts,
-} from "../../src/background/tools";
+} from "../../src/background/tools/first-party-tool-contracts";
 
 describe("first-party tool contracts", () => {
   it("freezes the first LLM-visible tool set without exposing internal actions", () => {

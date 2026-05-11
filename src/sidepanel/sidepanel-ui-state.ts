@@ -1,6 +1,6 @@
-import type { ResultArtifact, SearchPreference, SessionPublicState } from "../shared/types";
-import type { LlmProfile } from "../shared/types";
-import { conversationUiText, messages, optimisticAssistantProgressText } from "./i18n-conversation";
+import type { ResultArtifact, SearchPreference, SessionPublicState } from "../shared/agent-domain-model";
+import type { LlmProfile } from "../shared/agent-domain-model";
+import { conversationUiText, messages, optimisticAssistantProgressText } from "./conversation-ui-text";
 
 export type PendingSessionSubmission = {
   requestId: number;

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { preparePublicResearchCandidates } from "../src/background/tools/adapters";
+import { preparePublicResearchCandidates } from "../src/background/tools/adapters/prepare-task-candidates";
 import { extractGoogleSearchResults, extractPageFacts } from "../src/content/research";
-import type { PublicResearchTaskSpec, SessionMemory, SnapshotData } from "../src/shared/types";
+import type { PublicResearchTaskSpec, SessionMemory, SnapshotData } from "../src/shared/agent-domain-model";
 
 const { reorderResearchCandidatesMock } = vi.hoisted(() => ({
   reorderResearchCandidatesMock: vi.fn(),

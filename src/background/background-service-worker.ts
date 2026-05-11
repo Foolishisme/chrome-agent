@@ -1,4 +1,4 @@
-import { DEFAULT_GOAL } from "../shared/constants";
+import { DEFAULT_GOAL } from "../shared/agent-runtime-config";
 import type {
   CreateConversationMessage,
   DeleteConversationMessage,
@@ -15,7 +15,7 @@ import type {
   StartSessionMessage,
   StartSessionResponse,
   StopSessionMessage,
-} from "../shared/protocol";
+} from "../shared/extension-message-protocol";
 import { BrowserAgentRuntime } from "./runtime/agent-runtime";
 import {
   createConversation,

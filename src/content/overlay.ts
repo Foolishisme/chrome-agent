@@ -1,4 +1,4 @@
-import type { ElementRect } from "../shared/types";
+import type { ElementRect } from "../shared/agent-domain-model";
 
 const ROOT_ID = "__browser_agent_mvp_overlay__";
 

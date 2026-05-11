@@ -1,4 +1,4 @@
-import type { DebugLogEntry, SessionDebugBundle, SessionMemory } from "../../shared/types";
+import type { DebugLogEntry, SessionDebugBundle, SessionMemory } from "../../shared/agent-domain-model";
 
 const RUN_LOG_PREFIX = "sessionRunLog:v1:";
 const MAX_PERSISTED_RUN_LOGS = 400;

@@ -1,7 +1,7 @@
-import type { ConversationTurn } from "../../shared/types";
-import { conversationInputPlaceholder } from "../i18n-conversation";
+import type { ConversationTurn } from "../../shared/agent-domain-model";
+import { conversationInputPlaceholder } from "../conversation-ui-text";
 import { renderMarkdownBlock } from "./markdown";
-import { escapeHtml, RenderState } from "./common";
+import { escapeHtml, RenderState } from "./sidepanel-rendering-primitives";
 import { renderLlmProfileSelector } from "./llm-profile";
 
 function hasSavedTurnForSession(turns: ConversationTurn[] | undefined, sessionId: string | undefined) {

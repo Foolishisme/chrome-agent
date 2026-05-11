@@ -1,8 +1,8 @@
-import { LIMITS } from "../../shared/constants";
-import { RuntimeError } from "../../shared/errors";
-import type { SessionMemory } from "../../shared/types";
-import type { ActiveSession } from "../runtime/shared";
-import type { BrowserDriver } from "../browser/capability/types";
+import { LIMITS } from "../../shared/agent-runtime-config";
+import { RuntimeError } from "../../shared/runtime-error";
+import type { SessionMemory } from "../../shared/agent-domain-model";
+import type { ActiveSession } from "../runtime/runtime-session-state";
+import type { BrowserDriver } from "../browser/capability/browser-driver-contract";
 import {
   executeCommerceTask,
   executeDirectAnswerTask,
@@ -11,7 +11,7 @@ import {
   type RuntimeToolLoopDeps,
 } from "./task-executors";
 import { createRuntimeBrowserDriver } from "./runtime-browser-driver";
-import { createDefaultFirstPartyToolRegistry } from "../tools";
+import { createDefaultFirstPartyToolRegistry } from "../tools/first-party-tool-registry";
 
 export function evaluateRuntimeBudget(memory: SessionMemory, now = Date.now()) {
   const elapsedMs = Math.max(0, now - memory.runtimeMeta.startedAt);

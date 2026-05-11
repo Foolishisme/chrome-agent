@@ -1,13 +1,13 @@
-import { LIMITS } from "../../shared/constants";
-import { RuntimeError } from "../../shared/errors";
+import { LIMITS } from "../../shared/agent-runtime-config";
+import { RuntimeError } from "../../shared/runtime-error";
 import type {
   ActionResult,
   AgentAction,
   CommerceTaskSpec,
   ExtractedItem,
   SnapshotData,
-} from "../../shared/types";
-import type { ToolExecutionContext } from "./shared";
+} from "../../shared/agent-domain-model";
+import type { ToolExecutionContext } from "./tool-execution-context";
 
 function normalizeText(text: string | undefined) {
   return (text ?? "").replace(/\s+/g, "").toLowerCase();

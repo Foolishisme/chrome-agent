@@ -1,5 +1,5 @@
-import type { BrowserDriver } from "../browser/capability/types";
-import type { BrowserLinkObservation, BrowserObservation, BrowserPageProblem } from "../../shared/browser-capability";
+import type { BrowserDriver } from "../browser/capability/browser-driver-contract";
+import type { BrowserLinkObservation, BrowserObservation, BrowserPageProblem } from "../../shared/browser-capability-contract";
 import { runExplicitUrlOverview } from "../browser/overview/explicit-url-overview";
 import {
   FIRST_PARTY_LLM_VISIBLE_TOOL_CONTRACTS,

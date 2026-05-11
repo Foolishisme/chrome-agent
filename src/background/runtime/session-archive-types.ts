@@ -1,4 +1,4 @@
-import type { ConversationTurn, FinalResult } from "../../shared/types";
+import type { ConversationTurn, FinalResult } from "../../shared/agent-domain-model";
 
 export interface ArchivedTurn {
   turnId: number;

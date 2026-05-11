@@ -7,7 +7,7 @@ import type {
   SnapshotData,
   ToolName,
   ToolResult,
-} from "../../shared/types";
+} from "../../shared/agent-domain-model";
 
 export type StepOptions = {
   stepSummary: string;

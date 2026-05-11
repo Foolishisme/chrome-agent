@@ -1,5 +1,5 @@
-import { RuntimeError } from "../../../shared/errors";
-import type { DebugLogEntry, DirectAnswerTaskSpec, FinalResult, PublicResearchTaskSpec, SearchTaskSpec, SessionMemory, SiteOverviewTaskSpec } from "../../../shared/types";
+import { RuntimeError } from "../../../shared/runtime-error";
+import type { DebugLogEntry, DirectAnswerTaskSpec, FinalResult, PublicResearchTaskSpec, SearchTaskSpec, SessionMemory, SiteOverviewTaskSpec } from "../../../shared/agent-domain-model";
 import { generateDirectAnswerResult, generateFinalResult } from "../../llm/llm-client";
 import {
   buildCommerceFinalMarkdown,
@@ -11,9 +11,9 @@ import {
   createFinalResult,
   dedupeIssues,
   getFinalStatusForResearch,
-} from "../result-builders";
-import { isCommerceTask, isDirectAnswerTask, isReadableResearchTask } from "../../../background/tools/task-guards";
-import type { StepOptions } from "../../../background/tools/shared";
+} from "../final-result-builders";
+import { isCommerceTask, isDirectAnswerTask, isReadableResearchTask } from "../task-spec-guards";
+import type { StepOptions } from "../tool-execution-context";
 
 export interface FinalizeTaskResultContext {
   memory: SessionMemory;

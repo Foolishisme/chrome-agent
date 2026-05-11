@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DebugLogEntry, SessionMemory } from "../src/shared/types";
+import type { DebugLogEntry, SessionMemory } from "../src/shared/agent-domain-model";
 
 const storageState: Record<string, unknown> = {};
 

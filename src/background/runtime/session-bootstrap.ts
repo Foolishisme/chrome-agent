@@ -1,11 +1,11 @@
-import type { SearchPreference } from "../../shared/types";
+import type { SearchPreference } from "../../shared/agent-domain-model";
 import { classifyTaskType } from "../llm/llm-client";
 import { compileTaskSpec, detectTaskTypeWithLiteModel } from "../llm/query-compiler";
 import { refineCommerceSearchQuery, refineResearchQuery } from "../llm/llm-client";
 import { buildRuntimeTaskPlan } from "../runner/task-plan-builder";
 import { toPublicState } from "./public-state";
-import type { ActiveSession } from "./shared";
-import { appendLog, createSessionId } from "./shared";
+import type { ActiveSession } from "./runtime-session-state";
+import { appendLog, createSessionId } from "./runtime-session-state";
 import { getOrPrepareSessionTab } from "./tab-host";
 
 async function getSessionAnchorTab() {

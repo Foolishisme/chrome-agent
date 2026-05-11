@@ -1,5 +1,5 @@
-﻿import { KNOWN_CATEGORY_KEYWORDS, LIMITS, RESEARCH_INTENT_KEYWORDS } from "../../shared/constants";
-import { RuntimeError } from "../../shared/errors";
+import { KNOWN_CATEGORY_KEYWORDS, LIMITS, RESEARCH_INTENT_KEYWORDS } from "../../shared/agent-runtime-config";
+import { RuntimeError } from "../../shared/runtime-error";
 import type {
   CommerceTaskSpec,
   ConversationTurn,
@@ -10,7 +10,7 @@ import type {
   SiteOverviewTaskSpec,
   TaskSpec,
   TaskType,
-} from "../../shared/types";
+} from "../../shared/agent-domain-model";
 
 interface RefineSearchQuery {
   (goal: string): Promise<{ searchQuery: string; reason: string } | undefined>;

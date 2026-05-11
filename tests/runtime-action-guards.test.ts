@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { compareExpectedOutcome, ensureAgentExists, isRepeatedAction } from "../src/background/guards";
-import type { SessionMemory, SnapshotData } from "../src/shared/types";
+import { compareExpectedOutcome, ensureAgentExists, isRepeatedAction } from "../src/background/runtime-action-guards";
+import type { SessionMemory, SnapshotData } from "../src/shared/agent-domain-model";
 
 function createSnapshot(overrides: Partial<SnapshotData> = {}): SnapshotData {
   return {

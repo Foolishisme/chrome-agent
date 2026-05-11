@@ -1,4 +1,4 @@
-import type { TaskType } from "./types";
+import type { TaskType } from "./agent-domain-model";
 
 export const LIMITS = {
   MAX_TOTAL_STEPS: 20,

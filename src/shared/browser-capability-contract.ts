@@ -1,4 +1,4 @@
-import type { ElementRect, SemanticRole, SemanticSnapshot } from "./types";
+import type { ElementRect, SemanticRole, SemanticSnapshot } from "./agent-domain-model";
 
 export type BrowserTabStatus = "loading" | "complete" | "unloaded" | "unknown";
 

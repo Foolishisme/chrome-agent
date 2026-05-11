@@ -1,5 +1,5 @@
-import type { SessionStateResponse, StartSessionResponse } from "../shared/protocol";
-import type { SessionPublicState } from "../shared/types";
+import type { SessionStateResponse, StartSessionResponse } from "../shared/extension-message-protocol";
+import type { SessionPublicState } from "../shared/agent-domain-model";
 import {
   applyState,
   beginPendingSession,
@@ -16,8 +16,8 @@ import {
   setDraftGoal,
   setUiNotice,
   toggleConversationDrawer,
-} from "./state";
-import { conversationUiText, emptyGoalNotice, messages } from "./i18n-conversation";
+} from "./sidepanel-ui-state";
+import { conversationUiText, emptyGoalNotice, messages } from "./conversation-ui-text";
 
 async function copyTextToClipboard(text: string) {
   if (navigator.clipboard?.writeText) {

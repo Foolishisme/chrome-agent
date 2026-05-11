@@ -17,11 +17,11 @@ import type {
   BrowserTabRef,
   BrowserTargetRef,
   BrowserTypeInput,
-} from "../../shared/browser-capability";
-import { createBrowserPageProblem } from "../../shared/browser-capability";
-import type { ActionResult, AgentAction, InteractiveElement, SnapshotData } from "../../shared/types";
-import type { BrowserDriver } from "../browser/capability/types";
-import type { ExecuteActionResponse, SnapshotResponse } from "../../shared/protocol";
+} from "../../shared/browser-capability-contract";
+import { createBrowserPageProblem } from "../../shared/browser-capability-contract";
+import type { ActionResult, AgentAction, InteractiveElement, SnapshotData } from "../../shared/agent-domain-model";
+import type { BrowserDriver } from "../browser/capability/browser-driver-contract";
+import type { ExecuteActionResponse, SnapshotResponse } from "../../shared/extension-message-protocol";
 import { sendMessageToTab, waitForTabComplete } from "../runtime/tab-host";
 
 interface RuntimeBrowserDriverCallbacks {

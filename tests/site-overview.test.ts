@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   filterSiteNavCandidates,
   prepareSiteOverviewCandidates,
-} from "../src/background/tools/adapters";
+} from "../src/background/tools/adapters/prepare-task-candidates";
 import { extractSiteNavLinks } from "../src/content/research";
-import type { SessionMemory, SiteOverviewTaskSpec, SnapshotData } from "../src/shared/types";
+import type { SessionMemory, SiteOverviewTaskSpec, SnapshotData } from "../src/shared/agent-domain-model";
 
 const { reorderSiteCandidatesMock } = vi.hoisted(() => ({
   reorderSiteCandidatesMock: vi.fn(),

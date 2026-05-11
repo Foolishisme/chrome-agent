@@ -1,5 +1,5 @@
-﻿import { LIMITS } from "../../../shared/constants";
-import { RuntimeError } from "../../../shared/errors";
+import { LIMITS } from "../../../shared/agent-runtime-config";
+import { RuntimeError } from "../../../shared/runtime-error";
 import type {
   ActionResult,
   CommerceFilterDiagnostics,
@@ -11,11 +11,11 @@ import type {
   SessionMemory,
   SiteOverviewTaskSpec,
   SnapshotData,
-} from "../../../shared/types";
+} from "../../../shared/agent-domain-model";
 import { reorderResearchCandidates, reorderSiteCandidates } from "../../llm/llm-client";
-import { dedupeIssues } from "../result-builders";
-import { ensureUsableSnapshotWithDialogRecovery, scrollForMoreCandidates } from "../search-flow";
-import type { StepOptions, ToolExecutionContext } from "../shared";
+import { dedupeIssues } from "../final-result-builders";
+import { ensureUsableSnapshotWithDialogRecovery, scrollForMoreCandidates } from "../commerce-search-page-flow";
+import type { StepOptions, ToolExecutionContext } from "../tool-execution-context";
 
 export interface CandidatePreparationContext {
   memory: SessionMemory;

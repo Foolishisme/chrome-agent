@@ -1,4 +1,4 @@
-import type { ConversationSummary, SessionPublicState } from "../../shared/types";
+import type { ConversationSummary, SessionPublicState } from "../../shared/agent-domain-model";
 import type { ArchivedConversation, ArchivedTurn, SaveSessionArchiveInput } from "./session-archive-types";
 import { buildConversationTitle } from "./session-archive-store";
 import { toConversationTurn } from "./session-archive-types";

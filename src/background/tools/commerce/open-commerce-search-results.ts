@@ -1,6 +1,6 @@
-import { RuntimeError } from "../../../shared/errors";
-import type { ToolResult } from "../../../shared/types";
-import { createToolResult, type ToolExecutionContext } from "../shared";
+import { RuntimeError } from "../../../shared/runtime-error";
+import type { ToolResult } from "../../../shared/agent-domain-model";
+import { createToolResult, type ToolExecutionContext } from "../tool-execution-context";
 import {
   buildCommerceSearchUrl,
   detectCommerceSearchBlocker,
@@ -8,8 +8,8 @@ import {
   hasMatchingQuery,
   needsSearchReopen,
   reopenCommerceSearchResults,
-} from "../search-flow";
-import { isCommerceTask } from "../task-guards";
+} from "../commerce-search-page-flow";
+import { isCommerceTask } from "../task-spec-guards";
 
 export async function openCommerceSearchResults(context: ToolExecutionContext): Promise<ToolResult> {
   if (!context.memory.taskSpec) {

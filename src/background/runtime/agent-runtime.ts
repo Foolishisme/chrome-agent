@@ -1,11 +1,11 @@
-import { RuntimeError } from "../../shared/errors";
-import type { StartSessionResponse } from "../../shared/protocol";
-import type { ActionResult, AgentAction, SessionDebugBundle, SessionPublicState, SnapshotData, StepRecord } from "../../shared/types";
-import { evaluateRuntimeBudget, runRuntimeToolLoop } from "../runner";
+import { RuntimeError } from "../../shared/runtime-error";
+import type { StartSessionResponse } from "../../shared/extension-message-protocol";
+import type { ActionResult, AgentAction, SessionDebugBundle, SessionPublicState, SnapshotData, StepRecord } from "../../shared/agent-domain-model";
+import { evaluateRuntimeBudget, runRuntimeToolLoop } from "../runner/run-runtime-tool-loop";
 import { setActiveLlmProfile } from "../llm/llm-client";
-import { summarizeSnapshot } from "../guards";
+import { summarizeSnapshot } from "../runtime-action-guards";
 import { saveSessionArchive } from "./session-archive";
-import { createInitialSession } from "./bootstrap";
+import { createInitialSession } from "./session-bootstrap";
 import { defaultPublicState, ensureTerminalResult, toPublicState } from "./public-state";
 import {
   deleteSessionRunLog as deleteStoredSessionRunLog,
@@ -14,8 +14,8 @@ import {
   mergeSessionRunLogs,
   saveSessionRunDebugSnapshot,
 } from "./run-log-store";
-import type { ActiveSession } from "./shared";
-import { appendLog } from "./shared";
+import type { ActiveSession } from "./runtime-session-state";
+import { appendLog } from "./runtime-session-state";
 import {
   ensureSessionUsableSnapshot,
   executeSessionAction,

@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE } from "../shared/constants";
+import { DEFAULT_LOCALE } from "../shared/agent-runtime-config";
 
 export type Locale = "zh-CN" | "en-US";
 

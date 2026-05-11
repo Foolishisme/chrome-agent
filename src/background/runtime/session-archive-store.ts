@@ -1,4 +1,4 @@
-import type { ConversationSummary } from "../../shared/types";
+import type { ConversationSummary } from "../../shared/agent-domain-model";
 import type { ArchivedConversation } from "./session-archive-types";
 
 const CONVERSATION_INDEX_KEY = "conversationArchiveIndexV2";

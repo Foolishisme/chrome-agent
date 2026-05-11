@@ -3,8 +3,8 @@ import type {
   ExecuteActionResponse,
   RequestSnapshotMessage,
   SnapshotResponse,
-} from "../shared/protocol";
-import { executeAction } from "./actions";
+} from "../shared/extension-message-protocol";
+import { executeAction } from "./content-action-executor";
 import { scanPage } from "./scanner";
 
 chrome.runtime.onMessage.addListener((message: RequestSnapshotMessage | ExecuteActionMessage, _sender, sendResponse) => {

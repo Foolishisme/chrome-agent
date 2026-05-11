@@ -1,6 +1,6 @@
 import { Readability } from "@mozilla/readability";
-import { LIMITS } from "../shared/constants";
-import type { PageContentState, PageFactExtraction, ResearchCandidate, SearchResultsState } from "../shared/types";
+import { LIMITS } from "../shared/agent-runtime-config";
+import type { PageContentState, PageFactExtraction, ResearchCandidate, SearchResultsState } from "../shared/agent-domain-model";
 
 const MAX_EXCERPT_CHARS = 2_000;
 const NOISE_ATTRIBUTE_PATTERNS = [

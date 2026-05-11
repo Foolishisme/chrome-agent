@@ -1,4 +1,4 @@
-import type { SessionPublicState } from "../../shared/types";
+import type { SessionPublicState } from "../../shared/agent-domain-model";
 import {
   buildSessionStateFromConversation,
   buildArchivedTurn,
