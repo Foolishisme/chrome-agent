@@ -199,7 +199,7 @@ describe("query compiler", () => {
     expect(task.timezone).toBe("Asia/Shanghai");
   });
 
-  it("builds a direct-answer task spec without a legacy workflow plan", async () => {
+  it("builds a direct-answer task spec without a workflow plan", async () => {
     const compiled = await compileTaskSpec("解释一下事件循环是什么", {
       taskType: "direct_answer",
       currentTimeIso: "2026-04-08T08:00:00.000Z",

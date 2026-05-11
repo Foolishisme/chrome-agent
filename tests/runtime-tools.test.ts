@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildRuleBasedSummary } from "../src/background/tools";
-import { openSearchResults } from "../src/background/tools/legacy-support/open-search-results";
+import { openCommerceSearchResults } from "../src/background/tools/commerce/open-commerce-search-results";
 import { compileSearchTask } from "../src/background/llm/query-compiler";
 import { finalizeTaskResult, prepareCommerceCandidates } from "../src/background/tools/adapters";
 import type { ActionResult, CommerceTaskSpec, SessionMemory, SnapshotData } from "../src/shared/types";
@@ -264,7 +264,7 @@ describe("runtime recovery path", () => {
 
 describe("search page query matching", () => {
   it("accepts a matching search result page even when the search input is missing", async () => {
-    const tool = openSearchResults;
+    const tool = openCommerceSearchResults;
     const memory = createMemory({
       taskType: "commerce_search",
       taskSpec: {
@@ -313,7 +313,7 @@ describe("search page query matching", () => {
   });
 
   it("closes a blocking dialog once before continuing", async () => {
-    const tool = openSearchResults;
+    const tool = openCommerceSearchResults;
     const memory = createMemory({
       taskType: "commerce_search",
       taskSpec: {
@@ -385,7 +385,7 @@ describe("search page query matching", () => {
   });
 
   it("navigates directly to the JD search url when the current page does not match the query", async () => {
-    const tool = openSearchResults;
+    const tool = openCommerceSearchResults;
     const memory = createMemory({
       taskType: "commerce_search",
       taskSpec: {
@@ -442,7 +442,7 @@ describe("search page query matching", () => {
   });
 
   it("reopens the canonical search page once when the first result page is unexpected", async () => {
-    const tool = openSearchResults;
+    const tool = openCommerceSearchResults;
     const memory = createMemory({
       taskType: "commerce_search",
       taskSpec: {

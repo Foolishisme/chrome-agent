@@ -1,4 +1,4 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 
 export const FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES = [
   "browser.search",
@@ -9,30 +9,30 @@ export const FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES = [
 
 export type FirstPartyLlmVisibleToolName = (typeof FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES)[number];
 
-export const BrowserCoreV2SideEffectLevelSchema = z.enum(["read_only", "external_navigation"]);
-export type BrowserCoreV2SideEffectLevel = z.infer<typeof BrowserCoreV2SideEffectLevelSchema>;
+export const FirstPartyToolSideEffectLevelSchema = z.enum(["read_only", "external_navigation"]);
+export type FirstPartyToolSideEffectLevel = z.infer<typeof FirstPartyToolSideEffectLevelSchema>;
 
-export const BrowserCoreV2ParallelPolicySchema = z.enum(["same_resource_serial", "singleton"]);
-export type BrowserCoreV2ParallelPolicy = z.infer<typeof BrowserCoreV2ParallelPolicySchema>;
+export const FirstPartyToolParallelPolicySchema = z.enum(["same_resource_serial", "singleton"]);
+export type FirstPartyToolParallelPolicy = z.infer<typeof FirstPartyToolParallelPolicySchema>;
 
-export const BrowserCoreV2FailurePolicySchema = z.object({
+export const FirstPartyToolFailurePolicySchema = z.object({
   defaultMode: z.enum(["return_partial", "fail_fast"]),
   highRiskAction: z.literal("blocked"),
 });
-export type BrowserCoreV2FailurePolicy = z.infer<typeof BrowserCoreV2FailurePolicySchema>;
+export type FirstPartyToolFailurePolicy = z.infer<typeof FirstPartyToolFailurePolicySchema>;
 
-export const BrowserCoreV2ToolProblemSchema = z.object({
+export const FirstPartyToolProblemSchema = z.object({
   code: z.string().min(1),
   message: z.string().min(1),
   suggestedNextAction: z.string().min(1).optional(),
 }).strict();
-export type BrowserCoreV2ToolProblem = z.infer<typeof BrowserCoreV2ToolProblemSchema>;
+export type FirstPartyToolProblem = z.infer<typeof FirstPartyToolProblemSchema>;
 
-export const BrowserCoreV2CoverageSchema = z.object({
+export const FirstPartyToolCoverageSchema = z.object({
   scope: z.string().min(1),
   limitations: z.array(z.string().min(1)).default([]),
 }).strict();
-export type BrowserCoreV2Coverage = z.infer<typeof BrowserCoreV2CoverageSchema>;
+export type FirstPartyToolCoverage = z.infer<typeof FirstPartyToolCoverageSchema>;
 
 export const BrowserSearchScopeSchema = z.enum(["web", "official_site"]);
 export type BrowserSearchScope = z.infer<typeof BrowserSearchScopeSchema>;
@@ -56,8 +56,8 @@ export const BrowserSearchToolOutputSchema = z.object({
   status: z.enum(["success", "partial", "failed", "blocked"]),
   results: z.array(BrowserSearchResultSchema),
   searchPageUrl: z.string().url(),
-  coverage: BrowserCoreV2CoverageSchema,
-  problems: z.array(BrowserCoreV2ToolProblemSchema),
+  coverage: FirstPartyToolCoverageSchema,
+  problems: z.array(FirstPartyToolProblemSchema),
 }).strict();
 export type BrowserSearchToolOutput = z.infer<typeof BrowserSearchToolOutputSchema>;
 
@@ -85,9 +85,9 @@ export const BrowserWebDetailToolOutputSchema = z.object({
   pageTitle: z.string().min(1),
   pageSummary: z.string().min(1),
   keyFacts: z.array(BrowserWebDetailFactSchema),
-  coverage: BrowserCoreV2CoverageSchema,
+  coverage: FirstPartyToolCoverageSchema,
   links: z.array(BrowserWebDetailLinkSchema).optional(),
-  problems: z.array(BrowserCoreV2ToolProblemSchema),
+  problems: z.array(FirstPartyToolProblemSchema),
 }).strict();
 export type BrowserWebDetailToolOutput = z.infer<typeof BrowserWebDetailToolOutputSchema>;
 
@@ -113,8 +113,8 @@ export const BrowserSiteOverviewToolOutputSchema = z.object({
   pagesRead: z.array(BrowserSiteOverviewPageSchema),
   keyPages: z.array(BrowserSiteOverviewPageSchema),
   gaps: z.array(z.string().min(1)),
-  coverage: BrowserCoreV2CoverageSchema,
-  problems: z.array(BrowserCoreV2ToolProblemSchema),
+  coverage: FirstPartyToolCoverageSchema,
+  problems: z.array(FirstPartyToolProblemSchema),
 }).strict();
 export type BrowserSiteOverviewToolOutput = z.infer<typeof BrowserSiteOverviewToolOutputSchema>;
 
@@ -152,8 +152,8 @@ export const CommerceResearchToolOutputSchema = z.object({
   shortlist: z.array(CommerceResearchShortlistItemSchema),
   evidence: z.array(CommerceResearchEvidenceSchema),
   gaps: z.array(z.string().min(1)),
-  coverage: BrowserCoreV2CoverageSchema,
-  problems: z.array(BrowserCoreV2ToolProblemSchema),
+  coverage: FirstPartyToolCoverageSchema,
+  problems: z.array(FirstPartyToolProblemSchema),
 }).strict();
 export type CommerceResearchToolOutput = z.infer<typeof CommerceResearchToolOutputSchema>;
 
@@ -173,17 +173,17 @@ export interface FirstPartyToolContract<TInputSchema extends z.ZodTypeAny, TOutp
   description: string;
   inputSchema: TInputSchema;
   outputSchema: TOutputSchema;
-  sideEffectLevel: BrowserCoreV2SideEffectLevel;
-  parallelPolicy: BrowserCoreV2ParallelPolicy;
+  sideEffectLevel: FirstPartyToolSideEffectLevel;
+  parallelPolicy: FirstPartyToolParallelPolicy;
   requires: string[];
   produces: string[];
   timeoutMs: number;
-  failurePolicy: BrowserCoreV2FailurePolicy;
+  failurePolicy: FirstPartyToolFailurePolicy;
   examples: FirstPartyToolExamples<z.input<TInputSchema>, z.output<TOutputSchema>>;
   promptGuidance: FirstPartyToolPromptGuidance;
 }
 
-const commonFailurePolicy: BrowserCoreV2FailurePolicy = {
+const commonFailurePolicy: FirstPartyToolFailurePolicy = {
   defaultMode: "return_partial",
   highRiskAction: "blocked",
 };
@@ -384,12 +384,12 @@ const siteOverviewContract: FirstPartyToolContract<typeof BrowserSiteOverviewToo
 
 const commerceResearchContract: FirstPartyToolContract<typeof CommerceResearchToolInputSchema, typeof CommerceResearchToolOutputSchema> = {
   name: "skill.commerceResearch",
-  description: "沿用旧 commerce_search 的黑盒逻辑，完成商品搜索、抽取、过滤、候选整理与结果汇总。",
+  description: "执行当前 commerce_search 主链，完成商品搜索、抽取、过滤、候选整理与结果汇总。",
   inputSchema: CommerceResearchToolInputSchema,
   outputSchema: CommerceResearchToolOutputSchema,
   sideEffectLevel: "external_navigation",
   parallelPolicy: "singleton",
-  requires: ["legacy.commerce_search_workflow"],
+  requires: ["commerce.search_workflow"],
   produces: ["commerce.shortlist", "commerce.evidence", "research.coverage_report"],
   timeoutMs: 45_000,
   failurePolicy: commonFailurePolicy,
@@ -421,7 +421,7 @@ const commerceResearchContract: FirstPartyToolContract<typeof CommerceResearchTo
       ],
       gaps: [],
       coverage: {
-        scope: "Legacy commerce workflow over the current JD search and filtering path.",
+        scope: "Commerce workflow over the current JD search and filtering path.",
         limitations: [],
       },
       problems: [],
@@ -432,7 +432,7 @@ const commerceResearchContract: FirstPartyToolContract<typeof CommerceResearchTo
       evidence: [],
       gaps: ["High-risk checkout, payment, or submission actions are out of scope for the first batch tool contract."],
       coverage: {
-        scope: "Legacy commerce workflow over the current JD search and filtering path.",
+        scope: "Commerce workflow over the current JD search and filtering path.",
         limitations: ["Only discovery, extraction, filtering, and recommendation are supported."],
       },
       problems: [

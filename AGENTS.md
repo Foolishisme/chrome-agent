@@ -30,6 +30,16 @@
 - 当事实源文档与代码表现不一致时，先检查 active call path 再改行为。
 - 修改后运行与改动直接相关的最小验证，并报告结果。
 
+## 命名与可检索性规则
+
+- 文件夹、文件、函数和导出名要服务于 agent/human 的精准检索；`git grep <核心概念>` 的前几条结果应尽量指向真实 owner 或当前主链入口。
+- 命名必须表达当前事实，不用 `legacy`、`v2`、`future`、`deprecated`、`facade`、`core` 等词保留历史计划或制造平行架构感，除非事实源和 active call site 明确需要。
+- 如果能力仍在当前主链使用，不要用 `legacy` 命名；改成描述当前职责的名字。
+- 如果能力不在当前主链使用，不靠重命名伪装为当前能力；按存在性证明判断删除、迁移或保留。
+- 宽泛命名如 `helper`、`manager`、`handler`、`core`、`utils` 应尽量带上所属边界和职责，避免 grep 结果无法区分 owner。
+- 重命名后必须同步 imports、tests 和事实源文档，并用静态 grep 验证旧噪音名是否消失或只剩明确的历史兼容测试。
+- 结构审查优先使用 `git grep` 和 tracked source；必须做文件系统递归扫描时，排除 `output/`、`dist/`、`node_modules/`、`doc/.obsidian/` 等生成、缓存或本地工具目录。
+
 ## 文档规则
 
 - 核心文档采用覆盖式 current-state 记录，只描述当前目标、架构、约束、checkpoint 和验收。

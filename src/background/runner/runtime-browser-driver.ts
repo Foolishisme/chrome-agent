@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   BrowserActionResult,
   BrowserClickInput,
   BrowserControlObservation,
@@ -31,7 +31,7 @@ interface RuntimeBrowserDriverCallbacks {
 
 function throwIfAborted(options?: BrowserOperationOptions) {
   if (options?.signal?.aborted) {
-    throw new Error("Browser Core V2 runtime driver was aborted.");
+    throw new Error("Runtime browser driver was aborted.");
   }
 }
 

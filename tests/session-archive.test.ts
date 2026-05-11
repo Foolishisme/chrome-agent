@@ -78,7 +78,7 @@ describe("session archive", () => {
       loadConversationBackfillState,
       rollbackConversationState,
       saveSessionArchive,
-    } = await import("../src/background/session-archive");
+    } = await import("../src/background/runtime/session-archive");
 
     const emptyFallback: SessionPublicState = {
       status: "idle",
@@ -116,7 +116,7 @@ describe("session archive", () => {
   });
 
   it("stores terminal non-success turns in the conversation archive", async () => {
-    const { createConversation, loadConversationBackfillState, saveSessionArchive } = await import("../src/background/session-archive");
+    const { createConversation, loadConversationBackfillState, saveSessionArchive } = await import("../src/background/runtime/session-archive");
 
     const fallback: SessionPublicState = {
       status: "idle",
@@ -140,7 +140,7 @@ describe("session archive", () => {
   });
 
   it("ignores legacy V1 archive keys after the V2 storage upgrade", async () => {
-    const { loadConversationBackfillState } = await import("../src/background/session-archive");
+    const { loadConversationBackfillState } = await import("../src/background/runtime/session-archive");
 
     storageState["conversationArchiveIndexV1"] = ["legacy-conversation"];
     storageState["activeConversationIdV1"] = "legacy-conversation";

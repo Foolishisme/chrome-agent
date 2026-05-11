@@ -12,7 +12,7 @@ import type {
   SiteOverviewTaskSpec,
   SnapshotData,
 } from "../../src/shared/types";
-import { buildBrowserCoreV2DisplayPlan, runBrowserCoreV2Loop } from "../../src/background/runner";
+import { buildRuntimeTaskPlan, runRuntimeToolLoop } from "../../src/background/runner";
 
 const { decideRoundActionMock, generateDirectAnswerResultMock, generateFinalResultMock } = vi.hoisted(() => ({
   decideRoundActionMock: vi.fn(),
@@ -65,7 +65,7 @@ function createBaseMemory(taskSpec: SessionMemory["taskSpec"]): SessionMemory {
     searchPreference: "auto",
     conversationTurns: [],
     currentTurnId: 1,
-    plan: taskSpec ? buildBrowserCoreV2DisplayPlan(taskSpec) : [],
+    plan: taskSpec ? buildRuntimeTaskPlan(taskSpec) : [],
     taskSpec,
     toolHistory: [],
     currentFacts: {},
@@ -112,7 +112,7 @@ function createSession(memory: SessionMemory): ActiveSession {
   };
 }
 
-function createDeps(overrides: Partial<Parameters<typeof runBrowserCoreV2Loop>[1]> = {}) {
+function createDeps(overrides: Partial<Parameters<typeof runRuntimeToolLoop>[1]> = {}) {
   return {
     publishState: vi.fn(async () => undefined),
     scanPage: vi.fn(async () => {
@@ -162,7 +162,7 @@ function createSearchSnapshot(query: string): SnapshotData {
   };
 }
 
-describe("Browser Core V2 runtime loop", () => {
+describe("runtime tool loop", () => {
   beforeEach(() => {
     decideRoundActionMock.mockReset();
     generateDirectAnswerResultMock.mockReset();
@@ -192,7 +192,7 @@ describe("Browser Core V2 runtime loop", () => {
     const deps = createDeps();
     const driver = new MockBrowserDriver();
 
-    await runBrowserCoreV2Loop(session, deps, { driver });
+    await runRuntimeToolLoop(session, deps, { driver });
 
     expect(session.memory.finalResult?.status).toBe("success");
     expect(session.memory.plan.map((step) => step.status)).toEqual(["succeeded"]);
@@ -277,7 +277,7 @@ describe("Browser Core V2 runtime loop", () => {
       },
     });
 
-    await runBrowserCoreV2Loop(session, deps, { driver });
+    await runRuntimeToolLoop(session, deps, { driver });
 
     expect(session.memory.finalResult?.summary).toContain("OpenAI provides products");
     expect(session.memory.researchSources).toHaveLength(2);
@@ -392,7 +392,7 @@ describe("Browser Core V2 runtime loop", () => {
       },
     });
 
-    await runBrowserCoreV2Loop(session, deps, { driver });
+    await runRuntimeToolLoop(session, deps, { driver });
 
     expect(session.memory.taskSpec?.taskType).toBe("site_overview");
     expect((session.memory.taskSpec as SiteOverviewTaskSpec).entryUrl).toBe("https://openai.com/");
@@ -463,7 +463,7 @@ describe("Browser Core V2 runtime loop", () => {
     });
     const driver = new MockBrowserDriver();
 
-    await runBrowserCoreV2Loop(session, deps, { driver });
+    await runRuntimeToolLoop(session, deps, { driver });
 
     expect(session.memory.extractedItems).toHaveLength(2);
     expect(session.memory.finalResult?.summary).toContain("Two shortlist items");
@@ -537,7 +537,7 @@ describe("Browser Core V2 runtime loop", () => {
     });
     const driver = new MockBrowserDriver();
 
-    await runBrowserCoreV2Loop(session, deps, { driver });
+    await runRuntimeToolLoop(session, deps, { driver });
 
     expect(executeAction).toHaveBeenCalledTimes(2);
     expect(executeAction.mock.calls.every(([action]) => action.type === "NAVIGATE")).toBe(true);
@@ -625,7 +625,7 @@ describe("Browser Core V2 runtime loop", () => {
       },
     });
 
-    await runBrowserCoreV2Loop(session, deps, { driver });
+    await runRuntimeToolLoop(session, deps, { driver });
 
     expect(decideRoundActionMock).toHaveBeenCalledTimes(2);
     expect((session.memory.taskSpec as PublicResearchTaskSpec).searchQuery).toBe("OpenAI pricing official");
@@ -704,7 +704,7 @@ describe("Browser Core V2 runtime loop", () => {
       },
     });
 
-    await runBrowserCoreV2Loop(session, deps, { driver });
+    await runRuntimeToolLoop(session, deps, { driver });
 
     expect(decideRoundActionMock).toHaveBeenCalledTimes(1);
     expect((session.memory.taskSpec as PublicResearchTaskSpec).searchQuery).toBe("OpenAI pricing official");

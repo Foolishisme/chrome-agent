@@ -1,8 +1,8 @@
-﻿import type { BrowserDriver } from "../browser/capability/types";
+import type { BrowserDriver } from "../browser/capability/types";
 import { decideRoundAction, type RoundDecisionResult } from "../llm/llm-client";
 import { appendLog } from "../runtime/shared";
 import { ensureTerminalResult } from "../runtime/public-state";
-import { openSearchResults } from "../tools/legacy-support/open-search-results";
+import { openCommerceSearchResults } from "../tools/commerce/open-commerce-search-results";
 import type { StepOptions } from "../tools/shared";
 import type {
   FirstPartyToolHandlerContext,
@@ -35,9 +35,9 @@ import {
   prepareCommerceCandidates,
   preparePublicResearchCandidates,
 } from "../tools/adapters";
-import { buildBrowserCoreV2DisplayPlan } from "./task-plan-builder";
+import { buildRuntimeTaskPlan } from "./task-plan-builder";
 
-export interface BrowserCoreRunnerDeps {
+export interface RuntimeToolLoopDeps {
   publishState(session: ActiveSession, asError?: boolean): Promise<void>;
   scanPage(): Promise<SnapshotData>;
   ensureUsableSnapshot(): Promise<SnapshotData>;
@@ -47,9 +47,9 @@ export interface BrowserCoreRunnerDeps {
   pushState(stepSummary?: string): Promise<void>;
 }
 
-export interface BrowserCoreTaskExecutorContext {
+export interface RuntimeToolExecutorContext {
   session: ActiveSession;
-  deps: BrowserCoreRunnerDeps;
+  deps: RuntimeToolLoopDeps;
   driver: BrowserDriver;
   registry: FirstPartyToolRegistry;
   ensureBudget(): Promise<void>;
@@ -61,7 +61,7 @@ function getPlanStep(memory: SessionMemory, stepId: string) {
   return memory.plan.find((step) => step.stepId === stepId);
 }
 
-function createAdapterContext(context: BrowserCoreTaskExecutorContext) {
+function createAdapterContext(context: RuntimeToolExecutorContext) {
   return {
     memory: context.session.memory,
     signal: context.session.abortController.signal,
@@ -77,7 +77,7 @@ function createAdapterContext(context: BrowserCoreTaskExecutorContext) {
 }
 
 async function beginPlanStep(
-  context: BrowserCoreTaskExecutorContext,
+  context: RuntimeToolExecutorContext,
   stepId: string,
   toolName: ToolName,
   stepSummary: string,
@@ -90,7 +90,7 @@ async function beginPlanStep(
   context.session.memory.runtimeMeta.currentTool = toolName;
   context.session.memory.runtimeMeta.currentStep += 1;
   context.session.memory.liveStepSummary = stepSummary;
-  appendLog(context.session, "runtime", "info", "Running Browser Core V2 plan step.", {
+  appendLog(context.session, "runtime", "info", "Running runtime tool loop step.", {
     stepId,
     toolName,
     goal: step?.goal,
@@ -99,7 +99,7 @@ async function beginPlanStep(
 }
 
 async function finishPlanStep(
-  context: BrowserCoreTaskExecutorContext,
+  context: RuntimeToolExecutorContext,
   stepId: string,
   status: PlanStepStatus,
   summary: string,
@@ -226,17 +226,17 @@ function applyCommercePatch(taskSpec: CommerceTaskSpec, decision: RoundDecisionR
   };
 }
 
-function rebuildPlanForTaskSpec(context: BrowserCoreTaskExecutorContext, stepId: string) {
+function rebuildPlanForTaskSpec(context: RuntimeToolExecutorContext, stepId: string) {
   const taskSpec = context.session.memory.taskSpec;
   if (!taskSpec) {
     return;
   }
 
-  context.session.memory.plan = buildBrowserCoreV2DisplayPlan(taskSpec);
+  context.session.memory.plan = buildRuntimeTaskPlan(taskSpec);
   context.session.memory.runtimeMeta.currentStepId = context.session.memory.plan[0]?.stepId;
   context.session.memory.runtimeMeta.currentTool = undefined;
   context.session.memory.liveStepSummary = `Round ${context.session.memory.runtimeMeta.currentRound} is ready.`;
-  appendLog(context.session, "runtime", "info", "Prepared the next Browser Core V2 round.", {
+  appendLog(context.session, "runtime", "info", "Prepared the next runtime tool loop round.", {
     stepId,
     round: context.session.memory.runtimeMeta.currentRound,
     taskType: taskSpec.taskType,
@@ -334,7 +334,7 @@ function toCommerceEvidence(memory: SessionMemory) {
   if ("searchQuery" in (memory.taskSpec ?? {})) {
     evidence.push({
       text: `Candidates were collected for query "${(memory.taskSpec as { searchQuery?: string }).searchQuery ?? memory.goal}".`,
-      evidenceTitle: "Legacy commerce search helper",
+      evidenceTitle: "Commerce search helper",
     });
   }
   if (memory.filterDiagnostics?.kind === "commerce") {
@@ -347,7 +347,7 @@ function toCommerceEvidence(memory: SessionMemory) {
 }
 
 async function executeSearchStep(
-  context: BrowserCoreTaskExecutorContext,
+  context: RuntimeToolExecutorContext,
   stepId: string,
   query: string,
   scope: "web" | "official_site",
@@ -413,7 +413,7 @@ function resolveOfficialEntry(
   return official ?? candidates[0];
 }
 
-async function executeWebDetailBatch(context: BrowserCoreTaskExecutorContext, stepId: string) {
+async function executeWebDetailBatch(context: RuntimeToolExecutorContext, stepId: string) {
   const taskSpec = context.session.memory.taskSpec;
   if (!taskSpec || taskSpec.taskType !== "public_research") {
     throw new Error("Public research detail execution requires a public research task spec.");
@@ -466,7 +466,7 @@ async function executeWebDetailBatch(context: BrowserCoreTaskExecutorContext, st
   );
 }
 
-async function executePrepareTaskCandidatesStep(context: BrowserCoreTaskExecutorContext, stepId: string) {
+async function executePrepareTaskCandidatesStep(context: RuntimeToolExecutorContext, stepId: string) {
   const taskSpec = context.session.memory.taskSpec;
   if (!taskSpec || taskSpec.taskType !== "public_research") {
     throw new Error("Prepare-task-candidates currently requires a public research task spec.");
@@ -527,7 +527,7 @@ async function executePrepareTaskCandidatesStep(context: BrowserCoreTaskExecutor
   );
 }
 
-async function executeSiteOverviewStep(context: BrowserCoreTaskExecutorContext, stepId: string) {
+async function executeSiteOverviewStep(context: RuntimeToolExecutorContext, stepId: string) {
   const taskSpec = context.session.memory.taskSpec;
   if (!taskSpec || taskSpec.taskType !== "site_overview" || !taskSpec.entryUrl) {
     throw new Error("Site overview execution requires a resolved site entry URL.");
@@ -573,7 +573,7 @@ async function executeSiteOverviewStep(context: BrowserCoreTaskExecutorContext, 
   return result;
 }
 
-async function executeCommerceSkillStep(context: BrowserCoreTaskExecutorContext, stepId: string) {
+async function executeCommerceSkillStep(context: RuntimeToolExecutorContext, stepId: string) {
   const taskSpec = context.session.memory.taskSpec;
   if (!taskSpec || taskSpec.taskType !== "commerce_search") {
     throw new Error("Commerce skill execution requires a commerce task spec.");
@@ -624,7 +624,7 @@ async function executeCommerceSkillStep(context: BrowserCoreTaskExecutorContext,
   return result;
 }
 
-async function executeRoundDecisionStep(context: BrowserCoreTaskExecutorContext, stepId: string) {
+async function executeRoundDecisionStep(context: RuntimeToolExecutorContext, stepId: string) {
   const taskSpec = context.session.memory.taskSpec;
   if (!taskSpec || taskSpec.taskType === "direct_answer") {
     throw new Error("Round decision requires a non-direct task spec.");
@@ -687,7 +687,7 @@ async function executeRoundDecisionStep(context: BrowserCoreTaskExecutorContext,
   return decision;
 }
 
-async function executeFinalizeTaskResultStep(context: BrowserCoreTaskExecutorContext, stepId: string) {
+async function executeFinalizeTaskResultStep(context: RuntimeToolExecutorContext, stepId: string) {
   await context.ensureBudget();
   await beginPlanStep(
     context,
@@ -704,11 +704,11 @@ async function executeFinalizeTaskResultStep(context: BrowserCoreTaskExecutorCon
 }
 
 async function runCommerceDelegate(
-  context: BrowserCoreTaskExecutorContext,
+  context: RuntimeToolExecutorContext,
   _input: CommerceResearchToolInput,
   _handlerContext: FirstPartyToolHandlerContext,
 ): Promise<CommerceResearchToolOutput> {
-  const openResult = await openSearchResults(createAdapterContext(context));
+  const openResult = await openCommerceSearchResults(createAdapterContext(context));
   if (openResult.stepStatus !== "succeeded") {
     const openStatus: CommerceResearchToolOutput["status"] =
       openResult.stepStatus === "blocked"
@@ -722,7 +722,7 @@ async function runCommerceDelegate(
       evidence: [],
       gaps: [openResult.summary],
       coverage: {
-        scope: "Legacy commerce helper path inside Browser Core V2 runtime.",
+        scope: "Commerce helper path inside runtime tool loop.",
         limitations: ["Search preparation failed before candidate extraction."],
       },
       problems: [
@@ -756,7 +756,7 @@ async function runCommerceDelegate(
     evidence,
     gaps,
     coverage: {
-      scope: "Browser Core V2 adapter commerce path.",
+      scope: "Runtime adapter commerce path.",
       limitations: shortlist.length > 0 ? [] : ["No shortlisted items were preserved after adapter candidate preparation."],
     },
     problems:
@@ -771,7 +771,7 @@ async function runCommerceDelegate(
   };
 }
 
-function applyRoundDecisionPatch(context: BrowserCoreTaskExecutorContext, decision: RoundDecisionResult) {
+function applyRoundDecisionPatch(context: RuntimeToolExecutorContext, decision: RoundDecisionResult) {
   const taskSpec = context.session.memory.taskSpec;
   if (!taskSpec || decision.decision !== "replan") {
     return;
@@ -786,14 +786,14 @@ function applyRoundDecisionPatch(context: BrowserCoreTaskExecutorContext, decisi
   }
 }
 
-function clearRoundStateForReplan(context: BrowserCoreTaskExecutorContext) {
+function clearRoundStateForReplan(context: RuntimeToolExecutorContext) {
   context.session.memory.researchCandidates = [];
   context.session.memory.filterDiagnostics = undefined;
   context.session.memory.runtimeMeta.currentRound += 1;
   rebuildPlanForTaskSpec(context, "decide-round-action");
 }
 
-function finishTerminalState(context: BrowserCoreTaskExecutorContext, summary: string, status: FinalStatus) {
+function finishTerminalState(context: RuntimeToolExecutorContext, summary: string, status: FinalStatus) {
   ensureTerminalResult(context.session.memory, summary, status === "success" ? "partial" : status);
   context.session.memory.runtimeMeta.status = "done";
   context.session.memory.runtimeMeta.currentTool = undefined;
@@ -805,7 +805,7 @@ function hasFinalizableEvidence(memory: SessionMemory) {
 }
 
 async function finishInsteadOfReplanAtMaxRounds(
-  context: BrowserCoreTaskExecutorContext,
+  context: RuntimeToolExecutorContext,
   decision: RoundDecisionResult,
   finalizeStepId: string,
 ) {
@@ -831,11 +831,11 @@ async function finishInsteadOfReplanAtMaxRounds(
   return true;
 }
 
-export async function executeDirectAnswerTask(context: BrowserCoreTaskExecutorContext) {
+export async function executeDirectAnswerTask(context: RuntimeToolExecutorContext) {
   await executeFinalizeTaskResultStep(context, "finalize-direct-answer");
 }
 
-export async function executePublicResearchTask(context: BrowserCoreTaskExecutorContext) {
+export async function executePublicResearchTask(context: RuntimeToolExecutorContext) {
   context.session.memory.runtimeMeta.currentRound = Math.max(1, context.session.memory.runtimeMeta.currentRound || 1);
   context.session.memory.runtimeMeta.maxRounds = MAX_RUNTIME_ROUNDS;
 
@@ -886,7 +886,7 @@ export async function executePublicResearchTask(context: BrowserCoreTaskExecutor
   }
 }
 
-export async function executeSiteOverviewTask(context: BrowserCoreTaskExecutorContext) {
+export async function executeSiteOverviewTask(context: RuntimeToolExecutorContext) {
   context.session.memory.runtimeMeta.currentRound = Math.max(1, context.session.memory.runtimeMeta.currentRound || 1);
   context.session.memory.runtimeMeta.maxRounds = MAX_RUNTIME_ROUNDS;
 
@@ -956,7 +956,7 @@ export async function executeSiteOverviewTask(context: BrowserCoreTaskExecutorCo
   }
 }
 
-export async function executeCommerceTask(context: BrowserCoreTaskExecutorContext) {
+export async function executeCommerceTask(context: RuntimeToolExecutorContext) {
   context.session.memory.runtimeMeta.currentRound = Math.max(1, context.session.memory.runtimeMeta.currentRound || 1);
   context.session.memory.runtimeMeta.maxRounds = MAX_RUNTIME_ROUNDS;
 

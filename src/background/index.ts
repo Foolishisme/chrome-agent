@@ -16,7 +16,7 @@ import type {
   StartSessionResponse,
   StopSessionMessage,
 } from "../shared/protocol";
-import { BrowserAgentRuntime } from "./runtime";
+import { BrowserAgentRuntime } from "./runtime/runtime-core";
 import {
   createConversation,
   createConversationState,
@@ -26,7 +26,7 @@ import {
   loadConversationState,
   rollbackConversationState,
   toConversationTurns,
-} from "./session-archive";
+} from "./runtime/session-archive";
 
 const runtime = new BrowserAgentRuntime();
 

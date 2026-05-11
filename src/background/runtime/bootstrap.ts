@@ -2,7 +2,7 @@ import type { SearchPreference } from "../../shared/types";
 import { classifyTaskType } from "../llm/llm-client";
 import { compileTaskSpec, detectTaskTypeWithLiteModel } from "../llm/query-compiler";
 import { refineCommerceSearchQuery, refineResearchQuery } from "../llm/llm-client";
-import { buildBrowserCoreV2DisplayPlan } from "../runner/task-plan-builder";
+import { buildRuntimeTaskPlan } from "../runner/task-plan-builder";
 import { toPublicState } from "./public-state";
 import type { ActiveSession } from "./shared";
 import { appendLog, createSessionId } from "./shared";
@@ -129,7 +129,7 @@ export async function createInitialSession(
     conversationTitle: options.conversationTitle,
     currentTurnId: options.currentTurnId,
     conversationTurns,
-    plan: buildBrowserCoreV2DisplayPlan(compiled.taskSpec),
+    plan: buildRuntimeTaskPlan(compiled.taskSpec),
     taskSpec: compiled.taskSpec,
     toolHistory: [],
     currentFacts: {
@@ -152,7 +152,7 @@ export async function createInitialSession(
     liveStepSummary:
       compiled.taskType === "direct_answer"
         ? "Ready to answer directly."
-        : "Ready to start the Browser Core V2 session.",
+        : "Ready to start the runtime tool session.",
     runtimeMeta: {
       sessionId,
       tabId: tab.id!,

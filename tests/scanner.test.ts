@@ -30,7 +30,7 @@ function flattenSemanticNodes(node: SemanticNode): SemanticNode[] {
 }
 
 describe("extractStructuredProducts", () => {
-  it("maps legacy JD search result cards into normalized items", () => {
+  it("maps classic JD search result cards into normalized items", () => {
     document.body.innerHTML = `
       <div id="J_goodsList">
         <div class="gl-item">
@@ -161,7 +161,7 @@ describe("collectResultListState", () => {
     expect(state.productLinkCount).toBe(2);
   });
 
-  it("treats link-based result sections as ready even when legacy cards are missing", () => {
+  it("treats link-based result sections as ready even when classic cards are missing", () => {
     const rectSpy = mockVisibleRect();
 
     document.title = "MacBook 搜索";

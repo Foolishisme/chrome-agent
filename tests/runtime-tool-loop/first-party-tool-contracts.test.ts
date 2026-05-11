@@ -7,7 +7,7 @@ import {
   listFirstPartyToolContracts,
 } from "../../src/background/tools";
 
-describe("Browser Core V2 first-party tool contracts", () => {
+describe("first-party tool contracts", () => {
   it("freezes the first LLM-visible tool set without exposing internal actions", () => {
     expect(FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES).toEqual([
       "browser.search",
@@ -59,7 +59,7 @@ describe("Browser Core V2 first-party tool contracts", () => {
 
     expect(contract.sideEffectLevel).toBe("external_navigation");
     expect(contract.parallelPolicy).toBe("singleton");
-    expect(contract.requires).toContain("legacy.commerce_search_workflow");
+    expect(contract.requires).toContain("commerce.search_workflow");
     expect(contract.outputSchema.parse(contract.examples.successOutput)).toMatchObject({
       status: "success",
       shortlist: expect.any(Array),

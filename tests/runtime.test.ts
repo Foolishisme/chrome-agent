@@ -4,9 +4,9 @@ import { RuntimeError } from "../src/shared/errors";
 import type { DebugLogEntry, SessionDebugBundle, SessionMemory } from "../src/shared/types";
 import type { ActiveSession } from "../src/background/runtime/shared";
 
-const { createInitialSessionMock, runBrowserCoreV2LoopMock } = vi.hoisted(() => ({
+const { createInitialSessionMock, runRuntimeToolLoopMock } = vi.hoisted(() => ({
   createInitialSessionMock: vi.fn(),
-  runBrowserCoreV2LoopMock: vi.fn(),
+  runRuntimeToolLoopMock: vi.fn(),
 }));
 
 vi.mock("../src/background/runtime/bootstrap", async () => {
@@ -21,11 +21,11 @@ vi.mock("../src/background/runner", async () => {
   const actual = await vi.importActual<typeof import("../src/background/runner")>("../src/background/runner");
   return {
     ...actual,
-    runBrowserCoreV2Loop: runBrowserCoreV2LoopMock,
+    runRuntimeToolLoop: runRuntimeToolLoopMock,
   };
 });
 
-import { BrowserAgentRuntime, evaluateRuntimeBudget, isReceiverMissingError, sendMessageToTab } from "../src/background/runtime";
+import { BrowserAgentRuntime, evaluateRuntimeBudget, isReceiverMissingError, sendMessageToTab } from "../src/background/runtime/runtime-core";
 
 function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
   const memory: SessionMemory = {
@@ -90,7 +90,7 @@ describe("runtime messaging recovery", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
     createInitialSessionMock.mockReset();
-    runBrowserCoreV2LoopMock.mockReset();
+    runRuntimeToolLoopMock.mockReset();
   });
 
   it("detects the missing receiver error", () => {
@@ -378,7 +378,7 @@ describe("runtime page wait recovery", () => {
   });
 });
 
-describe("runtime Browser Core V2 orchestration", () => {
+describe("runtime tool loop orchestration", () => {
   beforeEach(() => {
     vi.stubGlobal("chrome", {
       runtime: {
@@ -387,7 +387,7 @@ describe("runtime Browser Core V2 orchestration", () => {
     });
   });
 
-  it("dispatches runSession to the Browser Core V2 loop", async () => {
+  it("dispatches runSession to the runtime tool loop", async () => {
     const memory = createMemory({
       taskType: "public_research",
       taskSpec: {
@@ -416,7 +416,7 @@ describe("runtime Browser Core V2 orchestration", () => {
       },
     });
     const session = createSession(memory);
-    runBrowserCoreV2LoopMock.mockImplementation(async (currentSession: ActiveSession, deps: { publishState: (session: ActiveSession) => Promise<void> }) => {
+    runRuntimeToolLoopMock.mockImplementation(async (currentSession: ActiveSession, deps: { publishState: (session: ActiveSession) => Promise<void> }) => {
       currentSession.memory.runtimeMeta.status = "done";
       currentSession.memory.finalResult = {
         outputMode: "inline",
@@ -441,7 +441,7 @@ describe("runtime Browser Core V2 orchestration", () => {
     runtime.activeSession = session;
     await runtime.runSession(session);
 
-    expect(runBrowserCoreV2LoopMock).toHaveBeenCalledOnce();
+    expect(runRuntimeToolLoopMock).toHaveBeenCalledOnce();
     expect(runtime.getState().status).toBe("done");
     expect(runtime.getState().finalResult?.summary).toBe("Done");
   });

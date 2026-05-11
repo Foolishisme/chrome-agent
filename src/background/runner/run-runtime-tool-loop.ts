@@ -1,4 +1,4 @@
-﻿import { LIMITS } from "../../shared/constants";
+import { LIMITS } from "../../shared/constants";
 import { RuntimeError } from "../../shared/errors";
 import type { SessionMemory } from "../../shared/types";
 import type { ActiveSession } from "../runtime/shared";
@@ -8,7 +8,7 @@ import {
   executeDirectAnswerTask,
   executePublicResearchTask,
   executeSiteOverviewTask,
-  type BrowserCoreRunnerDeps,
+  type RuntimeToolLoopDeps,
 } from "./task-executors";
 import { createRuntimeBrowserDriver } from "./runtime-browser-driver";
 import { createDefaultFirstPartyToolRegistry } from "../tools";
@@ -41,9 +41,9 @@ export function evaluateRuntimeBudget(memory: SessionMemory, now = Date.now()) {
   };
 }
 
-export async function runBrowserCoreV2Loop(
+export async function runRuntimeToolLoop(
   session: ActiveSession,
-  deps: BrowserCoreRunnerDeps,
+  deps: RuntimeToolLoopDeps,
   options: {
     driver?: BrowserDriver;
     registry?: ReturnType<typeof createDefaultFirstPartyToolRegistry>;
@@ -87,7 +87,7 @@ export async function runBrowserCoreV2Loop(
   } as const;
 
   if (!session.memory.taskSpec) {
-    throw new RuntimeError("Task spec is missing before entering the Browser Core V2 loop.", "TASK_SPEC_MISSING");
+    throw new RuntimeError("Task spec is missing before entering the runtime tool loop.", "TASK_SPEC_MISSING");
   }
 
   if (session.memory.taskSpec.taskType === "direct_answer") {

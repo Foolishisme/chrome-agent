@@ -1,4 +1,4 @@
-﻿import type { PlanStep, TaskSpec, ToolName } from "../../shared/types";
+import type { PlanStep, TaskSpec, ToolName } from "../../shared/types";
 
 function createPlanStep(stepId: string, goal: string, toolName: ToolName): PlanStep {
   return {
@@ -10,7 +10,7 @@ function createPlanStep(stepId: string, goal: string, toolName: ToolName): PlanS
   };
 }
 
-export function buildBrowserCoreV2DisplayPlan(taskSpec: TaskSpec): PlanStep[] {
+export function buildRuntimeTaskPlan(taskSpec: TaskSpec): PlanStep[] {
   if (taskSpec.taskType === "direct_answer") {
     return [createPlanStep("finalize-direct-answer", "Generate the direct answer.", "finalizeTaskResult")];
   }

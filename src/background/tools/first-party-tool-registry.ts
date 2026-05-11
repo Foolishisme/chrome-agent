@@ -1,4 +1,4 @@
-﻿import type { BrowserDriver } from "../browser/capability/types";
+import type { BrowserDriver } from "../browser/capability/types";
 import type { BrowserLinkObservation, BrowserObservation, BrowserPageProblem } from "../../shared/browser-capability";
 import { runExplicitUrlOverview } from "../browser/overview/explicit-url-overview";
 import {
@@ -382,7 +382,7 @@ export async function runCommerceResearchTool(
     status: "blocked",
     shortlist: [],
     evidence: [],
-    gaps: ["No commerce research delegate is wired into the Browser Core V2 registry yet."],
+    gaps: ["No commerce research delegate is wired into the first-party tool registry yet."],
     coverage: {
       scope: "Contract-level black-box commerce skill registration only.",
       limitations: ["A runtime delegate or adapter is required before this skill becomes executable."],
@@ -391,7 +391,7 @@ export async function runCommerceResearchTool(
       {
         code: "COMMERCE_DELEGATE_MISSING",
         message: "首批 commerce skill 已注册，但尚未接入可执行 delegate。",
-        suggestedNextAction: "把旧 commerce_search workflow 适配为 registry handler 或 runtime delegate。",
+        suggestedNextAction: "为 commerce_search 主链提供 registry handler 或 runtime delegate。",
       },
     ],
   };

@@ -37,7 +37,7 @@
 
 默认 session 路径：
 
-`START_SESSION -> BrowserAgentRuntime -> runBrowserCoreV2Loop -> task executor -> first-party tools -> RuntimeBrowserDriver -> content bridge`
+`START_SESSION -> BrowserAgentRuntime -> runRuntimeToolLoop -> task executor -> first-party tools -> RuntimeBrowserDriver -> content bridge`
 
 浏览器页面能力通过两类消息进入 content script：
 

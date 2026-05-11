@@ -3,9 +3,9 @@ import { RuntimeError } from "../../shared/errors";
 import type {
   ActionResult,
   AgentAction,
+  CommerceTaskSpec,
   ExtractedItem,
   SnapshotData,
-  TaskSpec,
 } from "../../shared/types";
 import type { ToolExecutionContext } from "./shared";
 
@@ -47,37 +47,21 @@ export function hasMatchingQuery(snapshot: SnapshotData, searchQuery: string) {
   });
 }
 
-export function buildSearchUrl(taskSpec: TaskSpec) {
-  if (taskSpec.taskType === "commerce_search") {
-    const url = new URL("https://search.jd.com/Search");
-    url.searchParams.set("keyword", taskSpec.searchQuery);
-    url.searchParams.set("enc", "utf-8");
-    return url.toString();
-  }
-
-  if (taskSpec.taskType !== "public_research") {
-    throw new RuntimeError("Direct answers do not have a search URL.", "DIRECT_ANSWER_NO_SEARCH_URL");
-  }
-
-  const url = new URL("https://www.google.com/search");
-  url.searchParams.set("q", taskSpec.searchQuery);
-  url.searchParams.set("hl", "zh-CN");
+export function buildCommerceSearchUrl(taskSpec: CommerceTaskSpec) {
+  const url = new URL("https://search.jd.com/Search");
+  url.searchParams.set("keyword", taskSpec.searchQuery);
+  url.searchParams.set("enc", "utf-8");
   return url.toString();
 }
 
-export function detectSearchBlocker(taskType: TaskSpec["taskType"], snapshot: SnapshotData) {
+export function detectCommerceSearchBlocker(snapshot: SnapshotData) {
   try {
     const parsed = new URL(snapshot.url);
 
     if (
-      taskType === "commerce_search" &&
       (parsed.hostname === "passport.jd.com" || parsed.hostname === "plogin.m.jd.com" || parsed.pathname.includes("/new/login"))
     ) {
       return "JD redirected the search to a login page.";
-    }
-
-    if (taskType === "public_research" && parsed.hostname.endsWith("google.com") && parsed.pathname.startsWith("/sorry")) {
-      return "Google returned a verification page and blocked the search results.";
     }
   } catch {
     // Ignore malformed URLs.
@@ -200,9 +184,9 @@ export async function ensureUsableSnapshotWithDialogRecovery(
   }
 }
 
-export async function reopenSearchResults(
+export async function reopenCommerceSearchResults(
   context: ToolExecutionContext,
-  taskSpec: TaskSpec,
+  taskSpec: CommerceTaskSpec,
   reason: string,
 ): Promise<SnapshotData | undefined> {
   if (context.memory.runtimeMeta.searchReopenRecoveryCount >= 1) {
@@ -216,12 +200,12 @@ export async function reopenSearchResults(
   context.appendLog("runtime", "warn", "Triggering canonical search reopen recovery.", {
     reason,
     searchReopenRecoveryCount: context.memory.runtimeMeta.searchReopenRecoveryCount,
-    url: buildSearchUrl(taskSpec),
+    url: buildCommerceSearchUrl(taskSpec),
   });
 
   const action: AgentAction = {
     type: "NAVIGATE",
-    url: buildSearchUrl(taskSpec),
+    url: buildCommerceSearchUrl(taskSpec),
   };
   const result = await context.executeAction(action, "Reopen the canonical search results page once.");
   await context.settleAfterAction(action);

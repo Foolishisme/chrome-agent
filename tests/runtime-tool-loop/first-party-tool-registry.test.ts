@@ -36,7 +36,7 @@ function createObservation(overrides: Partial<BrowserObservation> = {}): Browser
   };
 }
 
-describe("Browser Core V2 first-party tool registry", () => {
+describe("first-party tool registry", () => {
   it("validates the default registry shape and metadata completeness", () => {
     const registry = createDefaultFirstPartyToolRegistry();
 

@@ -2,36 +2,33 @@ import { RuntimeError } from "../../../shared/errors";
 import type { ToolResult } from "../../../shared/types";
 import { createToolResult, type ToolExecutionContext } from "../shared";
 import {
-  buildSearchUrl,
-  detectSearchBlocker,
+  buildCommerceSearchUrl,
+  detectCommerceSearchBlocker,
   ensureUsableSnapshotWithDialogRecovery,
   hasMatchingQuery,
   needsSearchReopen,
-  reopenSearchResults,
+  reopenCommerceSearchResults,
 } from "../search-flow";
-import { isCommerceTask, isResearchTask } from "../task-guards";
+import { isCommerceTask } from "../task-guards";
 
-export async function openSearchResults(context: ToolExecutionContext): Promise<ToolResult> {
+export async function openCommerceSearchResults(context: ToolExecutionContext): Promise<ToolResult> {
   if (!context.memory.taskSpec) {
     throw new RuntimeError("Task spec is missing before search.", "TASK_SPEC_MISSING");
   }
 
-  if (!isCommerceTask(context.memory.taskSpec) && !isResearchTask(context.memory.taskSpec)) {
-    throw new RuntimeError("Open-search-results only supports commerce or public research tasks.", "INVALID_SEARCH_TASK");
+  if (!isCommerceTask(context.memory.taskSpec)) {
+    throw new RuntimeError("Commerce search preparation only supports commerce tasks.", "INVALID_SEARCH_TASK");
   }
 
   const taskSpec = context.memory.taskSpec;
 
-  const expectedSearchPage = taskSpec.taskType === "commerce_search" ? "search" : "google_search";
+  const expectedSearchPage = "search";
   let snapshot = await ensureUsableSnapshotWithDialogRecovery(context, "Search page blocked before submission.");
 
   if (snapshot.pageType === expectedSearchPage && hasMatchingQuery(snapshot, taskSpec.searchQuery)) {
     context.memory.recoveryHint = undefined;
     context.memory.lastError = undefined;
-    context.memory.nextIntent =
-      taskSpec.taskType === "commerce_search"
-        ? "Collect product candidates from the JD result page."
-        : "Collect source candidates from the Google result page.";
+    context.memory.nextIntent = "Collect product candidates from the JD result page.";
 
     return createToolResult({
       status: "success",
@@ -51,13 +48,11 @@ export async function openSearchResults(context: ToolExecutionContext): Promise<
 
   const action = {
     type: "NAVIGATE" as const,
-    url: buildSearchUrl(taskSpec),
+    url: buildCommerceSearchUrl(taskSpec),
   };
   const result = await context.executeAction(
     action,
-    taskSpec.taskType === "commerce_search"
-      ? `Open the JD search results for "${taskSpec.searchQuery}".`
-      : `Open the Google search results for "${taskSpec.searchQuery}".`,
+    `Open the JD search results for "${taskSpec.searchQuery}".`,
   );
   await context.settleAfterAction(action);
   snapshot = await ensureUsableSnapshotWithDialogRecovery(context, "Search results page stayed blocked after navigation.");
@@ -70,10 +65,7 @@ export async function openSearchResults(context: ToolExecutionContext): Promise<
   context.memory.filterDiagnostics = undefined;
   context.memory.unresolvedIssues = [];
   context.memory.runtimeMeta.recoveryCount = 0;
-  context.memory.nextIntent =
-    taskSpec.taskType === "commerce_search"
-      ? "Collect product candidates from the JD result page."
-      : "Collect source candidates from the Google result page.";
+  context.memory.nextIntent = "Collect product candidates from the JD result page.";
   context.memory.recoveryHint = undefined;
   context.memory.lastError = result.success ? undefined : result.message;
 
@@ -87,7 +79,7 @@ export async function openSearchResults(context: ToolExecutionContext): Promise<
   });
 
   if (needsSearchReopen(snapshot, expectedSearchPage)) {
-    const reopenedSnapshot = await reopenSearchResults(
+    const reopenedSnapshot = await reopenCommerceSearchResults(
       context,
       taskSpec,
       `Received ${snapshot.pageType} after opening search results.`,
@@ -97,7 +89,7 @@ export async function openSearchResults(context: ToolExecutionContext): Promise<
     }
   }
 
-  const blockedReason = detectSearchBlocker(context.memory.taskType, snapshot);
+  const blockedReason = detectCommerceSearchBlocker(snapshot);
   if (blockedReason) {
     return createToolResult({
       status: "fatal_error",

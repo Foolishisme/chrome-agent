@@ -1,7 +1,7 @@
 import { RuntimeError } from "../../shared/errors";
 import type { StartSessionResponse } from "../../shared/protocol";
 import type { ActionResult, AgentAction, SessionDebugBundle, SessionPublicState, SnapshotData, StepRecord } from "../../shared/types";
-import { evaluateRuntimeBudget, runBrowserCoreV2Loop } from "../runner";
+import { evaluateRuntimeBudget, runRuntimeToolLoop } from "../runner";
 import { setActiveLlmProfile } from "../llm/llm-client";
 import { summarizeSnapshot } from "../guards";
 import { saveSessionArchive } from "./session-archive";
@@ -159,7 +159,7 @@ export class BrowserAgentRuntime {
 
   private async runSession(session: ActiveSession) {
     try {
-      await runBrowserCoreV2Loop(session, {
+      await runRuntimeToolLoop(session, {
         publishState: (currentSession, asError) => this.publishSessionState(currentSession, asError),
         scanPage: () => this.scanPage(session),
         ensureUsableSnapshot: () => this.ensureUsableSnapshot(session),
