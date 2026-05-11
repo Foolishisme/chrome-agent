@@ -1,20 +1,9 @@
 import type { ConversationTurn, SessionMemory, SessionPublicState } from "../../shared/types";
 import { buildFallbackFinalResult } from "../tools/result-builders";
 
-const TIMELINE_LIMIT = 8;
-
-function getElapsedMs(memory: SessionMemory, now = Date.now()) {
-  return Math.max(0, now - memory.runtimeMeta.startedAt);
-}
-
 export function defaultPublicState(): SessionPublicState {
   return {
     status: "idle",
-    currentStep: 0,
-    plan: [],
-    items: [],
-    logs: [],
-    timeline: [],
     updatedAt: Date.now(),
   };
 }
@@ -35,7 +24,6 @@ function buildCurrentConversationTurn(memory: SessionMemory): ConversationTurn |
     goal: memory.goal,
     answerSummary: memory.finalResult.summary,
     answerMarkdown,
-    timeline: memory.stepHistory.slice(),
     savedAt: Date.now(),
   };
 }
@@ -62,7 +50,6 @@ export function ensureTerminalResult(memory: SessionMemory, reason: string, stat
 }
 
 export function toPublicState(memory: SessionMemory): SessionPublicState {
-  const lastStep = memory.stepHistory.at(-1);
   return {
     sessionId: memory.runtimeMeta.sessionId,
     goal: memory.goal,
@@ -71,27 +58,7 @@ export function toPublicState(memory: SessionMemory): SessionPublicState {
     conversationTitle: memory.conversationTitle,
     conversationTurns: buildConversationTurns(memory),
     searchPreference: memory.searchPreference,
-    taskType: memory.taskType,
-    taskSpec: memory.taskSpec,
     status: memory.runtimeMeta.status,
-    currentStepId: memory.runtimeMeta.currentStepId,
-    currentTool: memory.runtimeMeta.currentTool,
-    currentStep: memory.runtimeMeta.currentStep,
-    budgetLow: memory.runtimeMeta.budgetLow,
-    elapsedMs: getElapsedMs(memory),
-    plan: memory.plan,
-    stepSummary: memory.liveStepSummary ?? lastStep?.stepSummary,
-    lastAction: lastStep?.action,
-    lastActionResult: lastStep?.actionResult,
-    items: memory.extractedItems,
-    rawItemCount: memory.rawExtractedItems.length,
-    researchCandidates: memory.researchCandidates,
-    researchSources: memory.researchSources,
-    filterDiagnostics: memory.filterDiagnostics,
-    logs: memory.logs,
-    timeline: memory.stepHistory.slice(-TIMELINE_LIMIT),
-    pageSnapshot: memory.pageSnapshot,
-    recoveryHint: memory.recoveryHint,
     error: memory.lastError,
     unresolvedIssues: memory.unresolvedIssues,
     finalResult: memory.finalResult,

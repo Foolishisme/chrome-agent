@@ -34,9 +34,6 @@ function hasMeaningfulSessionState() {
   const state = runtime.getState();
   return (
     state.status !== "idle" ||
-    state.currentStep > 0 ||
-    state.timeline.length > 0 ||
-    state.logs.length > 0 ||
     !!state.finalResult ||
     !!state.error ||
     !!state.sessionId ||

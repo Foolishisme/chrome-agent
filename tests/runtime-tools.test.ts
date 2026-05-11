@@ -178,7 +178,6 @@ describe("runtime tool helpers", () => {
           goal: "解释一下 Playwright 和 Selenium 的区别",
           answerSummary: "Playwright 在现代浏览器支持和自动等待上更强。",
           answerMarkdown: "summary",
-          timeline: [],
           savedAt: Date.now() - 10_000,
         },
       ],

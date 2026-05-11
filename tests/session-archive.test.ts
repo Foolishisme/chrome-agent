@@ -8,18 +8,6 @@ function createStoredState(sessionId: string, goal: string, summary: string): Se
     sessionId,
     goal,
     status: "done",
-    currentStep: 3,
-    plan: [],
-    items: [],
-    logs: [],
-    timeline: [
-      {
-        step: 1,
-        status: "done",
-        stepSummary: `${goal} timeline`,
-        timestamp: Date.now(),
-      },
-    ],
     updatedAt: Date.now(),
     finalResult: {
       outputMode: "inline",
@@ -41,7 +29,6 @@ function createArchiveInput(state: SessionPublicState, conversationId: string, c
     sessionId: state.sessionId!,
     goal: state.goal!,
     finalResult: state.finalResult!,
-    timeline: state.timeline,
     conversationId,
     conversationTitle,
   };
@@ -95,11 +82,6 @@ describe("session archive", () => {
 
     const emptyFallback: SessionPublicState = {
       status: "idle",
-      currentStep: 0,
-      plan: [],
-      items: [],
-      logs: [],
-      timeline: [],
       updatedAt: Date.now(),
     };
 
@@ -119,8 +101,7 @@ describe("session archive", () => {
     expect(current.conversationTurns).toHaveLength(2);
     expect(current.conversationTurns?.[0]?.turnId).toBe(1);
     expect(current.conversationTurns?.[1]?.turnId).toBe(2);
-    expect(current.conversationTurns?.[0]?.timeline).toHaveLength(1);
-    expect(current.conversationTurns?.[1]?.timeline?.[0]?.stepSummary).toContain("timeline");
+    expect("timeline" in current.conversationTurns![0]!).toBe(false);
     expect(current.finalResult?.summary).toBe("War is one of the risk-off factors");
 
     const rolledBack = await rollbackConversationState(conversation.conversationId, 1, emptyFallback);
@@ -139,11 +120,6 @@ describe("session archive", () => {
 
     const fallback: SessionPublicState = {
       status: "idle",
-      currentStep: 0,
-      plan: [],
-      items: [],
-      logs: [],
-      timeline: [],
       updatedAt: Date.now(),
     };
 
@@ -190,11 +166,6 @@ describe("session archive", () => {
 
     const fallback = await loadConversationBackfillState({
       status: "idle",
-      currentStep: 0,
-      plan: [],
-      items: [],
-      logs: [],
-      timeline: [],
       updatedAt: Date.now(),
     });
 

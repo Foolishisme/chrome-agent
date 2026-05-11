@@ -1,4 +1,4 @@
-import type { ResultArtifact, SearchPreference, SessionPublicState, StepRecord } from "../shared/types";
+import type { ResultArtifact, SearchPreference, SessionPublicState } from "../shared/types";
 import type { LlmProfile } from "../shared/types";
 import { archiveUiText, messages, optimisticAssistantProgressText } from "./ui-text";
 
@@ -12,8 +12,6 @@ export type PendingSessionSubmission = {
 export type UiNoticeTone = "info" | "error";
 const LLM_PROFILE_STORAGE_KEY = "browser-agent.llm-profile";
 const DEFAULT_LLM_PROFILE: LlmProfile = "external";
-
-const browserAgentWindow = window as Window & typeof globalThis & { __browserAgentElapsedTicker?: number };
 
 function normalizeLlmProfile(profile: string | undefined): LlmProfile | undefined {
   const normalized = profile?.trim().toLowerCase();
@@ -35,11 +33,6 @@ function resolveInitialLlmProfile(): LlmProfile {
 function createBaseState(): SessionPublicState {
   return {
     status: "idle",
-    currentStep: 0,
-    plan: [],
-    items: [],
-    logs: [],
-    timeline: [],
     updatedAt: Date.now(),
   };
 }
@@ -57,10 +50,6 @@ const state = {
   nextPendingSessionRequestId: 0,
   cancelledPendingSessionRequestIds: new Set<number>(),
 };
-
-export function getBrowserAgentWindow() {
-  return browserAgentWindow;
-}
 
 export function getCurrentState() {
   return state.currentState;
@@ -184,8 +173,6 @@ export function hasSessionActivity() {
   return (
     Boolean(state.pendingSessionSubmission) ||
     state.currentState.status !== "idle" ||
-    state.currentState.timeline.length > 0 ||
-    state.currentState.logs.length > 0 ||
     Boolean(state.currentState.finalResult) ||
     Boolean(state.currentState.error)
   );
@@ -196,42 +183,17 @@ export function getCurrentProgressText() {
     return optimisticAssistantProgressText;
   }
 
-  return state.currentState.error ?? state.currentState.stepSummary ?? state.currentState.finalResult?.summary ?? messages.assistantWaiting;
+  if (state.currentState.status === "running") {
+    return navigator.language.startsWith("zh") ? "正在处理请求..." : "Working on it...";
+  }
+
+  return state.currentState.error ?? state.currentState.finalResult?.summary ?? messages.assistantWaiting;
 }
 
 export function getActiveSearchPreference() {
   return state.currentState.status === "running"
     ? state.currentState.searchPreference ?? state.draftSearchPreference
     : state.draftSearchPreference;
-}
-
-function getTimelineDurationMs(records: StepRecord[]) {
-  if (records.length === 0) {
-    return undefined;
-  }
-
-  const timestamps = records
-    .map((record) => record.timestamp)
-    .filter((timestamp) => Number.isFinite(timestamp))
-    .sort((left, right) => left - right);
-
-  if (timestamps.length === 0) {
-    return undefined;
-  }
-
-  return Math.max(1000, timestamps.at(-1)! - timestamps[0]!);
-}
-
-export function getDisplayedElapsedMs() {
-  if (state.currentState.elapsedMs !== undefined) {
-    if (state.currentState.status !== "running") {
-      return state.currentState.elapsedMs;
-    }
-
-    return state.currentState.elapsedMs + Math.max(0, Date.now() - state.currentState.updatedAt);
-  }
-
-  return getTimelineDurationMs(state.currentState.timeline);
 }
 
 export function getFinalResultDisplayMarkdown() {
@@ -293,7 +255,6 @@ export function getRenderState() {
     pendingSessionSubmission: state.pendingSessionSubmission,
     activeSearchPreference: getActiveSearchPreference(),
     currentProgressText: getCurrentProgressText(),
-    displayedElapsedMs: getDisplayedElapsedMs(),
     finalResultDisplayMarkdown: getFinalResultDisplayMarkdown(),
     documentArtifacts: getDocumentArtifacts(),
     selectedLlmProfile: getActiveLlmProfile(),

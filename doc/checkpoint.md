@@ -48,14 +48,16 @@
   - `prepareTaskCandidates`
   - `finalizeTaskResult`
 - conversation archive 保存用户可见结果。
-- runtime run log 通过 `src/background/runtime/run-log-store.ts` 按 `sessionId` 存储。
-- `SessionPublicState.logs` 只作为当前 session live tail。
+- `SessionPublicState` 只广播 Side Panel 需要的会话、运行占位、错误和终态结果字段。
+- runtime run log 通过 `src/background/runtime/run-log-store.ts` 按 `sessionId` 存储工具级诊断记录。
+- 执行 timeline、当前 step/tool 和调试日志不进入前端状态或 conversation archive。
 
 ## 当前边界
 
 - 当前只保留实际运行链；未接入主链的平行 driver、content bridge、低层 facade、QA route 和 future helper 已不属于当前事实源。
 - `RuntimeBrowserDriver` 是默认浏览器驱动；测试中的 mock driver 位于 `tests/test-support/`。
 - first-party tool contracts 仍是当前稳定 LLM-visible 能力边界。
+- 思考链、中间推理过程、raw prompt 和 raw model intermediate text 不进入前端、archive 或 run log。
 - 继续开发时，新增能力必须先证明 active call site、当前测试保护、安全/数据风险保护或事实源要求。
 
 ## 验证快照

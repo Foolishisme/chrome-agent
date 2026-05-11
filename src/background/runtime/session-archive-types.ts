@@ -1,4 +1,4 @@
-import type { ConversationTurn, FinalResult, StepRecord } from "../../shared/types";
+import type { ConversationTurn, FinalResult } from "../../shared/types";
 
 export interface ArchivedTurn {
   turnId: number;
@@ -7,7 +7,6 @@ export interface ArchivedTurn {
   answerSummary: string;
   answerMarkdown: string;
   finalResult: FinalResult;
-  timeline: StepRecord[];
   savedAt: number;
 }
 
@@ -24,7 +23,6 @@ export interface SaveSessionArchiveInput {
   sessionId: string;
   goal: string;
   finalResult: FinalResult;
-  timeline: StepRecord[];
   conversationId?: string;
   conversationTitle?: string;
 }
@@ -36,7 +34,6 @@ export function toConversationTurn(turn: ArchivedTurn): ConversationTurn {
     goal: turn.goal,
     answerSummary: turn.answerSummary,
     answerMarkdown: turn.answerMarkdown,
-    timeline: turn.timeline ?? [],
     savedAt: turn.savedAt,
   };
 }

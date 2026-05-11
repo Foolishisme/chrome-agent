@@ -19,17 +19,6 @@ const conversationSummaries: ConversationSummary[] = [
   },
 ];
 
-function createTurnTimeline(stepSummary: string) {
-  return [
-    {
-      step: 1,
-      status: "done" as const,
-      stepSummary,
-      timestamp: Date.now(),
-    },
-  ];
-}
-
 function createConversationTurns(): ConversationTurn[] {
   return [
     {
@@ -38,7 +27,6 @@ function createConversationTurns(): ConversationTurn[] {
       goal: "近期黄金",
       answerSummary: "黄金近期波动上行。",
       answerMarkdown: "## 结论\n黄金近期波动上行。",
-      timeline: createTurnTimeline("Gold trend timeline"),
       savedAt: Date.now() - 5_000,
     },
     {
@@ -47,7 +35,6 @@ function createConversationTurns(): ConversationTurn[] {
       goal: "黄金是否与近期战争有关？",
       answerSummary: "战争是避险情绪因素之一。",
       answerMarkdown: "## 结论\n战争是避险情绪因素之一。",
-      timeline: createTurnTimeline("War factor timeline"),
       savedAt: Date.now(),
     },
   ];
@@ -62,31 +49,6 @@ function createRunningState(): SessionPublicState {
     sessionId: "session-running",
     goal: "黄金是否与近期战争有关？",
     status: "running",
-    currentStep: 1,
-    currentStepId: "prepareTaskCandidates",
-    currentTool: "prepareTaskCandidates",
-    stepSummary: "Collecting source candidates.",
-    elapsedMs: 4_000,
-    plan: [],
-    items: [],
-    logs: [],
-    timeline: [
-      {
-        step: 1,
-        status: "running",
-        stepSummary: "Collecting source candidates.",
-        action: {
-          type: "NAVIGATE",
-          url: "https://www.google.com/search?q=test",
-        },
-        actionResult: {
-          success: true,
-          actionType: "NAVIGATE",
-          message: "Opened Google search.",
-        },
-        timestamp: Date.now(),
-      },
-    ],
     updatedAt: Date.now(),
   };
 }
@@ -100,11 +62,6 @@ function createArtifactState(): SessionPublicState {
     sessionId: "session-artifact",
     goal: "黄金是否与近期战争有关？",
     status: "done",
-    currentStep: 4,
-    plan: [],
-    items: [],
-    logs: [],
-    timeline: [],
     updatedAt: Date.now(),
     finalResult: {
       outputMode: "artifact",
@@ -140,18 +97,6 @@ function createInlineState(): SessionPublicState {
     sessionId: "session-inline",
     goal: "黄金是否与近期战争有关？",
     status: "done",
-    currentStep: 4,
-    plan: [],
-    items: [],
-    logs: [],
-    timeline: [
-      {
-        step: 4,
-        status: "done",
-        stepSummary: "Final result is ready.",
-        timestamp: Date.now(),
-      },
-    ],
     updatedAt: Date.now(),
     finalResult: {
       outputMode: "inline",
@@ -177,21 +122,6 @@ function createFailedState(): SessionPublicState {
     sessionId: "session-failed",
     goal: "Will source reading fail?",
     status: "error",
-    currentStep: 3,
-    currentStepId: "browser.webDetail",
-    currentTool: "browser.webDetail",
-    stepSummary: "Source reading failed.",
-    plan: [],
-    items: [],
-    logs: [],
-    timeline: [
-      {
-        step: 3,
-        status: "error",
-        stepSummary: "Source reading failed.",
-        timestamp: Date.now(),
-      },
-    ],
     error: "Source reading failed.",
     updatedAt: Date.now(),
     finalResult: {
@@ -218,21 +148,6 @@ function createStoppedState(): SessionPublicState {
     sessionId: "session-stopped",
     goal: "Will source reading fail?",
     status: "done",
-    currentStep: 2,
-    currentStepId: "prepare-task-candidates",
-    currentTool: "prepareTaskCandidates",
-    stepSummary: "Session stopped.",
-    plan: [],
-    items: [],
-    logs: [],
-    timeline: [
-      {
-        step: 2,
-        status: "error",
-        stepSummary: "Session stopped.",
-        timestamp: Date.now(),
-      },
-    ],
     error: "The session was stopped before completion.",
     updatedAt: Date.now(),
     finalResult: {
@@ -265,11 +180,6 @@ async function loadSidepanel() {
 describe("sidepanel result actions", () => {
   const idleState: SessionPublicState = {
     status: "idle",
-    currentStep: 0,
-    plan: [],
-    items: [],
-    logs: [],
-    timeline: [],
     updatedAt: Date.now(),
   };
 
@@ -523,11 +433,11 @@ describe("sidepanel result actions", () => {
     });
 
     await vi.waitFor(() => {
-      expect(document.body.textContent).toContain("Collecting source candidates.");
+      expect(document.body.textContent).toMatch(/正在处理请求|Working on it/);
     });
   });
 
-  it("shows timeline instead of runtime status while running", async () => {
+  it("shows a minimal running placeholder without runtime details", async () => {
     await loadSidepanel();
     onRuntimeMessage?.({
       type: "SESSION_UPDATE",
@@ -537,12 +447,13 @@ describe("sidepanel result actions", () => {
     expect(document.getElementById("start-button")).toBeNull();
     expect(document.getElementById("stop-button")).not.toBeNull();
     expect(document.getElementById("copy-result-button")).toBeNull();
-    expect(document.body.textContent).toContain("Collecting source candidates.");
-    expect(document.body.textContent).toContain("Gold trend timeline");
+    expect(document.body.textContent).toMatch(/正在处理请求|Working on it/);
+    expect(document.body.textContent).not.toContain("Collecting source candidates.");
+    expect(document.body.textContent).not.toContain("Gold trend timeline");
     expect(document.querySelectorAll("section.section")).toHaveLength(1);
     expect(document.body.textContent).toContain("对话");
     expect(document.querySelector(".status-grid")).toBeNull();
-    expect(document.body.textContent).toMatch(/思考中|Thinking/);
+    expect(document.querySelector(".timeline-details")).toBeNull();
   });
 
   it("does not submit stop when Enter is pressed during a running session", async () => {
@@ -575,7 +486,7 @@ describe("sidepanel result actions", () => {
     expect(document.querySelectorAll("details.section-details")).toHaveLength(1);
     expect(document.querySelectorAll("section.section")).toHaveLength(1);
     expect(document.querySelector("[data-copy-turn-id='2']")).not.toBeNull();
-    expect(document.body.textContent).toMatch(/已思考|Thought for/);
+    expect(document.querySelector(".timeline-details")).toBeNull();
   });
 
   it("allows cancelling while the optimistic startup state is pending", async () => {
@@ -628,15 +539,15 @@ describe("sidepanel result actions", () => {
     });
   });
 
-  it("shows runtime status when the session fails", async () => {
+  it("shows a concise failure result without runtime details", async () => {
     await loadSidepanel();
     onRuntimeMessage?.({
       type: "SESSION_UPDATE",
       payload: createFailedState(),
     });
 
-    expect(document.querySelectorAll("section.section")).toHaveLength(2);
-    expect(document.querySelector(".status-grid")).not.toBeNull();
+    expect(document.querySelectorAll("section.section")).toHaveLength(1);
+    expect(document.querySelector(".status-grid")).toBeNull();
     expect(document.body.textContent).toContain("Source reading failed.");
   });
 
@@ -661,7 +572,8 @@ describe("sidepanel result actions", () => {
 
     expect(document.querySelectorAll("section.section")).toHaveLength(1);
     expect(document.querySelector(".status-grid")).toBeNull();
-    expect(document.body.textContent).toContain("Retrying after a transient read failure.");
+    expect(document.body.textContent).not.toContain("Retrying after a transient read failure.");
+    expect(document.body.textContent).toMatch(/正在处理请求|Working on it/);
   });
 
   it("copies a historical turn from the shared conversation stream", async () => {

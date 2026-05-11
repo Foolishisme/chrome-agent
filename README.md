@@ -30,9 +30,9 @@
 - `src/shared/`
 - `src/sidepanel/`
 
-Side Panel 负责启动和停止会话、展示当前目标和必要进度，并在对话流中呈现最终结果。
+Side Panel 负责启动和停止会话、展示会话历史、最小运行占位、最终结果和 artifact 操作；不展示执行 timeline、runtime debug panel、调试日志或 thinking 过程。
 
-runtime-visible tools 通过当前 tool 层注册并返回结构化结果。浏览器控制细节留在 `RuntimeBrowserDriver`、content bridge 和 content action 内部。
+runtime-visible tools 通过当前 tool 层注册并返回结构化结果。浏览器控制细节留在 `RuntimeBrowserDriver`、content bridge 和 content action 内部；工具级诊断只进入后台 run log。
 
 ## 文档入口
 

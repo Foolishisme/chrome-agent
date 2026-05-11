@@ -81,11 +81,6 @@ function createSession(memory: SessionMemory) {
     abortController: new AbortController(),
     lastPublicState: {
       status: "running" as const,
-      currentStep: memory.runtimeMeta.currentStep,
-      plan: memory.plan,
-      items: [],
-      logs: [],
-      timeline: [],
       updatedAt: Date.now(),
     },
   };

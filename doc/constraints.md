@@ -35,6 +35,7 @@
 - 页面内容进入 LLM 前必须裁剪、脱水或结构化。
 - Search、read、click 和 type 能力必须有预算、超时和失败路径。
 - 高风险真实账号动作必须阻断或进入人工确认。
+- 后台 run log 只记录工具级事件、状态、错误和必要诊断上下文。
 
 禁止：
 
@@ -43,6 +44,8 @@
 - 把 tool 内部恢复步骤暴露给 LLM。
 - 把未裁剪页面噪音写进 memory。
 - 重新引入已删除的内部 QA route 或未接入产品流的后台消息。
+- 在 Side Panel 展示 runtime debug panel、执行 timeline、调试日志、当前 step/tool 或 thinking 过程。
+- 把思考链、中间推理过程、raw prompt 或 raw model intermediate text 写入 run log、public state 或 conversation archive。
 
 ## 4. 权限边界
 

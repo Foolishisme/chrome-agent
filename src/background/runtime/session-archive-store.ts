@@ -56,7 +56,6 @@ function normalizeTurn(value: unknown) {
     answerSummary: candidate.answerSummary,
     answerMarkdown: candidate.answerMarkdown,
     finalResult: candidate.finalResult,
-    timeline: Array.isArray(candidate.timeline) ? candidate.timeline : [],
     savedAt: candidate.savedAt,
   };
 }

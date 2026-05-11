@@ -7,10 +7,10 @@
 ## 2. 原则
 
 - 最终结果优先于执行细节。
-- 过程可见，但处于次级位置。
+- 前端不展示执行过程、debug 日志或 thinking 中间过程。
 - 输入框代表当前本地 draft。
 - 保存的 conversations 不修改 active draft。
-- 前端只展示状态，不替代 runtime 或 LLM 做路由。
+- 前端只展示最小运行占位和终态结果，不替代 runtime 或 LLM 做路由。
 
 ## 3. 结果展示
 
@@ -20,13 +20,14 @@
 - 结果 actions 限定在当前 turn。
 - 保存的 turns 使用与 active turns 相同的展示结构。
 
-## 4. 过程展示
+## 4. 过程与日志
 
-- 运行中的 sessions 可以展示 timeline 和当前进度。
-- 执行细节弱于最终内容。
-- 完成后的过程详情应折叠或放在回答下方。
+- 运行中的 sessions 只显示通用处理中占位和 stop 入口。
+- Side Panel 不展示 execution timeline、runtime debug panel、调试日志、当前 step/tool 或 thinking 过程。
+- 完成后的 turn 只保存用户问题、最终回答和必要结果操作。
 - 用户 stop 不显示为系统错误。
-- tool 内部 retry 默认不展开成错误详情。
+- tool 内部 retry、局部恢复和调试日志只进入后台工具级 run log。
+- 思考链、中间推理、raw prompt 和 raw model intermediate text 不进入前端、archive 或 run log。
 
 ## 5. 输入与状态
 
@@ -40,13 +41,13 @@
 ## 6. 保存的 Conversations
 
 - 保存的 conversations 使用低干扰 drawer 或等价入口。
-- Turn timeline 归属于对应 turn。
+- 保存的 turns 不包含执行 timeline。
 - Copy、delete 和 switch actions 绑定明确 turn 或 conversation。
 - Running-session switch、rollback 或 deletion 需要防止状态错觉。
 
 ## 7. 失败与阻塞状态
 
-- 明确 failure、blocked 或 error 时，runtime state 可以展开。
+- 明确 failure、blocked 或 error 时，前端只展示简短失败提示和最终结果中的边界说明。
 - `partial / blocked / failed` 状态必须说明剩余边界。
 - 结果必须说明未完成区域或不确定性。
 - Limited-read 结果不能表达为完整覆盖。
@@ -55,6 +56,7 @@
 
 - Token-level streaming protocol。
 - 把 runtime debug panel 作为主阅读路径。
+- 前端 timeline / log / thinking 过程展示。
 - 在前端硬编码 task routing。
 - 保存的 conversation state 进入 active input flow。
 

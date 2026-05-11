@@ -65,7 +65,6 @@ export class BrowserAgentRuntime {
       sessionId: session.memory.runtimeMeta.sessionId,
       goal: session.memory.goal,
       finalResult: session.memory.finalResult,
-      timeline: session.memory.stepHistory,
       conversationId: session.memory.conversationId,
       conversationTitle: session.memory.conversationTitle,
     });
@@ -233,7 +232,6 @@ export class BrowserAgentRuntime {
         goal: this.activeSession.memory.goal,
         taskType: this.activeSession.memory.taskType,
         taskSpec: this.activeSession.memory.taskSpec,
-        timeline: [...this.activeSession.memory.stepHistory],
         finalResult: this.activeSession.memory.finalResult,
         runLogs: mergeSessionRunLogs(stored?.runLogs, this.activeSession.memory.logs),
         filterDiagnostics: this.activeSession.memory.filterDiagnostics,

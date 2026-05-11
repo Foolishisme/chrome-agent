@@ -155,7 +155,6 @@ describe("run log store", () => {
     const bundle = await exportSessionDebugBundle(memory.runtimeMeta.sessionId);
     expect(bundle?.sessionId).toBe(memory.runtimeMeta.sessionId);
     expect(bundle?.taskType).toBe("public_research");
-    expect(bundle?.timeline).toHaveLength(1);
     expect(bundle?.unresolvedIssues).toContain("Need one more source");
 
     await deleteSessionRunLog(memory.runtimeMeta.sessionId);

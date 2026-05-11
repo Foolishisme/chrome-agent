@@ -1,106 +1,8 @@
-import type { ConversationTurn, DebugLogEntry, PlanStep, StepRecord } from "../../shared/types";
+import type { ConversationTurn } from "../../shared/types";
 import { conversationInputPlaceholder } from "../ui-text";
 import { renderMarkdownBlock } from "./markdown";
-import {
-  escapeHtml,
-  formatCompactDuration,
-  RenderState,
-} from "./common";
-import { getTimelineDurationMs } from "./common";
+import { escapeHtml, RenderState } from "./common";
 import { renderLlmProfileSelector } from "./llm-profile";
-
-function renderPlanStep(step: PlanStep, detailRecords: StepRecord[], renderState: RenderState) {
-  const allowedTools = step.allowedTools.length > 0 ? step.allowedTools.join(", ") : renderState.messages.emptyValue;
-  const criteria =
-    step.successCriteria.length > 0
-      ? step.successCriteria.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
-      : `<li>${escapeHtml(renderState.messages.emptyValue)}</li>`;
-  const detailsMarkup =
-    detailRecords.length > 0
-      ? `<div class="timeline-sublist">${detailRecords.map((record) => renderTimelineStep(record, renderState)).join("")}</div>`
-      : `<div class="muted">${escapeHtml(renderState.messages.timelineWaiting)}</div>`;
-  const shouldOpen = step.status === "running" || step.status === "failed" || step.status === "blocked";
-
-  return `
-    <details class="source-card"${shouldOpen ? " open" : ""}>
-      <summary class="source-summary">
-        <span>${escapeHtml(step.goal)}</span>
-        <span class="pill">${escapeHtml(renderState.messages.stepStatusLabels[step.status])}</span>
-      </summary>
-      <div class="source-body">
-        <div><strong>${escapeHtml(renderState.messages.currentStepId)}:</strong> ${escapeHtml(step.stepId)}</div>
-        <div><strong>${escapeHtml(renderState.messages.planTools)}:</strong> ${escapeHtml(allowedTools)}</div>
-        <div><strong>${escapeHtml(renderState.messages.planCriteria)}:</strong></div>
-        <ul class="debug-list">${criteria}</ul>
-        ${detailsMarkup}
-      </div>
-    </details>
-  `;
-}
-
-export function renderTimelineStep(step: StepRecord, renderState: RenderState) {
-  const resultText = step.actionResult?.message ?? "";
-  const summary = resultText || step.stepSummary;
-  
-  const lowerSummary = summary.toLowerCase();
-  let statusClass = "timeline-item-default";
-  if (lowerSummary.includes("decision: replan")) {
-    statusClass = "timeline-item-warning";
-  } else if (lowerSummary.includes("decision: finalize") || lowerSummary.includes("final output")) {
-    statusClass = "timeline-item-success";
-  } else if (lowerSummary.includes("已跳转") || lowerSummary.includes("http")) {
-    statusClass = "timeline-item-info";
-  }
-
-  return `
-    <div class="timeline-item ${statusClass}" title="${escapeHtml(summary)}">
-      <div class="timeline-head">
-        <span class="timeline-step-number">#${step.step}</span>
-        <span class="timeline-content">${escapeHtml(summary)}</span>
-        <span class="timeline-timestamp">${new Date(step.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-      </div>
-    </div>
-  `;
-}
-
-function renderTimelineList(records: StepRecord[], renderState: RenderState) {
-  if (records.length === 0) {
-    return `<div class="muted">${escapeHtml(renderState.messages.timelineWaiting)}</div>`;
-  }
-
-  return `<div class="timeline">${records.map((record) => renderTimelineStep(record, renderState)).join("")}</div>`;
-}
-
-export function renderConversationTurnTimeline(records: StepRecord[], renderState: RenderState, open = false, isRunning = false) {
-  if (records.length === 0 && !isRunning) {
-    return "";
-  }
-
-  const durationMs = isRunning ? renderState.displayedElapsedMs : getTimelineDurationMs(records);
-  const compact = durationMs !== undefined ? formatCompactDuration(durationMs, renderState.messages) : "";
-  const spinnerHtml = isRunning ? '<span class="thinking-spinner"></span>' : '';
-  const customizedTitle = navigator.language.startsWith("zh")
-    ? isRunning
-      ? `思考中 ${compact}`
-      : `已思考 ${compact}`
-    : isRunning
-      ? `Thinking ${compact}`
-      : `Thought for ${compact}`;
-  const sparklesSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--color-accent);"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>`;
-
-  return `
-    <details class="timeline-details"${open ? " open" : ""} style="margin-bottom: 12px;">
-      <summary style="cursor: pointer; color: var(--color-text-muted); font-weight: 600; font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; list-style: none;">
-        <div style="display: flex; align-items: center; gap: 6px;">
-          ${isRunning ? spinnerHtml : sparklesSvg}
-          <span>${escapeHtml(customizedTitle)}</span>
-        </div>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: ${open ? 'rotate(90deg)' : 'none'}; transition: transform 0.2s;"><polyline points="9 18 15 12 9 6"></polyline></svg>
-      </summary>
-      <div class="section-body">${renderTimelineList(records, renderState)}</div>
-    </details>
-  `;
-}
 
 function hasSavedTurnForSession(turns: ConversationTurn[] | undefined, sessionId: string | undefined) {
   if (!sessionId) {
@@ -138,7 +40,6 @@ function renderSavedConversationTurn(turn: ConversationTurn, renderState: Render
       <div class="conversation-turn-row conversation-turn-row-assistant">
         <div class="conversation-turn conversation-turn-assistant">
           <div class="conversation-turn-body">
-            ${renderConversationTurnTimeline(turn.timeline, renderState, false, false)}
             ${renderMarkdownBlock(turn.answerMarkdown, renderState.messages.resultsHint)}
           </div>
           <div class="conversation-turn-assistant-footer">
@@ -186,8 +87,8 @@ function renderLiveConversationTurn(renderState: RenderState) {
           <div class="conversation-turn-body">
             ${
               renderState.currentState.finalResult
-                ? `${renderState.currentState.status === "running" ? renderConversationTurnTimeline(renderState.currentState.timeline, renderState, true, true) : renderConversationTurnTimeline(renderState.currentState.timeline, renderState, false, false)}${assistantBody}`
-                : `<div class="conversation-turn-body-pending">${renderConversationTurnTimeline(renderState.currentState.timeline, renderState, true, true)}${assistantBody}</div>`
+                ? assistantBody
+                : `<div class="conversation-turn-body-pending">${assistantBody}</div>`
             }
           </div>
           ${
@@ -323,45 +224,3 @@ export function renderConversationSection(renderState: RenderState) {
   `;
 }
 
-export function buildTimelineMarkup(renderState: RenderState) {
-  const stepRecordsByPlanStep = new Map<string, StepRecord[]>();
-  const orphanRecords: StepRecord[] = [];
-
-  for (const record of renderState.currentState.timeline) {
-    if (!record.planStepId) {
-      orphanRecords.push(record);
-      continue;
-    }
-
-    const matchedPlanStep = renderState.currentState.plan.find((step) => step.stepId === record.planStepId);
-    if (!matchedPlanStep) {
-      orphanRecords.push(record);
-      continue;
-    }
-
-    const existing = stepRecordsByPlanStep.get(record.planStepId) ?? [];
-    existing.push(record);
-    stepRecordsByPlanStep.set(record.planStepId, existing);
-  }
-
-  const planTimelineMarkup =
-    renderState.currentState.plan.length > 0
-      ? renderState.currentState.plan
-          .map((step) => renderPlanStep(step, stepRecordsByPlanStep.get(step.stepId) ?? [], renderState))
-          .join("")
-      : renderState.currentState.timeline.length > 0
-        ? renderState.currentState.timeline.map((step) => renderTimelineStep(step, renderState)).join("")
-        : `<div class="muted">${escapeHtml(renderState.messages.timelineWaiting)}</div>`;
-
-  const orphanMarkup =
-    orphanRecords.length > 0
-      ? `<div class="timeline-sublist">${orphanRecords.map((record) => renderTimelineStep(record, renderState)).join("")}</div>`
-      : "";
-
-  return `
-    <div class="timeline">
-      ${planTimelineMarkup}
-      ${orphanMarkup}
-    </div>
-  `;
-}

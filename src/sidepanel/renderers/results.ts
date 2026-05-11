@@ -51,7 +51,7 @@ export function renderResultsSection(renderState: RenderState) {
   const documentsMarkup =
     renderState.documentArtifacts.length > 0
       ? `
-        <div class="timeline">
+        <div class="document-list">
           ${renderArtifactDetail(
             renderState.messages.resultDocumentsTitle,
             renderState.documentArtifacts.map((_, index) => renderDocumentArtifact(renderState, index)).join(""),

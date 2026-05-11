@@ -17,9 +17,7 @@ import {
 import { renderConversationSection } from "./renderers/conversation";
 import { renderTopLevelSection } from "./renderers/common";
 import { renderResultsSection } from "./renderers/results";
-import { hasFailureState, renderRuntimeSection } from "./renderers/runtime";
 import {
-  getBrowserAgentWindow,
   getCurrentState,
   getPendingSessionSubmission,
   getRenderState,
@@ -31,40 +29,11 @@ import {
 
 const app = document.getElementById("app")!;
 
-function syncLiveElapsedTicker() {
-  const ticker = getBrowserAgentWindow().__browserAgentElapsedTicker;
-  const shouldRun = getCurrentState().status === "running";
-
-  if (!shouldRun) {
-    if (ticker !== undefined) {
-      window.clearInterval(ticker);
-      delete getBrowserAgentWindow().__browserAgentElapsedTicker;
-    }
-    return;
-  }
-
-  if (ticker !== undefined) {
-    return;
-  }
-
-  getBrowserAgentWindow().__browserAgentElapsedTicker = window.setInterval(() => {
-    if (!app.isConnected || getCurrentState().status !== "running") {
-      syncLiveElapsedTicker();
-      return;
-    }
-
-    render();
-  }, 1000);
-}
-
 function render() {
-  syncLiveElapsedTicker();
-
   const renderState = getRenderState();
   const showResultsSection =
     Boolean(renderState.currentState.finalResult) &&
     (renderState.currentState.finalResult?.outputMode === "artifact" || renderState.documentArtifacts.length > 0);
-  const showRuntimeSection = hasFailureState(renderState);
 
   const isRunning = renderState.currentState.status === "running" || Boolean(renderState.pendingSessionSubmission);
 
@@ -106,7 +75,6 @@ function render() {
           `
           : ""
       }
-      ${showRuntimeSection ? renderTopLevelSection(renderState.messages.runtimeStatusTitle, renderRuntimeSection(renderState), true) : ""}
     </div>
   `;
 }

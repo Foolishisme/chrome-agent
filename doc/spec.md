@@ -73,7 +73,7 @@ Tools 负责稳定语义能力、调用当前 `BrowserDriver`、裁剪结果、�
 
 ### Runtime 和 Runner
 
-Runtime 负责 session 生命周期、stop、状态广播、archive、run log 和终态兜底。
+Runtime 负责 session 生命周期、stop、最小状态广播、conversation archive、run log 和终态兜底。
 
 Runner 当前按任务族执行 bounded round：
 
@@ -89,7 +89,7 @@ Runner 当前按任务族执行 bounded round：
 
 ### Memory
 
-Memory 保存结构化工作状态、候选、来源、失败、run log 和 conversation archive 所需信息。页面噪音进入 LLM 前必须被裁剪或结构化。
+Memory 保存结构化工作状态、候选、来源、失败、工具级 run log 和 conversation archive 所需终态信息。页面噪音进入 LLM 前必须被裁剪或结构化。思考链或中间推理过程不进入前端状态、conversation archive 或 run log。
 
 ## 5. 不变量
 
@@ -102,6 +102,6 @@ Memory 保存结构化工作状态、候选、来源、失败、run log 和 conv
 
 ## 6. UI 契约
 
-Side Panel 展示当前目标、当前能力、关键来源、失败信息、stop/retry/takeover 入口和最终对话结果。UI 只展示当前链路状态；路由和执行决策留给 runtime、runner 和 LLM 边界。
+Side Panel 只负责启动/停止会话、维护会话历史、展示最小运行占位、简短失败提示、最终回答和 artifact 操作。前端不展示 runtime debug panel、执行 timeline、调试日志、当前 step/tool 或 thinking 过程。路由和执行决策留给 runtime、runner 和 LLM 边界。
 
 更新日期：2026-05-11

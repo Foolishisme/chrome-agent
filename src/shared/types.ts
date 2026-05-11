@@ -308,7 +308,6 @@ export interface ConversationTurn {
   goal: string;
   answerSummary: string;
   answerMarkdown: string;
-  timeline: StepRecord[];
   savedAt: number;
 }
 
@@ -498,27 +497,7 @@ export interface SessionPublicState {
   conversationTitle?: string;
   conversationTurns?: ConversationTurn[];
   availableConversations?: ConversationSummary[];
-  taskType?: TaskType;
-  taskSpec?: TaskSpec;
   status: RuntimeStatus;
-  currentStepId?: string;
-  currentTool?: ToolName;
-  currentStep: number;
-  plan: PlanStep[];
-  budgetLow?: boolean;
-  elapsedMs?: number;
-  stepSummary?: string;
-  lastAction?: AgentAction;
-  lastActionResult?: ActionResult;
-  items: ExtractedItem[];
-  rawItemCount?: number;
-  researchCandidates?: ResearchCandidate[];
-  researchSources?: ResearchSourceResult[];
-  filterDiagnostics?: FilterDiagnostics;
-  logs: DebugLogEntry[];
-  timeline: StepRecord[];
-  pageSnapshot?: SnapshotData;
-  recoveryHint?: string;
   error?: string;
   unresolvedIssues?: string[];
   finalResult?: FinalResult;
@@ -530,7 +509,6 @@ export interface SessionDebugBundle {
   goal?: string;
   taskType?: TaskType;
   taskSpec?: TaskSpec;
-  timeline: StepRecord[];
   finalResult?: FinalResult;
   runLogs: DebugLogEntry[];
   filterDiagnostics?: FilterDiagnostics;

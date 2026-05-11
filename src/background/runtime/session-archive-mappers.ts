@@ -16,7 +16,6 @@ export function buildArchivedTurn(input: SaveSessionArchiveInput, turnId: number
     answerSummary: input.finalResult.summary,
     answerMarkdown: getAnswerMarkdownFromFinalResult(input.finalResult),
     finalResult: input.finalResult,
-    timeline: [...input.timeline],
     savedAt,
   };
 }
@@ -64,11 +63,6 @@ export function buildSessionStateFromConversation(
     conversationTurns: toConversationTurns(archive),
     availableConversations: summaries,
     status: "done",
-    currentStep: latestTurn.timeline.at(-1)?.step ?? 0,
-    plan: [],
-    items: [],
-    logs: [],
-    timeline: latestTurn.timeline,
     finalResult: latestTurn.finalResult,
     error: undefined,
     updatedAt: latestTurn.savedAt,
