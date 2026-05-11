@@ -34,8 +34,6 @@ export async function saveSessionArchive(input: SaveSessionArchiveInput) {
   return replaceConversation(updatedArchive);
 }
 
-export const saveSuccessfulSessionArchive = saveSessionArchive;
-
 export async function loadConversationBackfillState(fallbackState: SessionPublicState) {
   const [archive, summaries] = await Promise.all([getPreferredConversation(), listConversationSummaries()]);
   return buildSessionStateFromConversation(archive, summaries, fallbackState);

@@ -16,9 +16,9 @@ export type ToolName =
   | "browser.siteOverview"
   | "skill.commerceResearch";
 
-export type RuntimeStatus = "idle" | "running" | "done" | "error";
+type RuntimeStatus = "idle" | "running" | "done" | "error";
 
-export type ToolExecutionStatus = "success" | "partial" | "retryable_error" | "fatal_error";
+type ToolExecutionStatus = "success" | "partial" | "retryable_error" | "fatal_error";
 
 export type FinalStatus = "success" | "partial" | "failed" | "blocked";
 
@@ -120,7 +120,7 @@ export interface PageReadyState {
   checks: string[];
 }
 
-export interface SearchControlState {
+interface SearchControlState {
   present: boolean;
   visible: boolean;
   text?: string;
@@ -196,7 +196,7 @@ export interface ResearchFilterDiagnostics {
   skippedInvalidCount: number;
 }
 
-export type FilterDiagnostics = CommerceFilterDiagnostics | ResearchFilterDiagnostics;
+type FilterDiagnostics = CommerceFilterDiagnostics | ResearchFilterDiagnostics;
 
 export interface CommerceTaskSpec {
   taskType: "commerce_search";
@@ -277,7 +277,7 @@ export interface PlanStep {
   status: PlanStepStatus;
 }
 
-export interface MarkdownArtifact {
+interface MarkdownArtifact {
   id: string;
   kind: "markdown";
   title: string;
@@ -327,7 +327,7 @@ export interface PageFactExtraction {
   reason?: string;
 }
 
-export interface SourceFact {
+interface SourceFact {
   text: string;
   evidenceUrl: string;
   evidenceTitle?: string;
@@ -419,7 +419,7 @@ export interface DebugLogEntry {
   round?: number;
 }
 
-export interface ToolCallRecord {
+interface ToolCallRecord {
   toolName: ToolName;
   status: ToolExecutionStatus;
   summary: string;
@@ -427,7 +427,7 @@ export interface ToolCallRecord {
   timestamp: number;
 }
 
-export interface FailureRecord {
+interface FailureRecord {
   toolName?: ToolName;
   message: string;
   errorCode?: string;

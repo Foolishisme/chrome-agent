@@ -4,11 +4,11 @@ export function isCommerceTask(taskSpec: TaskSpec | undefined): taskSpec is Comm
   return !!taskSpec && taskSpec.taskType === "commerce_search";
 }
 
-export function isResearchTask(taskSpec: TaskSpec | undefined): taskSpec is PublicResearchTaskSpec {
+function isResearchTask(taskSpec: TaskSpec | undefined): taskSpec is PublicResearchTaskSpec {
   return !!taskSpec && taskSpec.taskType === "public_research";
 }
 
-export function isSiteOverviewTask(taskSpec: TaskSpec | undefined): taskSpec is SiteOverviewTaskSpec {
+function isSiteOverviewTask(taskSpec: TaskSpec | undefined): taskSpec is SiteOverviewTaskSpec {
   return !!taskSpec && taskSpec.taskType === "site_overview";
 }
 

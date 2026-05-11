@@ -137,7 +137,7 @@ export function detectTaskType(goal: string): TaskType {
   return detectTaskTypeWithContext(goal);
 }
 
-export function detectTaskTypeWithContext(
+function detectTaskTypeWithContext(
   goal: string,
   options: {
     conversationTurns?: ConversationTurn[];
@@ -297,7 +297,7 @@ export function compileDirectAnswerTask(
   };
 }
 
-export async function compileCommerceTask(
+async function compileCommerceTask(
   goal: string,
   options: {
     refineWithLiteModel?: RefineSearchQuery;

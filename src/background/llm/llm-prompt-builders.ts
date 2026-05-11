@@ -10,10 +10,6 @@ import type {
   TaskType,
 } from "../../shared/agent-domain-model";
 
-export function buildTaskRoutePrompt(goal: string) {
-  return buildTaskRoutePromptWithContext(goal);
-}
-
 function formatConversationTurns(turns: ConversationTurn[] | undefined) {
   const recentTurns = turns?.slice(-3) ?? [];
   if (recentTurns.length === 0) {
@@ -162,36 +158,6 @@ export function buildSiteCandidateReorderPrompt(options: {
     `User goal: ${options.goal}`,
     `Target domain: ${options.targetDomain ?? "unknown"}`,
     `Candidates: ${JSON.stringify(options.candidates, null, 2)}`,
-  ].join("\n");
-}
-
-export function buildSourceFactCardPrompt(options: {
-  goal: string;
-  title: string;
-  url: string;
-  text: string;
-  unresolvedIssues?: string[];
-}) {
-  return [
-    "Task: dehydrate one web source into a small evidence card for later synthesis.",
-    "",
-    "Output:",
-    "Return JSON only.",
-    'Schema: {"title":"source title","url":"source url","summary":"1 short source-level summary","facts":[{"text":"short factual claim from this source only","evidenceUrl":"source url","evidenceTitle":"optional title"}],"caveats":["source-specific caveat"],"status":"success|partial"}',
-    "",
-    "Hard rules:",
-    "1. Use only the provided source text and unresolved issues.",
-    "2. Do not add external facts, assumptions, prices, claims, or links.",
-    "3. Keep 1-5 facts. Each fact must be short, concrete, and useful for the user goal.",
-    "4. Set evidenceUrl to the provided source URL for every fact.",
-    "5. If the source text is weak or partial, return fewer facts and include caveats.",
-    "6. Write summary, facts, and caveats in concise Chinese.",
-    "",
-    `User goal: ${options.goal}`,
-    `Source title: ${options.title}`,
-    `Source URL: ${options.url}`,
-    `Unresolved issues: ${JSON.stringify(options.unresolvedIssues ?? [], null, 2)}`,
-    `Source text:\n${options.text}`,
   ].join("\n");
 }
 

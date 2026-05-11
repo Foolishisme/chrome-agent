@@ -133,7 +133,7 @@ async function setActiveConversationId(conversationId: string | undefined) {
   });
 }
 
-export async function saveConversation(archive: ArchivedConversation) {
+async function saveConversation(archive: ArchivedConversation) {
   const storage = getChromeLocalStorage();
   if (!storage) {
     return;

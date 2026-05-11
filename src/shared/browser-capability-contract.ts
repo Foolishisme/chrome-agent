@@ -1,6 +1,6 @@
 import type { ElementRect, SemanticRole, SemanticSnapshot } from "./agent-domain-model";
 
-export type BrowserTabStatus = "loading" | "complete" | "unloaded" | "unknown";
+type BrowserTabStatus = "loading" | "complete" | "unloaded" | "unknown";
 
 export interface BrowserTabRef {
   tabId: number;
@@ -11,7 +11,7 @@ export interface BrowserTabRef {
   status: BrowserTabStatus;
 }
 
-export type BrowserTargetSource = "cdp" | "content_script" | "mock";
+type BrowserTargetSource = "cdp" | "content_script" | "mock";
 
 export interface BrowserTargetRef {
   tabId: number;
@@ -82,7 +82,7 @@ export interface BrowserControlObservation {
   required?: boolean;
 }
 
-export interface BrowserObservationCoverage {
+interface BrowserObservationCoverage {
   mainTextChars: number;
   linkCount: number;
   controlCount: number;
@@ -103,7 +103,7 @@ export interface BrowserObservation {
   coverage: BrowserObservationCoverage;
 }
 
-export type BrowserActionStatus = "success" | "partial" | "failed" | "blocked";
+type BrowserActionStatus = "success" | "partial" | "failed" | "blocked";
 
 export interface BrowserActionResult {
   status: BrowserActionStatus;

@@ -73,33 +73,6 @@ export type ExecuteActionMessage = {
   action: AgentAction;
 };
 
-export type SessionUpdateMessage = {
-  type: "SESSION_UPDATE";
-  payload: SessionPublicState;
-};
-
-export type SessionErrorMessage = {
-  type: "SESSION_ERROR";
-  payload: SessionPublicState;
-};
-
-export type RuntimeMessage =
-  | StartSessionMessage
-  | StopSessionMessage
-  | RequestSessionStateMessage
-  | DeleteSessionArchiveMessage
-  | CreateConversationMessage
-  | SelectConversationMessage
-  | DeleteConversationMessage
-  | RollbackConversationTurnMessage
-  | RequestSessionRunLogMessage
-  | ExportSessionDebugBundleMessage
-  | DeleteSessionRunLogMessage
-  | RequestSnapshotMessage
-  | ExecuteActionMessage
-  | SessionUpdateMessage
-  | SessionErrorMessage;
-
 export interface StartSessionResponse {
   ok: boolean;
   error?: string;

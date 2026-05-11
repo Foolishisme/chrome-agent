@@ -14,15 +14,11 @@ export const LIMITS = {
   PAGE_READY_SECOND_WAIT_MS: 500,
   MAX_RUNTIME_RECOVERY: 2,
   PAGE_TEXT_MIN_LENGTH: 200,
-  SOURCE_FACT_LLM_THRESHOLD_CHARS: 300,
-  SOURCE_FACT_MAX_INPUT_CHARS: 4_000,
 } as const;
 
 export const DEFAULT_GOAL = "帮我调研一下 Playwright 和 Selenium 的区别，进入前 3 个页面总结";
 
 export const DEFAULT_LOCALE = "zh-CN" as const;
-
-export const SENSITIVE_KEYWORDS = ["购物车", "购买", "立即购买", "提交订单", "去结算", "支付"];
 
 export const KNOWN_CATEGORY_KEYWORDS = [
   "笔记本电脑",

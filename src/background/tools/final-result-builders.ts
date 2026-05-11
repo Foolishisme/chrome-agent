@@ -80,7 +80,7 @@ export function dedupeIssues(issues: string[]) {
   return Array.from(new Set(issues.filter(Boolean)));
 }
 
-export function countSuccessfulResearchSources(sources: ResearchSourceResult[]) {
+function countSuccessfulResearchSources(sources: ResearchSourceResult[]) {
   return sources.filter((source) => source.status === "success").length;
 }
 
@@ -205,7 +205,7 @@ function createMarkdownArtifact(memory: SessionMemory, markdown: string, summary
   };
 }
 
-export function getOutputMode(taskSpec: TaskSpec | undefined): OutputMode {
+function getOutputMode(taskSpec: TaskSpec | undefined): OutputMode {
   return taskSpec?.outputMode ?? "inline";
 }
 

@@ -182,7 +182,7 @@ function blockedRisk(riskLevel: BrowserRiskLevel | undefined) {
   return riskLevel === "medium_risk_submit" || riskLevel === "high_risk_irreversible";
 }
 
-export class RuntimeBrowserDriver implements BrowserDriver {
+class RuntimeBrowserDriver implements BrowserDriver {
   constructor(private readonly callbacks: RuntimeBrowserDriverCallbacks = {}) {}
 
   async listTabs(options?: BrowserOperationOptions): Promise<BrowserTabRef[]> {

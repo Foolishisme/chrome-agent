@@ -5,7 +5,6 @@ import type {
   DebugLogLevel,
   SessionMemory,
   SnapshotData,
-  ToolName,
   ToolResult,
 } from "../../shared/agent-domain-model";
 
@@ -29,11 +28,6 @@ export interface ToolExecutionContext {
   appendLog(source: DebugLogEntry["source"], level: DebugLogLevel, message: string, detail?: unknown): void;
   recordStep(options: StepOptions): void;
   pushState(stepSummary?: string): Promise<void>;
-}
-
-export interface AgentToolDefinition {
-  name: ToolName;
-  run(context: ToolExecutionContext): Promise<ToolResult>;
 }
 
 export function createToolResult(

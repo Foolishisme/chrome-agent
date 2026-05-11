@@ -1,27 +1,14 @@
 import { RuntimeError } from "../../shared/runtime-error";
-import type { DebugLogEntry, DebugLogLevel, SessionMemory, SessionPublicState, ToolName, ToolResult } from "../../shared/agent-domain-model";
+import type { DebugLogEntry, DebugLogLevel, SessionMemory, SessionPublicState } from "../../shared/agent-domain-model";
 import { appendSessionRunLogEntry } from "./run-log-store";
 
-export const MAX_LOG_ENTRIES = 80;
-export const MAX_FAILURE_ENTRIES = 12;
-export const MAX_TOOL_HISTORY_ENTRIES = 20;
-export const MAX_SAME_TOOL_RETRIES = 3;
-export const MAX_CONSECUTIVE_NO_PROGRESS = 3;
+const MAX_LOG_ENTRIES = 80;
 
 export interface ActiveSession {
   memory: SessionMemory;
   stopped: boolean;
   abortController: AbortController;
   lastPublicState: SessionPublicState;
-}
-
-export interface ProgressSnapshot {
-  currentFactsJson: string;
-  itemCount: number;
-  candidateCount: number;
-  sourceCount: number;
-  completedStepCount: number;
-  hasFinalResult: boolean;
 }
 
 export function createSessionId() {
@@ -73,58 +60,4 @@ export function appendLog(
   };
   session.memory.logs = [...session.memory.logs, entry].slice(-MAX_LOG_ENTRIES);
   void appendSessionRunLogEntry(session.memory.runtimeMeta.sessionId, entry);
-}
-
-export function captureProgressSnapshot(memory: SessionMemory): ProgressSnapshot {
-  return {
-    currentFactsJson: JSON.stringify(memory.currentFacts),
-    itemCount: memory.extractedItems.length,
-    candidateCount: memory.researchCandidates.length,
-    sourceCount: memory.researchSources.length,
-    completedStepCount: memory.plan.filter((step) => step.status === "succeeded").length,
-    hasFinalResult: !!memory.finalResult,
-  };
-}
-
-export function detectProgress(memory: SessionMemory, before: ProgressSnapshot, result: ToolResult) {
-  if (Object.keys(result.facts).length > 0 || result.artifacts.length > 0) {
-    return true;
-  }
-
-  return (
-    JSON.stringify(memory.currentFacts) !== before.currentFactsJson ||
-    memory.extractedItems.length > before.itemCount ||
-    memory.researchCandidates.length > before.candidateCount ||
-    memory.researchSources.length > before.sourceCount ||
-    memory.plan.filter((step) => step.status === "succeeded").length > before.completedStepCount ||
-    (!!memory.finalResult && !before.hasFinalResult)
-  );
-}
-
-export function markToolFailure(
-  session: ActiveSession,
-  toolName: ToolName,
-  message: string,
-  errorCode?: string,
-  stepStatus: "failed" | "blocked" = "failed",
-) {
-  session.memory.toolHistory = [
-    ...session.memory.toolHistory,
-    {
-      toolName,
-      status: "fatal_error" as const,
-      summary: message,
-      stepStatus,
-      timestamp: Date.now(),
-    },
-  ].slice(-MAX_TOOL_HISTORY_ENTRIES);
-  session.memory.failures = [
-    ...session.memory.failures,
-    {
-      toolName,
-      message,
-      errorCode,
-      timestamp: Date.now(),
-    },
-  ].slice(-MAX_FAILURE_ENTRIES);
 }

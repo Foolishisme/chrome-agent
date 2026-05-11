@@ -17,7 +17,7 @@ import {
   type FirstPartyLlmVisibleToolName,
 } from "./first-party-tool-contracts";
 
-export interface FirstPartyToolInputMap {
+interface FirstPartyToolInputMap {
   "browser.search": BrowserSearchToolInput;
   "browser.webDetail": BrowserWebDetailToolInput;
   "browser.siteOverview": BrowserSiteOverviewToolInput;
@@ -40,7 +40,7 @@ export interface FirstPartyToolHandlerContext {
   ) => Promise<CommerceResearchToolOutput>;
 }
 
-export type FirstPartyToolHandler<Name extends FirstPartyLlmVisibleToolName> = (
+type FirstPartyToolHandler<Name extends FirstPartyLlmVisibleToolName> = (
   input: FirstPartyToolInputMap[Name],
   context: FirstPartyToolHandlerContext,
 ) => Promise<FirstPartyToolOutputMap[Name]>;
@@ -231,7 +231,7 @@ function sameSiteLinks(entryUrl: string, links: BrowserLinkObservation[]) {
   return uniqueByUrl(filtered);
 }
 
-export async function runBrowserSearchTool(
+async function runBrowserSearchTool(
   input: BrowserSearchToolInput,
   context: FirstPartyToolHandlerContext,
 ): Promise<BrowserSearchToolOutput> {
@@ -266,7 +266,7 @@ export async function runBrowserSearchTool(
   };
 }
 
-export async function runBrowserWebDetailTool(
+async function runBrowserWebDetailTool(
   input: BrowserWebDetailToolInput,
   context: FirstPartyToolHandlerContext,
 ): Promise<BrowserWebDetailToolOutput> {
@@ -311,7 +311,7 @@ export async function runBrowserWebDetailTool(
   };
 }
 
-export async function runBrowserSiteOverviewTool(
+async function runBrowserSiteOverviewTool(
   input: BrowserSiteOverviewToolInput,
   context: FirstPartyToolHandlerContext,
 ): Promise<BrowserSiteOverviewToolOutput> {
@@ -370,7 +370,7 @@ export async function runBrowserSiteOverviewTool(
   };
 }
 
-export async function runCommerceResearchTool(
+async function runCommerceResearchTool(
   input: CommerceResearchToolInput,
   context: FirstPartyToolHandlerContext,
 ): Promise<CommerceResearchToolOutput> {
@@ -397,7 +397,7 @@ export async function runCommerceResearchTool(
   };
 }
 
-export const DEFAULT_FIRST_PARTY_TOOL_HANDLERS: FirstPartyToolHandlerMap = {
+const DEFAULT_FIRST_PARTY_TOOL_HANDLERS: FirstPartyToolHandlerMap = {
   "browser.search": runBrowserSearchTool,
   "browser.webDetail": runBrowserWebDetailTool,
   "browser.siteOverview": runBrowserSiteOverviewTool,
@@ -460,7 +460,7 @@ export function validateFirstPartyToolRegistry(registry: FirstPartyToolRegistry)
   }
 }
 
-export function getFirstPartyToolRegistration<Name extends FirstPartyLlmVisibleToolName>(
+function getFirstPartyToolRegistration<Name extends FirstPartyLlmVisibleToolName>(
   registry: FirstPartyToolRegistry,
   name: Name,
 ) {

@@ -645,31 +645,6 @@ function buildSemanticSnapshot(urlText: string): SemanticSnapshot {
   };
 }
 
-export function summarizeSemanticSnapshot(snapshot: SemanticSnapshot) {
-  const topLevelRoleCounts: Partial<Record<SemanticRole, number>> = {};
-  for (const node of snapshot.root.children ?? []) {
-    topLevelRoleCounts[node.role] = (topLevelRoleCounts[node.role] ?? 0) + 1;
-  }
-
-  const topLevelRoles = Object.entries(topLevelRoleCounts)
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, 6)
-    .reduce<Record<string, number>>((acc, [role, count]) => {
-      acc[role] = count;
-      return acc;
-    }, {});
-
-  return {
-    nodeCount: snapshot.nodeCount,
-    truncated: snapshot.truncated,
-    topLevelRoles,
-    hasDialog: !!snapshot.root.children?.some((node) => node.role === "dialog"),
-    hasAlert: !!snapshot.root.children?.some((node) => node.role === "alert"),
-    hasMain: !!snapshot.root.children?.some((node) => node.role === "main"),
-    hasSearch: !!snapshot.root.children?.some((node) => node.role === "search"),
-  };
-}
-
 export function resolveAgentElement(agentId: string): HTMLElement | null {
   const pageType = getPageType(new URL(window.location.href));
   const { input, button } = findSearchElements(pageType);

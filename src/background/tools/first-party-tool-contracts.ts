@@ -9,35 +9,28 @@ export const FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES = [
 
 export type FirstPartyLlmVisibleToolName = (typeof FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES)[number];
 
-export const FirstPartyToolSideEffectLevelSchema = z.enum(["read_only", "external_navigation"]);
-export type FirstPartyToolSideEffectLevel = z.infer<typeof FirstPartyToolSideEffectLevelSchema>;
+type FirstPartyToolSideEffectLevel = "read_only" | "external_navigation";
 
-export const FirstPartyToolParallelPolicySchema = z.enum(["same_resource_serial", "singleton"]);
-export type FirstPartyToolParallelPolicy = z.infer<typeof FirstPartyToolParallelPolicySchema>;
+type FirstPartyToolParallelPolicy = "same_resource_serial" | "singleton";
 
-export const FirstPartyToolFailurePolicySchema = z.object({
-  defaultMode: z.enum(["return_partial", "fail_fast"]),
-  highRiskAction: z.literal("blocked"),
-});
-export type FirstPartyToolFailurePolicy = z.infer<typeof FirstPartyToolFailurePolicySchema>;
+type FirstPartyToolFailurePolicy = {
+  defaultMode: "return_partial" | "fail_fast";
+  highRiskAction: "blocked";
+};
 
-export const FirstPartyToolProblemSchema = z.object({
+const FirstPartyToolProblemSchema = z.object({
   code: z.string().min(1),
   message: z.string().min(1),
   suggestedNextAction: z.string().min(1).optional(),
 }).strict();
-export type FirstPartyToolProblem = z.infer<typeof FirstPartyToolProblemSchema>;
-
-export const FirstPartyToolCoverageSchema = z.object({
+const FirstPartyToolCoverageSchema = z.object({
   scope: z.string().min(1),
   limitations: z.array(z.string().min(1)).default([]),
 }).strict();
-export type FirstPartyToolCoverage = z.infer<typeof FirstPartyToolCoverageSchema>;
 
-export const BrowserSearchScopeSchema = z.enum(["web", "official_site"]);
-export type BrowserSearchScope = z.infer<typeof BrowserSearchScopeSchema>;
+const BrowserSearchScopeSchema = z.enum(["web", "official_site"]);
 
-export const BrowserSearchResultSchema = z.object({
+const BrowserSearchResultSchema = z.object({
   title: z.string().min(1),
   url: z.string().url(),
   snippet: z.string().min(1).optional(),
@@ -46,13 +39,13 @@ export const BrowserSearchResultSchema = z.object({
 }).strict();
 export type BrowserSearchResult = z.infer<typeof BrowserSearchResultSchema>;
 
-export const BrowserSearchToolInputSchema = z.object({
+const BrowserSearchToolInputSchema = z.object({
   query: z.string().min(1),
   scope: BrowserSearchScopeSchema.optional(),
 }).strict();
 export type BrowserSearchToolInput = z.infer<typeof BrowserSearchToolInputSchema>;
 
-export const BrowserSearchToolOutputSchema = z.object({
+const BrowserSearchToolOutputSchema = z.object({
   status: z.enum(["success", "partial", "failed", "blocked"]),
   results: z.array(BrowserSearchResultSchema),
   searchPageUrl: z.string().url(),
@@ -61,26 +54,24 @@ export const BrowserSearchToolOutputSchema = z.object({
 }).strict();
 export type BrowserSearchToolOutput = z.infer<typeof BrowserSearchToolOutputSchema>;
 
-export const BrowserWebDetailLinkSchema = z.object({
+const BrowserWebDetailLinkSchema = z.object({
   title: z.string().min(1),
   url: z.string().url(),
 }).strict();
-export type BrowserWebDetailLink = z.infer<typeof BrowserWebDetailLinkSchema>;
-
-export const BrowserWebDetailFactSchema = z.object({
+const BrowserWebDetailFactSchema = z.object({
   text: z.string().min(1),
   evidenceUrl: z.string().url().optional(),
   evidenceTitle: z.string().min(1).optional(),
 }).strict();
 export type BrowserWebDetailFact = z.infer<typeof BrowserWebDetailFactSchema>;
 
-export const BrowserWebDetailToolInputSchema = z.object({
+const BrowserWebDetailToolInputSchema = z.object({
   url: z.string().url(),
   goal: z.string().min(1).optional(),
 }).strict();
 export type BrowserWebDetailToolInput = z.infer<typeof BrowserWebDetailToolInputSchema>;
 
-export const BrowserWebDetailToolOutputSchema = z.object({
+const BrowserWebDetailToolOutputSchema = z.object({
   status: z.enum(["success", "partial", "failed", "blocked"]),
   pageTitle: z.string().min(1),
   pageSummary: z.string().min(1),
@@ -91,7 +82,7 @@ export const BrowserWebDetailToolOutputSchema = z.object({
 }).strict();
 export type BrowserWebDetailToolOutput = z.infer<typeof BrowserWebDetailToolOutputSchema>;
 
-export const BrowserSiteOverviewPageSchema = z.object({
+const BrowserSiteOverviewPageSchema = z.object({
   title: z.string().min(1),
   url: z.string().url(),
   role: z.enum(["entry", "docs", "pricing", "product", "about", "other"]),
@@ -99,7 +90,7 @@ export const BrowserSiteOverviewPageSchema = z.object({
 }).strict();
 export type BrowserSiteOverviewPage = z.infer<typeof BrowserSiteOverviewPageSchema>;
 
-export const BrowserSiteOverviewToolInputSchema = z.object({
+const BrowserSiteOverviewToolInputSchema = z.object({
   entryUrl: z.string().url(),
   goal: z.string().min(1),
   maxPages: z.number().int().positive(),
@@ -107,7 +98,7 @@ export const BrowserSiteOverviewToolInputSchema = z.object({
 }).strict();
 export type BrowserSiteOverviewToolInput = z.infer<typeof BrowserSiteOverviewToolInputSchema>;
 
-export const BrowserSiteOverviewToolOutputSchema = z.object({
+const BrowserSiteOverviewToolOutputSchema = z.object({
   status: z.enum(["success", "partial", "failed", "blocked"]),
   siteSummary: z.string().min(1),
   pagesRead: z.array(BrowserSiteOverviewPageSchema),
@@ -118,36 +109,30 @@ export const BrowserSiteOverviewToolOutputSchema = z.object({
 }).strict();
 export type BrowserSiteOverviewToolOutput = z.infer<typeof BrowserSiteOverviewToolOutputSchema>;
 
-export const CommerceResearchBudgetSchema = z.object({
+const CommerceResearchBudgetSchema = z.object({
   min: z.number().nonnegative().optional(),
   max: z.number().nonnegative().optional(),
 }).strict();
-export type CommerceResearchBudget = z.infer<typeof CommerceResearchBudgetSchema>;
-
-export const CommerceResearchShortlistItemSchema = z.object({
+const CommerceResearchShortlistItemSchema = z.object({
   title: z.string().min(1),
   url: z.string().url(),
   priceText: z.string().min(1).optional(),
   shopText: z.string().min(1).optional(),
   summary: z.string().min(1).optional(),
 }).strict();
-export type CommerceResearchShortlistItem = z.infer<typeof CommerceResearchShortlistItemSchema>;
-
-export const CommerceResearchEvidenceSchema = z.object({
+const CommerceResearchEvidenceSchema = z.object({
   text: z.string().min(1),
   evidenceUrl: z.string().url().optional(),
   evidenceTitle: z.string().min(1).optional(),
 }).strict();
-export type CommerceResearchEvidence = z.infer<typeof CommerceResearchEvidenceSchema>;
-
-export const CommerceResearchToolInputSchema = z.object({
+const CommerceResearchToolInputSchema = z.object({
   goal: z.string().min(1),
   budget: CommerceResearchBudgetSchema.optional(),
   constraints: z.array(z.string().min(1)).optional(),
 }).strict();
 export type CommerceResearchToolInput = z.infer<typeof CommerceResearchToolInputSchema>;
 
-export const CommerceResearchToolOutputSchema = z.object({
+const CommerceResearchToolOutputSchema = z.object({
   status: z.enum(["success", "partial", "failed", "blocked"]),
   shortlist: z.array(CommerceResearchShortlistItemSchema),
   evidence: z.array(CommerceResearchEvidenceSchema),
@@ -157,12 +142,12 @@ export const CommerceResearchToolOutputSchema = z.object({
 }).strict();
 export type CommerceResearchToolOutput = z.infer<typeof CommerceResearchToolOutputSchema>;
 
-export interface FirstPartyToolPromptGuidance {
+interface FirstPartyToolPromptGuidance {
   whenToUse: string;
   whenNotToUse: string;
 }
 
-export interface FirstPartyToolExamples<TInput, TOutput> {
+interface FirstPartyToolExamples<TInput, TOutput> {
   minimalInput: TInput;
   successOutput: TOutput;
   partialOrBlockedOutput: TOutput;

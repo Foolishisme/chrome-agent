@@ -6,7 +6,6 @@ import {
   queryRefinementSchema,
   researchCandidateReorderSchema,
   roundDecisionSchema,
-  sourceFactCardSchema,
   taskRouteSchema,
 } from "../../shared/llm-runtime-contract-schemas";
 import type {
@@ -29,7 +28,6 @@ import {
   buildRoundDecisionPrompt,
   buildResearchCandidateReorderPrompt,
   buildResearchQueryRefinementPrompt,
-  buildSourceFactCardPrompt,
   buildSiteCandidateReorderPrompt,
   buildTaskRoutePromptWithContext,
 } from "./llm-prompt-builders";
@@ -108,10 +106,6 @@ let activeLlmProfile: LlmProfile = resolveInitialLlmProfile();
 
 export function setActiveLlmProfile(profile: LlmProfile | undefined) {
   activeLlmProfile = normalizeLlmProfile(profile) ?? activeLlmProfile;
-}
-
-export function getActiveLlmProfile() {
-  return activeLlmProfile;
 }
 
 interface LlmConfig {
@@ -247,7 +241,7 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
-export function getConfiguredProvider(): ProviderName {
+function getConfiguredProvider(): ProviderName {
   return resolveLlmConfig().provider;
 }
 
@@ -282,8 +276,6 @@ export function buildOpenAiCompatibleRequestBody(prompt: string, model = DEFAULT
   };
 }
 
-export const buildDeepSeekRequestBody = buildOpenAiCompatibleRequestBody;
-
 export function extractJsonText(response: GeminiResponse): string {
   const text = response.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
   if (!text) {
@@ -299,8 +291,6 @@ export function extractOpenAiCompatibleJsonText(response: OpenAiCompatibleRespon
   }
   return text.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
 }
-
-export const extractDeepSeekJsonText = extractOpenAiCompatibleJsonText;
 
 export function extractFirstJsonBlock(raw: string): string {
   const text = raw.trim();
@@ -686,40 +676,6 @@ function buildFinalPromptSources(sources: ResearchSourceResult[] | undefined) {
   }));
 }
 
-export async function generateSourceFactCard(
-  input: {
-    goal: string;
-    title: string;
-    url: string;
-    text: string;
-    unresolvedIssues?: string[];
-  },
-  options: RequestOptions = {},
-) {
-  const response = await requestProviderJson(
-    buildSourceFactCardPrompt({
-      ...input,
-      text: compactText(input.text, LIMITS.SOURCE_FACT_MAX_INPUT_CHARS),
-    }),
-    sourceFactCardSchema,
-    "simple",
-    options,
-  );
-
-  return {
-    ...response.data,
-    title: response.data.title || input.title,
-    url: input.url,
-    facts: (response.data.facts ?? []).map((fact) => ({
-      ...fact,
-      evidenceUrl: input.url,
-      evidenceTitle: fact.evidenceTitle || response.data.title || input.title,
-    })),
-    model: response.model,
-    provider: response.provider,
-  };
-}
-
 export async function generateFinalResult(
   input: {
     goal: string;
@@ -771,7 +727,7 @@ export async function generateDirectAnswerResult(
   };
 }
 
-export interface RoundDecisionTaskSpecPatch {
+interface RoundDecisionTaskSpecPatch {
   searchQuery?: string;
   officialSearchQuery?: string;
   entryUrl?: string;
