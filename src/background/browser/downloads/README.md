@@ -1,5 +1,5 @@
 # Browser Core V2 Downloads
 
-This directory is reserved for a future `chrome.downloads` based capability.
+本目录预留给基于 `chrome.downloads` 的能力。
 
-Downloads are not part of the first Browser Core V2 store-safe loop. Do not request `downloads` permission or wire download tools until the explicit URL overview path is stable and the product policy for file handling is written.
+下载支持不属于当前 store-safe S1 路径。只有 explicit URL overview 稳定且文件处理策略成文后，才添加 download permission 和 tools。

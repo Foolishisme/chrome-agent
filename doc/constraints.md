@@ -1,123 +1,130 @@
 # Browser Agent 约束清单
 
-## 1. 文档定位
+## 1. 定位
 
-本文档只记录当前主线下的硬约束、禁区和红线。
+本文记录当前主路径的硬约束和禁区。
 
-## 2. 架构红线
+## 2. 架构约束
 
-必须坚持：
-- 产品目标是通用浏览器 Agent，不是 workflow 集合。
-- `LLM` 是目标理解、工具选择、轮次决策和汇总的核心。
-- `Runtime` 只做最小保障层。
-- `Tools` 只暴露稳定语义能力。
+必须成立：
+
+- 产品目标是通用浏览器 Agent。
+- `LLM` 负责目标理解、tool choice、round decision 和 synthesis。
+- `Runtime` 是最小保障层。
+- `Tools` 暴露稳定语义能力。
 - `BrowserCapabilityLayer` 封装浏览器控制、恢复、裁剪和 fallback。
-- 新主链采用 bounded plan + thin runner；每轮 plan 默认 1-5 个 action。
-- runtime-visible tool 必须通过 ToolRegistry 注册，并声明 schema、side effect、parallel policy、requires、produces 和 handler。
-- 默认 driver 是 store-safe JS/DOM 路线，不默认依赖 `debugger` / CDP。
-- `Memory` 后置，不作为当前优先差距。
+- 主路径采用 bounded plan + thin runner；每轮默认 1-5 个 action。
+- runtime-visible tools 必须通过 ToolRegistry 注册，并声明 schema、side effect、parallel policy、requires、produces 和 handler metadata。
+- 默认 driver 路径是 store-safe JS/DOM。
+- `Memory` 优先级低于 tool、恢复、裁剪和 runner 稳定性。
 
-明确禁止：
-- 把 Runtime 膨胀成 workflow 引擎。
-- 再按 `phase -> tool` 或 `stepId -> 业务语义` 编写主链。
-- 把 bounded plan 扩展成无限 DAG 或重型编排框架依赖。
-- 把当前任务模块当作长期产品边界。
-- 把工具内部恢复拆成 raw DOM 动作交给 LLM。
-- 为追求通用而直接暴露无限制 `evaluate`、任意 selector 或任意脚本执行。
+禁止：
 
-## 3. 执行红线
+- 把 Runtime 扩成 workflow engine。
+- 用任务族 phase script 编写主链行为。
+- 把 bounded plan 扩成 unbounded DAG orchestration。
+- 把当前 task modules 当成产品架构边界。
+- 把 tool 内部恢复步骤暴露给 LLM。
+- 为通用场景暴露 unrestricted `evaluate`、任意 selector 或任意 script。
 
-- 新能力优先进入 `BrowserCapabilityLayer` 或稳定 tool。
-- LLM 只能在明确授权的工具集合内行动。
-- 每轮 plan 必须有 action 上限、工具白名单和失败策略。
-- runner 可以依据 metadata 调度，但不能代替 LLM 补业务语义。
-- tool result 必须短、结构化、带来源或失败解释。
+## 3. 执行约束
+
+必须成立：
+
+- 新能力先进入 `BrowserCapabilityLayer` 或稳定 tool。
+- LLM 只能在授权 tool set 内行动。
+- 每轮都有 action limit、tool allowlist 和 failure policy。
+- Runner 可以按 metadata 调度，但不能添加业务语义。
+- Tool result 必须短、结构化、带来源或失败解释。
 - 页面内容进入 LLM 前必须裁剪、脱水或结构化。
-- 搜索、读页、点击、输入等能力必须有预算、超时和失败路径。
-- 默认做最小必要改动，不擅自重构、重命名或修改无关文件。
-- 旧代码仅在阻塞编译、测试、安全、理解或新主链验证时才清理。
+- Search、read、click 和 type 能力必须有预算、超时和失败路径。
+- 修改保持最小且聚焦当前任务。
+- Compatibility helpers 需要当前 call site、当前 spec 需要、当前测试或安全需要。
 
-明确禁止：
-- 让 LLM 绕过工具权限或安全边界。
-- 让 tool 擅自改写产品目标。
-- 让 runtime 替 LLM 做任务级语义决策。
-- 让 LLM 输出未注册 action、任意 selector、任意 JS 或无限循环 plan。
-- 为了“重开”而删除仍有对照或 fallback 价值的代码。
-- 把未来方向或未验证设想顺手实现进当前任务。
+禁止：
 
-## 4. Browser Capability 红线
+- 绕过 tool 权限或安全边界。
+- 让 tools 改写产品目标。
+- 让 runtime 做任务级语义决策。
+- 让 LLM 输出未注册 action、任意 selector、任意 JS 或 unbounded plans。
+- 在没有事实源支持时实现面向未来的想法。
 
-允许推进：
-- store-safe JS/DOM observe/read/extract
-- `activeTab` / `scripting` / optional host access
-- tab lifecycle
-- content-script snapshot
-- click / type / keyboard
-- navigation wait / reload / fallback
-- stale reference 恢复
-- 受控 evaluate
+## 4. Browser Capability 约束
 
-必须满足：
-- 用户能理解扩展正在控制浏览器页面。
+允许方向：
+
+- store-safe JS/DOM observe/read/extract；
+- `activeTab` / `scripting` / optional host access；
+- tab lifecycle；
+- content-script snapshot；
+- click / type / keyboard；
+- navigation wait / reload / fallback；
+- stale reference recovery；
+- controlled evaluate subset。
+
+必须成立：
+
+- 用户能理解扩展正在控制页面。
 - 用户能 stop、takeover 或关闭 session。
-- 高风险动作前必须确认。
-- 失败必须返回原因和建议下一步。
-- 能用更低权限完成时，不扩大权限。
-- `debugger` / CDP 只作为 advanced/local/enterprise driver。
+- 高风险 action 需要确认。
+- 失败返回原因和建议下一步。
+- 权限范围尽量窄。
+- `debugger` / CDP 属于 advanced/local/enterprise driver scope。
 
-明确禁止：
-- 静默执行支付、下单、转账、删除、发送不可撤回内容等高风险动作。
-- 在真实账号环境下绕过用户确认做长期自动化。
-- 隐式读取无关高敏页面内容。
-- 把 `cookies`、`identity`、`declarativeNetRequest` 作为第一阶段默认依赖。
+禁止：
+
+- 静默支付、下单、转账、删除或发送不可撤回内容。
+- 在真实账号场景中无确认地执行长程自动化。
+- 读取无关高敏页面内容。
+- 默认依赖 `cookies`、`identity` 或 `declarativeNetRequest`。
 
 ## 5. 权限边界
 
-- `debugger` / CDP 不是大众/商店默认主路径权限。
-- 默认优先：`activeTab`、`scripting`、`storage`、必要且可解释的 host permissions。
-- 按需评估：`tabs`、`offscreen`、optional host permissions。
+- 默认：`activeTab`、`scripting`、`storage` 和可解释的 host permissions。
+- 按场景评估：`tabs`、`offscreen`、optional host permissions。
 - advanced/local/enterprise：`debugger`。
-- 暂不作为第一阶段默认依赖：`identity`、`cookies`、`declarativeNetRequest`。
-- `<all_urls>` 不作为商店默认权限；开发验证可短期使用，但必须与产品化 manifest 区分。
+- 默认延后：`identity`、`cookies`、`declarativeNetRequest`。
+- 商店分发路径必须避免宽泛 host permissions，除非有明确理由。
 
-## 6. Tool 红线
+## 6. Tool 约束
 
-- runtime-visible tool 必须返回统一高层 `ToolResult`。
-- content script 或 CDP 原子动作只作为 tool 内部实现细节。
-- 局部恢复、等待和 fallback 留在 tool 内。
-- 页面读取必须返回覆盖边界、来源和失败项。
+- runtime-visible tools 返回高层 `ToolResult`。
+- content script 和 CDP atoms 留在 tool 实现细节内部。
+- 局部恢复、等待和 fallback 留在 tools 内。
+- 页面读取返回覆盖边界、来源和失败。
 - 批量读取或并行执行必须有预算和取消机制。
 
-明确禁止：
-- 让高层 tool 返回 action-style 回执。
-- 把长网页原文不裁剪直接喂给 LLM。
-- 为每个页面细节新增一个 runtime-visible 原子 tool。
-- 让 memory 存未裁剪网页噪音。
+禁止：
 
-## 7. 输出红线
+- 高层 tools 返回 action-style receipts。
+- 把长篇 raw page text 直接喂给 LLM。
+- 为页面细节新增 runtime-visible atomic tools。
+- 把未裁剪页面噪音写进 memory。
 
-无论成功或失败，最终都必须返回结构化结果。
+## 7. 输出约束
 
-最终状态只允许：
+终态 status 只能是：
+
 - `success`
 - `partial`
 - `failed`
 - `blocked`
 
-明确禁止：
-- 只返回原始日志。
-- 只返回一句失败提示。
-- 失败后没有 `errorsOrBlockers`。
-- 失败后没有 `suggestedNextAction`。
-- 成功后不说明关键来源或覆盖边界。
+每个终态结果包含：
 
-## 8. 人工确认项
+- 用户可读 summary；
+- 关键来源或覆盖边界；
+- 存在时包含 errors or blockers；
+- blocked 或 failed 时包含 suggested next action。
 
-以下事项默认不能自行拍板：
-- 是否允许真实账号环境下的高风险自动化。
-- 是否引入高成本付费依赖。
-- 是否接受向后不兼容的对外协议变化。
-- 是否切到完整动态 tool-loop runtime。
-- 是否把 `cookies`、`identity`、`declarativeNetRequest` 纳入默认权限。
+## 8. 人工确认
 
-Updated: 2026-04-29
+以下事项需要人工决策：
+
+- 高风险真实账号自动化；
+- 高成本付费依赖；
+- 对外不兼容协议变化；
+- 完整 dynamic tool-loop runtime 切换；
+- 默认使用 `cookies`、`identity` 或 `declarativeNetRequest`。
+
+更新日期：2026-05-11
