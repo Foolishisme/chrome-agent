@@ -29,6 +29,8 @@
 - 没有当前任务或事实源支持时，不实现面向未来的功能。
 - 当事实源文档与代码表现不一致时，先检查 active call path 再改行为。
 - 修改后运行与改动直接相关的最小验证，并报告结果。
+- 预计或实际改动达到 500 行或 8 个文件以上时，默认运行 `npm run check:repo`；重要合并前运行 `npm run check`。
+- 静态检查报告只作为删除候选证据；不能仅凭 Knip/grep 输出批量删除文件、导出或依赖，必须先确认 active call path 和当前存在性证明。
 
 ## 命名与可检索性规则
 
@@ -39,6 +41,13 @@
 - 宽泛命名如 `helper`、`manager`、`handler`、`core`、`utils` 应尽量带上所属边界和职责，避免 grep 结果无法区分 owner。
 - 重命名后必须同步 imports、tests 和事实源文档，并用静态 grep 验证旧噪音名是否消失或只剩明确的历史兼容测试。
 - 结构审查优先使用 `git grep` 和 tracked source；必须做文件系统递归扫描时，排除 `output/`、`dist/`、`node_modules/`、`doc/.obsidian/` 等生成、缓存或本地工具目录。
+
+## 静态检查规则
+
+- 常规小改动优先运行 `npm run check:fast`，覆盖 typecheck、lint 和测试。
+- 架构收敛、命名收敛、死代码清理或大范围改动后运行 `npm run check:repo`，覆盖 Knip、dependency-cruiser、repo hygiene、legacy refs 和 current-state docs 检查。
+- `npm run check:unused` 是高置信度 gate，只检查未使用文件、依赖、未声明依赖和无法解析引用；unused exports 使用 `npm run check:unused:exports` 单独出报告后人工判断。
+- `npm run check:change-size` 用于判断当前 diff 是否触发大范围改动阈值；触发后按本节规则补跑仓库级检查。
 
 ## 文档规则
 

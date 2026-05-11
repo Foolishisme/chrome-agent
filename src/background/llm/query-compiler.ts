@@ -1,4 +1,4 @@
-import { KNOWN_CATEGORY_KEYWORDS, LIMITS, RESEARCH_INTENT_KEYWORDS } from "../../shared/agent-runtime-config";
+﻿import { KNOWN_CATEGORY_KEYWORDS, LIMITS, RESEARCH_INTENT_KEYWORDS } from "../../shared/agent-runtime-config";
 import { RuntimeError } from "../../shared/runtime-error";
 import type {
   CommerceTaskSpec,
@@ -56,7 +56,7 @@ function hasResearchSignal(goal: string) {
 }
 
 function extractExplicitUrl(goal: string) {
-  const matched = goal.match(/https?:\/\/[^\s\"'，。！？、】【；：）]+/i);
+  const matched = goal.match(/https?:\/\/[^\s"'，。！？、】【；：）]+/i);
   if (!matched) {
     return undefined;
   }
@@ -242,7 +242,7 @@ function normalizeDomainFromUrl(url: string | undefined) {
 }
 
 function extractSiteName(goal: string) {
-  const withoutUrl = goal.replace(/https?:\/\/[^\s\"'，。！？、】【；：）]+/gi, " ");
+  const withoutUrl = goal.replace(/https?:\/\/[^\s"'，。！？、】【；：）]+/gi, " ");
   const normalizedGoal = withoutUrl.replace(/^\s*(?:帮我|请|麻烦你)?\s*(?:看一下|了解一下|介绍一下|调研一下|研究一下)?\s*/u, "");
   const matched =
     normalizedGoal.match(/([A-Za-z0-9\u4e00-\u9fff][A-Za-z0-9\u4e00-\u9fff ._-]{1,40}?)\s*(?:的\s*)?(?:官网|官方网站|官方站点|站点|网站|official website|official site|website|site|产品|平台|功能|文档|价格|pricing|docs|product|products|platform)/i) ??

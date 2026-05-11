@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LIMITS } from "../src/shared/agent-runtime-config";
-import { RuntimeError } from "../src/shared/runtime-error";
 import type { DebugLogEntry, SessionDebugBundle, SessionMemory } from "../src/shared/agent-domain-model";
 import type { ActiveSession } from "../src/background/runtime/runtime-session-state";
 

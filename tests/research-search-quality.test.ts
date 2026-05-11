@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { preparePublicResearchCandidates } from "../src/background/tools/adapters/prepare-task-candidates";
 import { extractGoogleSearchResults, extractPageFacts } from "../src/content/research";
-import type { PublicResearchTaskSpec, SessionMemory, SnapshotData } from "../src/shared/agent-domain-model";
+import type { PublicResearchTaskSpec, SessionMemory } from "../src/shared/agent-domain-model";
 
 const { reorderResearchCandidatesMock } = vi.hoisted(() => ({
   reorderResearchCandidatesMock: vi.fn(),
@@ -59,37 +59,6 @@ function createResearchMemory(overrides: Partial<SessionMemory> = {}): SessionMe
   memory.searchPreference = overrides.searchPreference ?? "auto";
   memory.conversationTurns = overrides.conversationTurns ?? [];
   return memory;
-}
-
-function createGoogleSnapshot(): SnapshotData {
-  return {
-    url: "https://www.google.com/search?q=ai+agents",
-    title: "ai agents - Google Search",
-    pageType: "google_search",
-    interactiveElements: [],
-    semanticSnapshot: {
-      version: 1,
-      url: "https://www.google.com/search?q=ai+agents",
-      title: "ai agents - Google Search",
-      nodeCount: 1,
-      truncated: false,
-      root: { ref: "sem_root", role: "unknown", name: "", children: [] },
-    },
-    productCandidates: [],
-    pageReady: { ready: true, reason: "ok", checks: [] },
-    pageFacts: {
-      searchBox: { present: true, visible: true, text: "ai agents" },
-      searchSubmit: { present: true, visible: true, text: "Search" },
-      searchResults: {
-        present: true,
-        loaded: true,
-        resultCount: 4,
-        naturalCount: 4,
-        adCount: 0,
-      },
-    },
-    timestamp: Date.now(),
-  };
 }
 
 describe("research search quality pipeline", () => {

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": [
+    "src/background/background-service-worker.ts",
+    "src/content/bridge.ts",
+    "src/content/content-script-host.ts",
+    "src/sidepanel/sidepanel-app.ts",
+    "tests/**/*.ts"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "tests/**/*.ts"
+  ]
+}

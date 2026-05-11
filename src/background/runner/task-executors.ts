@@ -29,7 +29,6 @@ import type {
   SnapshotData,
   SiteOverviewTaskSpec,
   ToolName,
-  ToolResult,
 } from "../../shared/agent-domain-model";
 import type { ActiveSession } from "../runtime/runtime-session-state";
 import {

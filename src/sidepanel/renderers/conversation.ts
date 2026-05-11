@@ -135,7 +135,6 @@ export function renderConversationSection(renderState: RenderState) {
     renderState.currentState.status === "running" || Boolean(renderState.pendingSessionSubmission)
       ? `<button id="stop-button" type="button" class="goal-input-action-button goal-input-stop-button" title="${escapeHtml(renderState.messages.stop)}">◼</button>`
       : `<button id="start-button" type="button" class="goal-input-action-button goal-input-start-button" title="${escapeHtml(renderState.messages.start)}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>`;
-  const currentConversationTitle = renderState.currentState.conversationTitle ?? renderState.conversationUiText.untitledConversation;
   const conversationHistory =
     (renderState.currentState.availableConversations ?? []).length > 0
       ? (renderState.currentState.availableConversations ?? [])
@@ -223,4 +222,3 @@ export function renderConversationSection(renderState: RenderState) {
     </div>
   `;
 }
-

@@ -10,10 +10,6 @@ function getProfileLabel(profile: LlmProfile) {
   return "云端大模型";
 }
 
-function getSelectorHint() {
-  return "切换将在下次对话生效";
-}
-
 export function renderLlmProfileSelector(renderState: RenderState) {
   const conversationRunning = renderState.currentState.status === "running" || Boolean(renderState.pendingSessionSubmission);
   const selectedProfile = renderState.selectedLlmProfile;

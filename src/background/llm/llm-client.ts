@@ -304,7 +304,7 @@ export const extractDeepSeekJsonText = extractOpenAiCompatibleJsonText;
 
 export function extractFirstJsonBlock(raw: string): string {
   const text = raw.trim();
-  const startIndex = text.search(/[\[{]/);
+  const startIndex = text.search(/[[{]/);
   if (startIndex < 0) {
     throw new RuntimeError("No JSON payload was found in the model response.", "LLM_JSON_NOT_FOUND");
   }

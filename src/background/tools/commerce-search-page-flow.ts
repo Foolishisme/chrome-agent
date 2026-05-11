@@ -4,7 +4,6 @@ import type {
   ActionResult,
   AgentAction,
   CommerceTaskSpec,
-  ExtractedItem,
   SnapshotData,
 } from "../../shared/agent-domain-model";
 import type { ToolExecutionContext } from "./tool-execution-context";
