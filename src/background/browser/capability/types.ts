@@ -32,7 +32,4 @@ export interface BrowserDriver {
   evaluateLimited(tabId: number, input: BrowserEvaluateInput, options?: BrowserOperationOptions): Promise<BrowserEvaluateResult>;
 }
 
-export interface BrowserCapabilityLayerOptions {
-  allowExperimentalEvaluate?: boolean;
-}
 

@@ -3,7 +3,6 @@ import type {
   AgentAction,
   DebugLogEntry,
   LlmProfile,
-  ManualExtractionRecord,
   SearchPreference,
   SessionDebugBundle,
   SessionPublicState,
@@ -50,18 +49,6 @@ export type RollbackConversationTurnMessage = {
   turnId: number;
 };
 
-export type ExtractCurrentPageMessage = {
-  type: "EXTRACT_CURRENT_PAGE";
-};
-
-export type RequestManualExtractionHistoryMessage = {
-  type: "REQUEST_MANUAL_EXTRACTION_HISTORY";
-};
-
-export type ClearManualExtractionHistoryMessage = {
-  type: "CLEAR_MANUAL_EXTRACTION_HISTORY";
-};
-
 export type RequestSessionRunLogMessage = {
   type: "REQUEST_SESSION_RUN_LOG";
   sessionId?: string;
@@ -105,9 +92,6 @@ export type RuntimeMessage =
   | SelectConversationMessage
   | DeleteConversationMessage
   | RollbackConversationTurnMessage
-  | ExtractCurrentPageMessage
-  | RequestManualExtractionHistoryMessage
-  | ClearManualExtractionHistoryMessage
   | RequestSessionRunLogMessage
   | ExportSessionDebugBundleMessage
   | DeleteSessionRunLogMessage
@@ -137,13 +121,6 @@ export interface SnapshotResponse {
 export interface ExecuteActionResponse {
   ok: boolean;
   result?: ActionResult;
-  error?: string;
-}
-
-export interface ManualExtractionResponse {
-  ok: boolean;
-  record?: ManualExtractionRecord;
-  history?: ManualExtractionRecord[];
   error?: string;
 }
 

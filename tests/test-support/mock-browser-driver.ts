@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   BrowserActionResult,
   BrowserClickInput,
   BrowserEvaluateInput,
@@ -13,8 +13,8 @@
   BrowserScrollInput,
   BrowserTabRef,
   BrowserTypeInput,
-} from "../../../shared/browser-capability";
-import type { BrowserDriver } from "./types";
+} from "../../src/shared/browser-capability";
+import type { BrowserDriver } from "../../src/background/browser/capability/types";
 
 type BrowserDriverMethod = keyof BrowserDriver;
 
@@ -192,12 +192,14 @@ export class MockBrowserDriver implements BrowserDriver {
 
   async evaluateLimited(tabId: number, input: BrowserEvaluateInput, options?: BrowserOperationOptions): Promise<BrowserEvaluateResult> {
     this.record("evaluateLimited", tabId, input, options);
-    return clone(this.actionResults.evaluateLimited ?? {
-      status: "success",
-      message: `Evaluated ${input.scriptId}.`,
-      problems: [],
-      value: undefined,
-    });
+    return clone(
+      this.actionResults.evaluateLimited ?? {
+        status: "success",
+        message: `Evaluated ${input.scriptId}.`,
+        problems: [],
+        value: undefined,
+      },
+    );
   }
 
   private record(method: BrowserDriverMethod, ...args: unknown[]) {
@@ -215,4 +217,3 @@ export class MockBrowserDriver implements BrowserDriver {
     return clone(tab);
   }
 }
-

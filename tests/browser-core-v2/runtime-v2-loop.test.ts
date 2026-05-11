@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MockBrowserDriver } from "../../src/background/browser/capability/mock-driver";
+import { MockBrowserDriver } from "../test-support/mock-browser-driver";
 import { defaultPublicState } from "../../src/background/runtime/public-state";
 import type { ActiveSession } from "../../src/background/runtime/shared";
 import type { BrowserObservation } from "../../src/shared/browser-capability";

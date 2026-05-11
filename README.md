@@ -3,33 +3,36 @@
 这是一个基于 Chrome Extension Manifest V3 的浏览器 Agent MVP。
 
 产品目标：
-
 `大众用户可用的通用浏览器 Agent`
 
 核心模型：
-
 `Agent = LLM + Tools + Memory + Runtime`
 
-执行模型：
-
-`LLM-driven bounded plan + thin runner over Store-safe Browser Core V2`
+当前执行模型：
+`LLM-driven bounded tool loop + RuntimeBrowserDriver + content bridge`
 
 ## 当前结构
 
-主源码根：
+主源码入口：
 
-- `src/background/`
-  - `runtime/`
-  - `runner/`
-  - `tools/`
-  - `browser/`
-  - `llm/`
-- `src/content/core/`
-- `src/shared/browser-core/`
+- `src/background/runtime/`
+- `src/background/runner/`
+- `src/background/tools/`
+- `src/background/llm/`
+- `src/background/browser/overview/explicit-url-overview.ts`
+- `src/background/browser/capability/types.ts`
+- `src/content/bridge.ts`
+- `src/content/index.ts`
+- `src/content/scanner.ts`
+- `src/content/actions.ts`
+- `src/content/research.ts`
+- `src/content/extractor.ts`
+- `src/shared/`
+- `src/sidepanel/`
 
-Side Panel 负责启动和停止会话、展示当前目标、显示必要进度，并在对话流中呈现最终结果。
+Side Panel 负责启动和停止会话、展示当前目标和必要进度，并在对话流中呈现最终结果。
 
-runtime-visible tools 通过当前 tool 层注册并返回结构化结果。浏览器控制细节留在 tool 或浏览器能力层内部。
+runtime-visible tools 通过当前 tool 层注册并返回结构化结果。浏览器控制细节留在 `RuntimeBrowserDriver`、content bridge 和 content action 内部。
 
 ## 文档入口
 

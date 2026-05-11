@@ -18,10 +18,10 @@
   BrowserTargetRef,
   BrowserTypeInput,
 } from "../../shared/browser-capability";
+import { createBrowserPageProblem } from "../../shared/browser-capability";
 import type { ActionResult, AgentAction, InteractiveElement, SnapshotData } from "../../shared/types";
 import type { BrowserDriver } from "../browser/capability/types";
 import type { ExecuteActionResponse, SnapshotResponse } from "../../shared/protocol";
-import { createBrowserCoreProblem } from "../../shared/browser-core/page-problems";
 import { sendMessageToTab, waitForTabComplete } from "../runtime/tab-host";
 
 interface RuntimeBrowserDriverCallbacks {
@@ -83,7 +83,7 @@ function toProblems(snapshot: SnapshotData, detailResult?: ActionResult): Browse
 
   if (!snapshot.pageReady.ready) {
     problems.push(
-      createBrowserCoreProblem("operation_failed", snapshot.pageReady.reason, {
+      createBrowserPageProblem("operation_failed", snapshot.pageReady.reason, {
         recoverable: true,
         suggestedNextAction: "Wait briefly and retry the page observation.",
       }),
@@ -93,7 +93,7 @@ function toProblems(snapshot: SnapshotData, detailResult?: ActionResult): Browse
   const pageContent = snapshot.pageFacts.pageContent;
   if (pageContent?.hasBlockingOverlay) {
     problems.push(
-      createBrowserCoreProblem("blocking_overlay", "A blocking overlay may be hiding the page content.", {
+      createBrowserPageProblem("blocking_overlay", "A blocking overlay may be hiding the page content.", {
         recoverable: true,
         suggestedNextAction: "Retry after dismissing the dialog or overlay.",
       }),
@@ -101,7 +101,7 @@ function toProblems(snapshot: SnapshotData, detailResult?: ActionResult): Browse
   }
   if (pageContent?.likelyLoginWall) {
     problems.push(
-      createBrowserCoreProblem("login_wall", pageContent.reason || "The page appears to require login.", {
+      createBrowserPageProblem("login_wall", pageContent.reason || "The page appears to require login.", {
         recoverable: false,
       }),
     );
@@ -109,7 +109,7 @@ function toProblems(snapshot: SnapshotData, detailResult?: ActionResult): Browse
 
   if (detailResult?.pageFactsResult?.status === "partial") {
     problems.push(
-      createBrowserCoreProblem("empty_content", detailResult.pageFactsResult.reason || "Readable page content was partial.", {
+      createBrowserPageProblem("empty_content", detailResult.pageFactsResult.reason || "Readable page content was partial.", {
         recoverable: true,
         suggestedNextAction: "Try a higher-value page or run a same-site overview.",
       }),
@@ -316,7 +316,7 @@ export class RuntimeBrowserDriver implements BrowserDriver {
       fullPage: input?.fullPage ?? false,
       sanitized: false,
       problems: [
-        createBrowserCoreProblem("screenshot_failed", "Runtime BrowserDriver does not support screenshots yet.", {
+        createBrowserPageProblem("screenshot_failed", "Runtime BrowserDriver does not support screenshots yet.", {
           recoverable: true,
         }),
       ],
@@ -329,7 +329,7 @@ export class RuntimeBrowserDriver implements BrowserDriver {
       return {
         status: "blocked",
         message: "High-risk click actions are blocked in the runtime BrowserDriver.",
-        problems: [createBrowserCoreProblem("operation_failed", "High-risk click action was blocked.", { recoverable: false })],
+        problems: [createBrowserPageProblem("operation_failed", "High-risk click action was blocked.", { recoverable: false })],
       };
     }
     const result = await runTabAction(tabId, { type: "CLICK", agentId: input.targetRef.refId });
@@ -342,7 +342,7 @@ export class RuntimeBrowserDriver implements BrowserDriver {
       return {
         status: "blocked",
         message: "High-risk type actions are blocked in the runtime BrowserDriver.",
-        problems: [createBrowserCoreProblem("operation_failed", "High-risk type action was blocked.", { recoverable: false })],
+        problems: [createBrowserPageProblem("operation_failed", "High-risk type action was blocked.", { recoverable: false })],
       };
     }
     const result = await runTabAction(tabId, {
@@ -360,7 +360,7 @@ export class RuntimeBrowserDriver implements BrowserDriver {
       return {
         status: "blocked",
         message: "High-risk press actions are blocked in the runtime BrowserDriver.",
-        problems: [createBrowserCoreProblem("operation_failed", "High-risk press action was blocked.", { recoverable: false })],
+        problems: [createBrowserPageProblem("operation_failed", "High-risk press action was blocked.", { recoverable: false })],
       };
     }
     const result = await runTabAction(tabId, {
@@ -388,7 +388,7 @@ export class RuntimeBrowserDriver implements BrowserDriver {
       status: "blocked",
       message: "Runtime BrowserDriver does not expose evaluateLimited.",
       problems: [
-        createBrowserCoreProblem("evaluate_blocked", "Raw evaluate is blocked in the runtime BrowserDriver.", {
+        createBrowserPageProblem("evaluate_blocked", "Raw evaluate is blocked in the runtime BrowserDriver.", {
           recoverable: false,
         }),
       ],

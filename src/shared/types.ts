@@ -328,16 +328,6 @@ export interface PageFactExtraction {
   reason?: string;
 }
 
-export interface ManualExtractionRecord {
-  id: string;
-  url: string;
-  pageTitle: string;
-  pageType: PageType;
-  extractedAt: number;
-  extraction: PageFactExtraction;
-  contentState?: PageContentState;
-}
-
 export interface SourceFact {
   text: string;
   evidenceUrl: string;

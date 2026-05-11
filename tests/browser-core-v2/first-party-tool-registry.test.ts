@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { MockBrowserDriver } from "../../src/background/browser/capability/mock-driver";
+import { MockBrowserDriver } from "../test-support/mock-browser-driver";
 import type { BrowserObservation } from "../../src/shared/browser-capability";
 import {
   createDefaultFirstPartyToolRegistry,

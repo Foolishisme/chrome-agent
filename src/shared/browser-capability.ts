@@ -51,6 +51,24 @@ export interface BrowserPageProblem {
   suggestedNextAction?: string;
 }
 
+export function createBrowserPageProblem(
+  code: BrowserPageProblemCode,
+  message: string,
+  options: {
+    recoverable?: boolean;
+    detail?: string;
+    suggestedNextAction?: string;
+  } = {},
+): BrowserPageProblem {
+  return {
+    code,
+    message,
+    recoverable: options.recoverable ?? code !== "permission_denied",
+    detail: options.detail,
+    suggestedNextAction: options.suggestedNextAction,
+  };
+}
+
 export interface BrowserLinkObservation {
   text: string;
   url: string;

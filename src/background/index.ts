@@ -1,17 +1,13 @@
 import { DEFAULT_GOAL } from "../shared/constants";
 import type {
-  ClearManualExtractionHistoryMessage,
   CreateConversationMessage,
   DeleteConversationMessage,
   DeleteSessionArchiveMessage,
   DeleteSessionRunLogMessage,
   ExportSessionDebugBundleMessage,
-  ExtractCurrentPageMessage,
-  ManualExtractionResponse,
   RollbackConversationTurnMessage,
   RequestSessionRunLogMessage,
   RequestSessionStateMessage,
-  RequestManualExtractionHistoryMessage,
   SelectConversationMessage,
   SessionDebugBundleResponse,
   SessionRunLogResponse,
@@ -20,7 +16,6 @@ import type {
   StartSessionResponse,
   StopSessionMessage,
 } from "../shared/protocol";
-import { clearManualExtractionHistory, extractCurrentPageForReview, getManualExtractionHistory } from "./manual-extraction";
 import { BrowserAgentRuntime } from "./runtime";
 import {
   createConversation,
@@ -34,32 +29,6 @@ import {
 } from "./session-archive";
 
 const runtime = new BrowserAgentRuntime();
-
-function isScriptableUrl(url?: string | null) {
-  if (!url) {
-    return false;
-  }
-
-  try {
-    const parsed = new URL(url);
-    return ["http:", "https:"].includes(parsed.protocol);
-  } catch {
-    return false;
-  }
-}
-
-async function getActiveScriptableTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) {
-    throw new Error("No active tab is available.");
-  }
-
-  if (!isScriptableUrl(tab.url)) {
-    throw new Error("The active tab is not a scriptable web page.");
-  }
-
-  return tab;
-}
 
 function hasMeaningfulSessionState() {
   const state = runtime.getState();
@@ -110,9 +79,6 @@ chrome.runtime.onMessage.addListener(
       | DeleteConversationMessage
       | RollbackConversationTurnMessage
       | DeleteSessionArchiveMessage
-      | ExtractCurrentPageMessage
-      | RequestManualExtractionHistoryMessage
-      | ClearManualExtractionHistoryMessage
       | RequestSessionRunLogMessage
       | ExportSessionDebugBundleMessage
       | DeleteSessionRunLogMessage,
@@ -339,65 +305,6 @@ chrome.runtime.onMessage.addListener(
           error: error instanceof Error ? error.message : "Failed to delete the current session.",
           payload: runtime.getState(),
         } satisfies SessionStateResponse),
-      );
-      return true;
-    }
-
-    if (message.type === "REQUEST_MANUAL_EXTRACTION_HISTORY") {
-      // Deprecated internal QA route. Kept temporarily for backend-only manual review flows.
-      void getManualExtractionHistory()
-        .then((history) =>
-          sendResponse({
-            ok: true,
-            history,
-          } satisfies ManualExtractionResponse),
-        )
-        .catch((error) =>
-          sendResponse({
-            ok: false,
-            error: error instanceof Error ? error.message : "Failed to load local extraction history.",
-          } satisfies ManualExtractionResponse),
-        );
-      return true;
-    }
-
-    if (message.type === "CLEAR_MANUAL_EXTRACTION_HISTORY") {
-      // Deprecated internal QA route. Kept temporarily for backend-only manual review flows.
-      void clearManualExtractionHistory()
-        .then(() =>
-          sendResponse({
-            ok: true,
-            history: [],
-          } satisfies ManualExtractionResponse),
-        )
-        .catch((error) =>
-          sendResponse({
-            ok: false,
-            error: error instanceof Error ? error.message : "Failed to clear local extraction history.",
-          } satisfies ManualExtractionResponse),
-        );
-      return true;
-    }
-
-    if (message.type === "EXTRACT_CURRENT_PAGE") {
-      // Deprecated internal QA route. Kept temporarily for backend-only manual review flows.
-      void (async () => {
-        if (runtime.getState().status === "running") {
-          throw new Error("Stop the current session before manual page extraction.");
-        }
-
-        const tab = await getActiveScriptableTab();
-        const result = await extractCurrentPageForReview(tab.id!);
-        sendResponse({
-          ok: true,
-          record: result.record,
-          history: result.history,
-        } satisfies ManualExtractionResponse);
-      })().catch((error) =>
-        sendResponse({
-          ok: false,
-          error: error instanceof Error ? error.message : "Failed to extract the current page.",
-        } satisfies ManualExtractionResponse),
       );
       return true;
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterExtractedItems } from "../src/background/result-filter";
+import { filterExtractedItems } from "../src/background/tools/adapters/prepare-task-candidates";
 import type { SearchTaskSpec } from "../src/shared/types";
 
 const taskSpec: SearchTaskSpec = {
