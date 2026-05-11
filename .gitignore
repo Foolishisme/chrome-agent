@@ -6,3 +6,8 @@ coverage/
 .playwright-cli/
 output/
 doc/.obsidian
+
+# AI Reference Files
+doc/reference/design_principles.md
+doc/reference/pitfalls.md
+doc/reference/success_patterns.md
