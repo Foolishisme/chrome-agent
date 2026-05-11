@@ -1,6 +1,6 @@
 import type { ResultArtifact, SearchPreference, SessionPublicState } from "../shared/types";
 import type { LlmProfile } from "../shared/types";
-import { archiveUiText, messages, optimisticAssistantProgressText } from "./ui-text";
+import { conversationUiText, messages, optimisticAssistantProgressText } from "./i18n-conversation";
 
 export type PendingSessionSubmission = {
   requestId: number;
@@ -55,10 +55,6 @@ export function getCurrentState() {
   return state.currentState;
 }
 
-export function getDraftGoal() {
-  return state.draftGoal;
-}
-
 export function setDraftGoal(value: string) {
   state.draftGoal = value;
 }
@@ -75,12 +71,8 @@ export function getDraftLlmProfile() {
   return state.draftLlmProfile;
 }
 
-export function getActiveLlmProfile() {
+function getActiveLlmProfile() {
   return state.currentState.llmProfile ?? state.draftLlmProfile;
-}
-
-export function setDraftLlmProfile(profile: LlmProfile) {
-  state.draftLlmProfile = profile;
 }
 
 export async function loadDraftLlmProfile() {
@@ -93,13 +85,6 @@ export async function loadDraftLlmProfile() {
 export async function persistDraftLlmProfile(profile: LlmProfile) {
   state.draftLlmProfile = profile;
   await chrome.storage.local.set({ [LLM_PROFILE_STORAGE_KEY]: profile });
-}
-
-export function getUiNotice() {
-  return {
-    message: state.uiNotice,
-    tone: state.uiNoticeTone,
-  };
 }
 
 export function setUiNotice(message: string, tone: UiNoticeTone = "info", onRender: () => void) {
@@ -119,10 +104,6 @@ export function setUiNotice(message: string, tone: UiNoticeTone = "info", onRend
   onRender();
 }
 
-export function isConversationDrawerOpen() {
-  return state.showConversationDrawer;
-}
-
 export function toggleConversationDrawer() {
   state.showConversationDrawer = !state.showConversationDrawer;
   return state.showConversationDrawer;
@@ -130,10 +111,6 @@ export function toggleConversationDrawer() {
 
 export function openConversationDrawer() {
   state.showConversationDrawer = true;
-}
-
-export function closeConversationDrawer() {
-  state.showConversationDrawer = false;
 }
 
 export function getPendingSessionSubmission() {
@@ -169,16 +146,7 @@ export function clearPendingSession() {
   state.pendingSessionSubmission = undefined;
 }
 
-export function hasSessionActivity() {
-  return (
-    Boolean(state.pendingSessionSubmission) ||
-    state.currentState.status !== "idle" ||
-    Boolean(state.currentState.finalResult) ||
-    Boolean(state.currentState.error)
-  );
-}
-
-export function getCurrentProgressText() {
+function getCurrentProgressText() {
   if (state.pendingSessionSubmission && state.currentState.status === "idle") {
     return optimisticAssistantProgressText;
   }
@@ -190,13 +158,13 @@ export function getCurrentProgressText() {
   return state.currentState.error ?? state.currentState.finalResult?.summary ?? messages.assistantWaiting;
 }
 
-export function getActiveSearchPreference() {
+function getActiveSearchPreference() {
   return state.currentState.status === "running"
     ? state.currentState.searchPreference ?? state.draftSearchPreference
     : state.draftSearchPreference;
 }
 
-export function getFinalResultDisplayMarkdown() {
+function getFinalResultDisplayMarkdown() {
   return (
     state.currentState.finalResult?.markdown?.trim() ||
     state.currentState.finalResult?.artifacts.find((artifact) => artifact.kind === "markdown")?.content?.trim() ||
@@ -258,7 +226,7 @@ export function getRenderState() {
     finalResultDisplayMarkdown: getFinalResultDisplayMarkdown(),
     documentArtifacts: getDocumentArtifacts(),
     selectedLlmProfile: getActiveLlmProfile(),
-    archiveUiText,
+    conversationUiText,
     messages,
   };
 }

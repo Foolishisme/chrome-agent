@@ -1,4 +1,4 @@
-import type { ArchiveUiText, Messages } from "../ui-text";
+import type { ConversationUiText, Messages } from "../i18n-conversation";
 import type { PendingSessionSubmission, UiNoticeTone } from "../state";
 import type { LlmProfile, ResultArtifact, SearchPreference, SessionPublicState } from "../../shared/types";
 
@@ -14,7 +14,7 @@ export interface RenderState {
   finalResultDisplayMarkdown: string;
   documentArtifacts: ResultArtifact[];
   selectedLlmProfile: LlmProfile;
-  archiveUiText: ArchiveUiText;
+  conversationUiText: ConversationUiText;
   messages: Messages;
 }
 

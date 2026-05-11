@@ -16,7 +16,7 @@ import type {
   StartSessionResponse,
   StopSessionMessage,
 } from "../shared/protocol";
-import { BrowserAgentRuntime } from "./runtime/runtime-core";
+import { BrowserAgentRuntime } from "./runtime/agent-runtime";
 import {
   createConversation,
   createConversationState,

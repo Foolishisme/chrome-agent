@@ -17,7 +17,7 @@ import {
   setUiNotice,
   toggleConversationDrawer,
 } from "./state";
-import { archiveUiText, emptyGoalNotice, messages } from "./ui-text";
+import { conversationUiText, emptyGoalNotice, messages } from "./i18n-conversation";
 
 async function copyTextToClipboard(text: string) {
   if (navigator.clipboard?.writeText) {
@@ -129,7 +129,7 @@ export async function toggleConversationPanel(render: () => void) {
     try {
       await requestSessionState(render);
     } catch {
-      setUiNotice(archiveUiText.selectConversationFailed, "error", render);
+      setUiNotice(conversationUiText.selectConversationFailed, "error", render);
     }
   } else {
     render();
@@ -143,7 +143,7 @@ export async function createConversation(render: () => void) {
     })) as SessionStateResponse;
 
     if (!response.ok) {
-      throw new Error(response.error || archiveUiText.createConversationFailed);
+      throw new Error(response.error || conversationUiText.createConversationFailed);
     }
 
     openConversationDrawer();
@@ -151,16 +151,16 @@ export async function createConversation(render: () => void) {
       applyState(response.payload, render);
     }
     setDraftGoal("");
-    setUiNotice(archiveUiText.createConversationReady, "info", render);
+    setUiNotice(conversationUiText.createConversationReady, "info", render);
   } catch {
-    setUiNotice(archiveUiText.createConversationFailed, "error", render);
+    setUiNotice(conversationUiText.createConversationFailed, "error", render);
   }
 }
 
 export async function deleteConversation(render: () => void) {
   const currentState = getCurrentState();
   if (!currentState.conversationId) {
-    setUiNotice(archiveUiText.deleteConversationFailed, "error", render);
+    setUiNotice(conversationUiText.deleteConversationFailed, "error", render);
     return;
   }
 
@@ -171,15 +171,15 @@ export async function deleteConversation(render: () => void) {
     })) as SessionStateResponse;
 
     if (!response.ok) {
-      throw new Error(response.error || archiveUiText.deleteConversationFailed);
+      throw new Error(response.error || conversationUiText.deleteConversationFailed);
     }
 
     if (response.payload) {
       applyState(response.payload, render);
     }
-    setUiNotice(archiveUiText.deleteConversationReady, "info", render);
+    setUiNotice(conversationUiText.deleteConversationReady, "info", render);
   } catch {
-    setUiNotice(archiveUiText.deleteConversationFailed, "error", render);
+    setUiNotice(conversationUiText.deleteConversationFailed, "error", render);
   }
 }
 
@@ -191,21 +191,21 @@ export async function selectConversation(conversationId: string, render: () => v
     })) as SessionStateResponse;
 
     if (!response.ok) {
-      throw new Error(response.error || archiveUiText.selectConversationFailed);
+      throw new Error(response.error || conversationUiText.selectConversationFailed);
     }
 
     if (response.payload) {
       applyState(response.payload, render);
     }
   } catch {
-    setUiNotice(archiveUiText.selectConversationFailed, "error", render);
+    setUiNotice(conversationUiText.selectConversationFailed, "error", render);
   }
 }
 
 export async function rollbackConversation(turnId: number, render: () => void) {
   const currentState = getCurrentState();
   if (!currentState.conversationId || !Number.isFinite(turnId)) {
-    setUiNotice(archiveUiText.rollbackConversationFailed, "error", render);
+    setUiNotice(conversationUiText.rollbackConversationFailed, "error", render);
     return;
   }
 
@@ -217,15 +217,15 @@ export async function rollbackConversation(turnId: number, render: () => void) {
     })) as SessionStateResponse;
 
     if (!response.ok) {
-      throw new Error(response.error || archiveUiText.rollbackConversationFailed);
+      throw new Error(response.error || conversationUiText.rollbackConversationFailed);
     }
 
     if (response.payload) {
       applyState(response.payload, render);
     }
-    setUiNotice(archiveUiText.rollbackConversationReady, "info", render);
+    setUiNotice(conversationUiText.rollbackConversationReady, "info", render);
   } catch {
-    setUiNotice(archiveUiText.rollbackConversationFailed, "error", render);
+    setUiNotice(conversationUiText.rollbackConversationFailed, "error", render);
   }
 }
 

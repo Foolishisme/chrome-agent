@@ -2,7 +2,7 @@ import { getMessages } from "./i18n";
 
 export const messages = getMessages();
 
-export const archiveUiText = {
+export const conversationUiText = {
   currentConversation: "当前会话",
   newConversation: "新建会话",
   conversationHistoryEmpty: "还没有历史会话。",
@@ -28,4 +28,4 @@ export const optimisticAssistantProgressText = navigator.language.startsWith("zh
   : "Understanding the question and starting the session...";
 
 export type Messages = typeof messages;
-export type ArchiveUiText = typeof archiveUiText;
+export type ConversationUiText = typeof conversationUiText;

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const extractedItemSchema = z.object({
+const extractedItemSchema = z.object({
   title: z.string().min(1),
   priceText: z.string().min(1),
   url: z.string().min(1),
@@ -9,7 +9,7 @@ export const extractedItemSchema = z.object({
   summary: z.string().optional(),
 });
 
-export const researchCandidateSchema = z.object({
+const researchCandidateSchema = z.object({
   title: z.string().min(1),
   url: z.string().min(1),
   snippet: z.string().optional(),
@@ -22,7 +22,7 @@ export const researchCandidateSchema = z.object({
   score: z.number().optional(),
 });
 
-export const pageFactExtractionSchema = z.object({
+const pageFactExtractionSchema = z.object({
   status: z.union([z.literal("success"), z.literal("partial")]),
   pageTitle: z.string(),
   bodyExcerpt: z.string(),
@@ -31,7 +31,7 @@ export const pageFactExtractionSchema = z.object({
   reason: z.string().optional(),
 });
 
-export const sourceFactSchema = z.object({
+const sourceFactSchema = z.object({
   text: z.string().min(1),
   evidenceUrl: z.string().min(1),
   evidenceTitle: z.string().optional(),
@@ -46,54 +46,54 @@ export const sourceFactCardSchema = z.object({
   status: z.union([z.literal("success"), z.literal("partial")]),
 });
 
-export const clickActionSchema = z.object({
+const clickActionSchema = z.object({
   type: z.literal("CLICK"),
   agentId: z.string().min(1),
 });
 
-export const typeActionSchema = z.object({
+const typeActionSchema = z.object({
   type: z.literal("TYPE"),
   agentId: z.string().min(1),
   text: z.string().min(1),
   submit: z.boolean().optional(),
 });
 
-export const navigateActionSchema = z.object({
+const navigateActionSchema = z.object({
   type: z.literal("NAVIGATE"),
   url: z.string().url(),
 });
 
-export const scrollActionSchema = z.object({
+const scrollActionSchema = z.object({
   type: z.literal("SCROLL"),
   direction: z.union([z.literal("up"), z.literal("down")]),
   amount: z.number().positive().optional(),
 });
 
-export const recoverCloseDialogActionSchema = z.object({
+const recoverCloseDialogActionSchema = z.object({
   type: z.literal("RECOVER_CLOSE_DIALOG"),
 });
 
-export const extractListActionSchema = z.object({
+const extractListActionSchema = z.object({
   type: z.literal("EXTRACT_LIST"),
   limit: z.number().int().positive().optional(),
 });
 
-export const extractSearchResultsActionSchema = z.object({
+const extractSearchResultsActionSchema = z.object({
   type: z.literal("EXTRACT_SEARCH_RESULTS"),
   limit: z.number().int().positive().optional(),
 });
 
-export const extractSiteNavLinksActionSchema = z.object({
+const extractSiteNavLinksActionSchema = z.object({
   type: z.literal("EXTRACT_SITE_NAV_LINKS"),
   limit: z.number().int().positive().optional(),
   baseUrl: z.string().url().optional(),
 });
 
-export const extractPageFactsActionSchema = z.object({
+const extractPageFactsActionSchema = z.object({
   type: z.literal("EXTRACT_PAGE_FACTS"),
 });
 
-export const doneActionSchema = z.object({
+const doneActionSchema = z.object({
   type: z.literal("DONE"),
   summary: z.string().min(1),
   items: z.array(extractedItemSchema).optional(),
@@ -136,7 +136,7 @@ export const finalResultSynthesisSchema = z.object({
   suggestedNextAction: z.string().min(1),
 });
 
-export const roundDecisionPatchSchema = z
+const roundDecisionPatchSchema = z
   .object({
     searchQuery: z.string().min(1).optional(),
     officialSearchQuery: z.string().min(1).optional(),
