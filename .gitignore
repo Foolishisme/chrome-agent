@@ -1,14 +1,41 @@
-node_modules/
-dist/
+# Environment
 .env
-.env.local
-coverage/
-.playwright-cli/
-output/
-doc/.obsidian
-scripts/
+.env.*
+!.env.example
 
-# AI Reference Files
-doc/reference/design_principles.md
-doc/reference/pitfalls.md
-doc/reference/success_patterns.md
+# Dependencies
+node_modules/
+vendor/
+
+# Build and test outputs
+dist/
+build/
+out/
+coverage/
+test-results/
+playwright-report/
+
+# Runtime and browser automation outputs
+output/
+.playwright-cli/
+
+# Caches
+.cache/
+.turbo/
+.vite/
+.pytest_cache/
+__pycache__/
+
+# Logs
+*.log
+logs/
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local documentation workspaces and reference packs
+doc/.obsidian/
+doc/reference/
