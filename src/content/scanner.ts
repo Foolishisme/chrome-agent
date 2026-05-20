@@ -1,6 +1,6 @@
 import { computeAccessibleName } from "dom-accessibility-api";
 import { roles } from "aria-query";
-import { JD_SELECTORS } from "../shared/jd-search-selectors";
+import { JD_SELECTORS } from "./jd-search-selectors";
 import type {
   ElementRect,
   InteractiveElement,

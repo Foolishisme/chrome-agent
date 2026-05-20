@@ -11,6 +11,68 @@
 
 <body>
   <div id="app"></div>
+
+  <div id="settings-drawer" class="settings-drawer hidden">
+    <div class="drawer-header">
+      <div class="drawer-title-group">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2".5 style="color: var(--color-accent);">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+        <h3>配置大模型与 API</h3>
+      </div>
+      <button id="close-settings-button" type="button" class="drawer-close" aria-label="关闭">&times;</button>
+    </div>
+    <div class="drawer-body">
+      <div class="settings-section">
+        <h4>☁️ 云端大模型 (External)</h4>
+        <div class="form-group">
+          <label for="ext-api-key">API Key</label>
+          <input type="password" id="ext-api-key" placeholder="填入 DeepSeek API Key (sk-...)" />
+        </div>
+        <div class="form-group">
+          <label for="ext-base-url">API 代理地址</label>
+          <input type="text" id="ext-base-url" placeholder="默认: https://api.deepseek.com" />
+        </div>
+        <div class="form-group-row">
+          <div class="form-group flex-1">
+            <label for="ext-model-pro">主推理模型 (Pro)</label>
+            <input type="text" id="ext-model-pro" placeholder="默认: deepseek-v4-pro" />
+          </div>
+          <div class="form-group flex-1">
+            <label for="ext-model-flash">极速过滤 (Flash)</label>
+            <input type="text" id="ext-model-flash" placeholder="默认: deepseek-v4-flash" />
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h4>💻 本地推理 (Local)</h4>
+        <div class="form-group">
+          <label for="local-api-key">API Key (可选)</label>
+          <input type="password" id="local-api-key" placeholder="本地接口密钥 (可选)" />
+        </div>
+        <div class="form-group">
+          <label for="local-base-url">API 接口地址</label>
+          <input type="text" id="local-base-url" placeholder="默认: http://localhost:11434/v1" />
+        </div>
+        <div class="form-group-row">
+          <div class="form-group flex-1">
+            <label for="local-model-pro">主推理模型 (Pro)</label>
+            <input type="text" id="local-model-pro" placeholder="默认: deepseek-r1:70b" />
+          </div>
+          <div class="form-group flex-1">
+            <label for="local-model-flash">极速过滤 (Flash)</label>
+            <input type="text" id="local-model-flash" placeholder="默认: qwen2.5:14b" />
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="drawer-footer">
+      <button id="save-settings-button" type="button" class="button-primary" style="width: 100%; min-height: 38px; border-radius: var(--radius-md);">保存配置</button>
+    </div>
+  </div>
+
   <script type="module" src="./sidepanel.js"></script>
 </body>
 

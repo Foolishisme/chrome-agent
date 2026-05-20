@@ -55,6 +55,12 @@ function render() {
             <h1>${renderState.messages.heroTitle}</h1>
             <p>${renderState.messages.heroDescription}</p>
           </div>
+          <button id="open-settings-button" type="button" class="hero-action-button" title="模型配置">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
           <button id="toggle-conversations-button" type="button" class="hero-action-button" title="历史记录">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10"></circle>
@@ -158,6 +164,31 @@ app.addEventListener("click", async (event) => {
     return;
   }
 
+  if (target.id === "open-settings-button") {
+    chrome.storage.local.get(["userLlmConfigs"], (res) => {
+      const configs = res.userLlmConfigs || {
+        external: { apiKey: "", baseUrl: "", modelPro: "", modelFlash: "" },
+        local: { apiKey: "", baseUrl: "", modelPro: "", modelFlash: "" }
+      };
+      
+      const ext = configs.external || {};
+      const loc = configs.local || {};
+
+      (document.getElementById("ext-api-key") as HTMLInputElement).value = ext.apiKey || "";
+      (document.getElementById("ext-base-url") as HTMLInputElement).value = ext.baseUrl || "";
+      (document.getElementById("ext-model-pro") as HTMLInputElement).value = ext.modelPro || "";
+      (document.getElementById("ext-model-flash") as HTMLInputElement).value = ext.modelFlash || "";
+
+      (document.getElementById("local-api-key") as HTMLInputElement).value = loc.apiKey || "";
+      (document.getElementById("local-base-url") as HTMLInputElement).value = loc.baseUrl || "";
+      (document.getElementById("local-model-pro") as HTMLInputElement).value = loc.modelPro || "";
+      (document.getElementById("local-model-flash") as HTMLInputElement).value = loc.modelFlash || "";
+
+      document.getElementById("settings-drawer")?.classList.remove("hidden");
+    });
+    return;
+  }
+
   if (target.id === "create-conversation-button") {
     await createConversation(render);
     return;
@@ -213,5 +244,32 @@ async function bootstrap() {
   }
 }
 
+// 绑定设置抽屉的关闭与保存操作
+document.getElementById("close-settings-button")?.addEventListener("click", () => {
+  document.getElementById("settings-drawer")?.classList.add("hidden");
+});
+
+document.getElementById("save-settings-button")?.addEventListener("click", () => {
+  const updatedConfigs = {
+    external: {
+      apiKey: (document.getElementById("ext-api-key") as HTMLInputElement).value.trim(),
+      baseUrl: (document.getElementById("ext-base-url") as HTMLInputElement).value.trim(),
+      modelPro: (document.getElementById("ext-model-pro") as HTMLInputElement).value.trim(),
+      modelFlash: (document.getElementById("ext-model-flash") as HTMLInputElement).value.trim()
+    },
+    local: {
+      apiKey: (document.getElementById("local-api-key") as HTMLInputElement).value.trim(),
+      baseUrl: (document.getElementById("local-base-url") as HTMLInputElement).value.trim(),
+      modelPro: (document.getElementById("local-model-pro") as HTMLInputElement).value.trim(),
+      modelFlash: (document.getElementById("local-model-flash") as HTMLInputElement).value.trim()
+    }
+  };
+
+  chrome.storage.local.set({ userLlmConfigs: updatedConfigs }, () => {
+    document.getElementById("settings-drawer")?.classList.add("hidden");
+  });
+});
+
 render();
 void bootstrap();
+

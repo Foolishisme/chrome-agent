@@ -514,3 +514,16 @@ export interface SessionDebugBundle {
   filterDiagnostics?: FilterDiagnostics;
   unresolvedIssues: string[];
 }
+
+export interface LlmProfileConfig {
+  apiKey: string;
+  baseUrl: string;
+  modelPro: string;
+  modelFlash: string;
+}
+
+export interface UserLlmConfigs {
+  external: LlmProfileConfig;
+  local: LlmProfileConfig;
+}
+

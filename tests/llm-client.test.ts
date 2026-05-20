@@ -1,11 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  buildGeminiRequestBody,
   buildOpenAiCompatibleRequestBody,
   decideRoundAction,
   extractOpenAiCompatibleJsonText,
   extractFirstJsonBlock,
-  extractJsonText,
   getModelCandidates,
   parseModelJson,
   reorderResearchCandidates,
@@ -17,40 +15,16 @@ afterEach(() => {
 });
 
 describe("llm client helpers", () => {
-  it("builds a JSON-mode Gemini request", () => {
-    const body = buildGeminiRequestBody("hello");
-    expect(body.generationConfig.responseMimeType).toBe("application/json");
-    expect(body.contents[0]?.parts[0]?.text).toBe("hello");
-  });
-
   it("prefers the simple task model for lightweight tasks", () => {
-    const candidates = getModelCandidates("simple", "openai-compatible");
-    expect(candidates[0]).toBe("deepseek-chat");
+    const candidates = getModelCandidates("simple");
+    expect(candidates[0]).toBe("deepseek-v4-flash");
   });
 
   it("builds a JSON-mode OpenAI-compatible request", () => {
-    const body = buildOpenAiCompatibleRequestBody("hello", "deepseek-chat");
+    const body = buildOpenAiCompatibleRequestBody("hello", "deepseek-v4-flash");
     expect(body.response_format.type).toBe("json_object");
     expect(body.messages[0]?.content).toBe("hello");
-    expect(body.model).toBe("deepseek-chat");
-  });
-
-  it("extracts JSON text from fenced responses", () => {
-    const text = extractJsonText({
-      candidates: [
-        {
-          content: {
-            parts: [
-              {
-                text: "```json\n{\"ok\":true}\n```",
-              },
-            ],
-          },
-        },
-      ],
-    });
-
-    expect(text).toBe("{\"ok\":true}");
+    expect(body.model).toBe("deepseek-v4-flash");
   });
 
   it("extracts the first JSON block when extra text is appended", () => {

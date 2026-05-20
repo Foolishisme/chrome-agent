@@ -23,17 +23,21 @@
 - `src/background/tools/`
 - `src/background/llm/`
 - `src/background/browser/overview/explicit-url-overview.ts`
-- `src/background/browser/capability/types.ts`
+- `src/background/browser/capability/browser-driver-contract.ts`
 - `src/content/bridge.ts`
-- `src/content/index.ts`
+- `src/content/content-script-host.ts`
 - `src/content/scanner.ts`
-- `src/content/actions.ts`
+- `src/content/content-action-executor.ts`
 - `src/content/research.ts`
 - `src/content/extractor.ts`
-- `src/shared/types.ts`
-- `src/shared/schema.ts`
-- `src/shared/protocol.ts`
-- `src/shared/browser-capability.ts`
+- `src/content/overlay.ts`
+- `src/content/jd-search-selectors.ts`
+- `src/shared/agent-domain-model.ts`
+- `src/shared/llm-runtime-contract-schemas.ts`
+- `src/shared/extension-message-protocol.ts`
+- `src/shared/browser-capability-contract.ts`
+- `src/shared/agent-runtime-config.ts`
+- `src/shared/runtime-error.ts`
 
 ## 当前能力
 
@@ -72,4 +76,4 @@
 
 本 checkpoint 仅描述当前有效事实，不记录未来迁移计划。
 
-更新日期：2026-05-11
+更新日期：2026-05-20

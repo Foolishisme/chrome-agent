@@ -6,21 +6,23 @@
 
 代码级协议优先查看：
 
-- `src/shared/types.ts`
-- `src/shared/schema.ts`
-- `src/shared/protocol.ts`
-- `src/shared/browser-capability.ts`
-- `src/background/runtime/runtime-core.ts`
+- `src/shared/agent-domain-model.ts`
+- `src/shared/llm-runtime-contract-schemas.ts`
+- `src/shared/extension-message-protocol.ts`
+- `src/shared/browser-capability-contract.ts`
+- `src/background/runtime/agent-runtime.ts`
 - `src/background/runner/`
 - `src/background/tools/`
 - `src/background/browser/overview/explicit-url-overview.ts`
-- `src/background/browser/capability/types.ts`
+- `src/background/browser/capability/browser-driver-contract.ts`
 - `src/content/bridge.ts`
-- `src/content/index.ts`
+- `src/content/content-script-host.ts`
 - `src/content/scanner.ts`
-- `src/content/actions.ts`
+- `src/content/content-action-executor.ts`
 - `src/content/research.ts`
 - `src/content/extractor.ts`
+- `src/content/overlay.ts`
+- `src/content/jd-search-selectors.ts`
 
 ## 2. 产品目标
 
@@ -44,7 +46,7 @@
 - `REQUEST_SNAPSHOT`：调用 `scanPage()` 生成页面快照。
 - `EXECUTE_ACTION`：调用 `executeAction()` 执行当前已有 action。
 
-当前内容提取与交互实现位于 `src/content/scanner.ts`、`src/content/actions.ts`、`src/content/research.ts` 和 `src/content/extractor.ts`。
+当前内容提取与交互实现位于 `src/content/scanner.ts`、`src/content/content-action-executor.ts`、`src/content/research.ts`、`src/content/extractor.ts` 和 `src/content/overlay.ts`。
 
 ## 4. 组件边界
 
@@ -85,7 +87,7 @@ Runner 当前按任务族执行 bounded round：
 
 当前默认浏览器驱动是 `RuntimeBrowserDriver`。它封装 Chrome tab 操作、页面稳定等待、content message 发送、风险阻断和失败问题结构化。
 
-`content-bridge.js` 是当前 fallback 注入桥，暴露 `scanCurrentPage` 和 `executeCurrentAction` 给 runtime 使用。
+`content-bridge.js` 是当前 fallback 注入桥，暴露 `scanCurrentPage` 和 `executeCurrentAction` 给 runtime使用。
 
 ### Memory
 
@@ -104,4 +106,4 @@ Memory 保存结构化工作状态、候选、来源、失败、工具级 run lo
 
 Side Panel 只负责启动/停止会话、维护会话历史、展示最小运行占位、简短失败提示、最终回答和 artifact 操作。前端不展示 runtime debug panel、执行 timeline、调试日志、当前 step/tool 或 thinking 过程。路由和执行决策留给 runtime、runner 和 LLM 边界。
 
-更新日期：2026-05-11
+更新日期：2026-05-20

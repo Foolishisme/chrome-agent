@@ -9,7 +9,7 @@
 必须成立：
 
 - 产品目标是通用浏览器 Agent。
-- 当前唯一主链是 `BrowserAgentRuntime -> runner -> RuntimeBrowserDriver -> content bridge -> scanner/actions/research/extractor`。
+- 当前唯一主链是 `BrowserAgentRuntime -> runner -> RuntimeBrowserDriver -> content bridge -> scanner/content-action-executor/research/extractor`。
 - `Runtime` 是最小保障层，负责 session 生命周期、预算、stop、状态广播和终态兜底。
 - `Tools` 暴露稳定语义能力，不暴露页面级 atomic tool 表面。
 - 当前 runtime-visible tools 仅为 `browser.search`、`browser.webDetail`、`browser.siteOverview`、`skill.commerceResearch`。
@@ -64,4 +64,4 @@
 
 每个终态结果包含用户可读 summary、关键来源或覆盖边界、必要的 errors/blockers，以及失败或 blocked 时的 suggested next action。
 
-更新日期：2026-05-11
+更新日期：2026-05-20

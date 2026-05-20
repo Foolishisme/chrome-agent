@@ -36,9 +36,8 @@ type ProviderName = "gemini" | "openai-compatible";
 
 const env = import.meta.env as Record<string, string | undefined>;
 
-const DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+
 const DEFAULT_OPENAI_COMPATIBLE_BASE_URL = "https://api.deepseek.com";
-const DEFAULT_OPENAI_COMPATIBLE_MODEL = "deepseek-chat";
 const DEFAULT_LLM_PROFILE: LlmProfile = "external";
 
 function readEnv(...keys: string[]) {
@@ -51,10 +50,6 @@ function readEnv(...keys: string[]) {
   return undefined;
 }
 
-function isDefined<T>(value: T | undefined): value is T {
-  return value !== undefined;
-}
-
 function normalizeLlmProfile(profile: string | undefined): LlmProfile | undefined {
   const normalized = profile?.trim().toLowerCase();
   if (normalized === "local") {
@@ -63,23 +58,6 @@ function normalizeLlmProfile(profile: string | undefined): LlmProfile | undefine
 
   if (normalized === "external" || normalized === "remote") {
     return "external";
-  }
-
-  return undefined;
-}
-
-function normalizeProvider(provider: string | undefined): ProviderName | undefined {
-  const normalized = provider?.trim().toLowerCase();
-  if (!normalized) {
-    return undefined;
-  }
-
-  if (normalized === "gemini") {
-    return "gemini";
-  }
-
-  if (normalized === "openai-compatible" || normalized === "openai" || normalized === "deepseek" || normalized === "api") {
-    return "openai-compatible";
   }
 
   return undefined;
@@ -98,6 +76,49 @@ function normalizeBaseUrl(baseUrl: string | undefined, pathSuffix?: string) {
   return trimmed;
 }
 
+import type { UserLlmConfigs } from "../../shared/agent-domain-model";
+
+
+
+let userLlmConfigsCache: UserLlmConfigs = {
+  external: {
+    apiKey: "",
+    baseUrl: "https://api.deepseek.com",
+    modelPro: "deepseek-v4-pro",
+    modelFlash: "deepseek-v4-flash"
+  },
+  local: {
+    apiKey: "",
+    baseUrl: "http://localhost:11434/v1",
+    modelPro: "deepseek-r1:70b",
+    modelFlash: "qwen2.5:14b"
+  }
+};
+
+// Initialize and listen to storage changes
+if (typeof chrome !== "undefined" && chrome.storage) {
+  chrome.storage.local.get(["userLlmConfigs"], (res) => {
+    if (res.userLlmConfigs) {
+      userLlmConfigsCache = {
+        external: { ...userLlmConfigsCache.external, ...res.userLlmConfigs.external },
+        local: { ...userLlmConfigsCache.local, ...res.userLlmConfigs.local }
+      };
+    }
+  });
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "local" && changes.userLlmConfigs) {
+      const newVal = changes.userLlmConfigs.newValue;
+      if (newVal) {
+        userLlmConfigsCache = {
+          external: { ...userLlmConfigsCache.external, ...newVal.external },
+          local: { ...userLlmConfigsCache.local, ...newVal.local }
+        };
+      }
+    }
+  });
+}
+
 function resolveInitialLlmProfile(): LlmProfile {
   return normalizeLlmProfile(readEnv("VITE_LLM_PROFILE", "VITE_LLM_DEFAULT_PROFILE")) ?? DEFAULT_LLM_PROFILE;
 }
@@ -109,124 +130,39 @@ export function setActiveLlmProfile(profile: LlmProfile | undefined) {
 }
 
 interface LlmConfig {
-  provider: ProviderName;
   apiKey?: string;
   baseUrl: string;
-  model: string;
-  simpleModel: string;
-  simpleModelFallback?: string;
+  modelPro: string;
+  modelFlash: string;
 }
 
 function resolveLlmConfig(profile: LlmProfile = activeLlmProfile): LlmConfig {
-  if (profile === "local") {
-    const provider = normalizeProvider(readEnv("VITE_LLM_LOCAL_PROVIDER", "LOCAL_MODEL_PROVIDER", "VITE_LLM_PROVIDER")) ?? "openai-compatible";
-    const baseUrl = normalizeBaseUrl(
-      readEnv(
-        "VITE_LLM_LOCAL_BASE_URL",
-        "VITE_LLM_LOCAL_API_URL",
-        "LOCAL_MODEL_API_URL",
-        "VITE_LLM_BASE_URL",
-        "VITE_OPENAI_BASE_URL",
-        "VITE_DEEPSEEK_BASE_URL",
-      ),
-      "/chat/completions",
-    ) || DEFAULT_OPENAI_COMPATIBLE_BASE_URL;
-    const apiKey = readEnv(
-      "VITE_LLM_LOCAL_API_KEY",
-      "LOCAL_MODEL_API_KEY",
-      "VITE_LLM_API_KEY",
-      "VITE_OPENAI_API_KEY",
-      "VITE_DEEPSEEK_API_KEY",
-      "deep-seek-api-key",
-    );
-    const model = readEnv("VITE_LLM_LOCAL_MODEL", "LOCAL_MODEL_NAME", "VITE_LLM_MODEL", "VITE_OPENAI_MODEL", "VITE_DEEPSEEK_MODEL") || DEFAULT_OPENAI_COMPATIBLE_MODEL;
-    const simpleModel = readEnv(
-      "VITE_LLM_LOCAL_SIMPLE_MODEL",
-      "VITE_LLM_SIMPLE_MODEL",
-      "VITE_OPENAI_SIMPLE_MODEL",
-      "VITE_DEEPSEEK_SIMPLE_MODEL",
-    ) || model;
-    const simpleModelFallback = readEnv(
-      "VITE_LLM_LOCAL_SIMPLE_MODEL_FALLBACK",
-      "VITE_LLM_SIMPLE_MODEL_FALLBACK",
-      "VITE_OPENAI_SIMPLE_MODEL_FALLBACK",
-      "VITE_DEEPSEEK_SIMPLE_MODEL_FALLBACK",
-    ) || model;
-    return {
-      provider,
-      apiKey,
-      baseUrl,
-      model,
-      simpleModel,
-      simpleModelFallback,
-    };
-  }
-
-  const provider =
-    normalizeProvider(readEnv("VITE_LLM_EXTERNAL_PROVIDER", "VITE_LLM_PROVIDER")) ??
-    (readEnv("VITE_GEMINI_API_KEY", "VITE_GEMINI_MODEL", "VITE_GEMINI_BASE_URL") ? "gemini" : "openai-compatible");
-
-  if (provider === "gemini") {
-    const baseUrl = normalizeBaseUrl(readEnv("VITE_LLM_EXTERNAL_BASE_URL", "VITE_GEMINI_BASE_URL", "VITE_LLM_BASE_URL"), "/chat/completions") || DEFAULT_GEMINI_BASE_URL;
-    const apiKey = readEnv("VITE_LLM_EXTERNAL_API_KEY", "VITE_GEMINI_API_KEY", "VITE_LLM_API_KEY");
-    const model = readEnv("VITE_LLM_EXTERNAL_MODEL", "VITE_GEMINI_MODEL", "VITE_LLM_MODEL") || "gemini-2.0-flash";
-    const simpleModel = readEnv("VITE_LLM_EXTERNAL_SIMPLE_MODEL", "VITE_GEMINI_SIMPLE_MODEL", "VITE_LLM_SIMPLE_MODEL") || "gemini-3.1-flash-lite-preview";
-    const simpleModelFallback = readEnv(
-      "VITE_LLM_EXTERNAL_SIMPLE_MODEL_FALLBACK",
-      "VITE_GEMINI_SIMPLE_MODEL_FALLBACK",
-      "VITE_LLM_SIMPLE_MODEL_FALLBACK",
-    ) || "gemini-2.5-flash-lite";
-    return {
-      provider,
-      apiKey,
-      baseUrl,
-      model,
-      simpleModel,
-      simpleModelFallback,
-    };
-  }
-
-  const baseUrl =
-    normalizeBaseUrl(readEnv("VITE_LLM_EXTERNAL_BASE_URL", "VITE_LLM_BASE_URL", "VITE_OPENAI_BASE_URL", "VITE_DEEPSEEK_BASE_URL"), "/chat/completions") ||
-    DEFAULT_OPENAI_COMPATIBLE_BASE_URL;
-  const apiKey = readEnv(
-    "VITE_LLM_EXTERNAL_API_KEY",
+  const custom = userLlmConfigsCache[profile];
+  // Fallback to environment variables if storage is empty
+  const envPrefix = profile === "local" ? "LOCAL" : "EXTERNAL";
+  const apiKey = custom.apiKey || readEnv(
+    `VITE_LLM_${envPrefix}_API_KEY`,
     "VITE_LLM_API_KEY",
     "VITE_OPENAI_API_KEY",
     "VITE_DEEPSEEK_API_KEY",
-    "deep-seek-api-key",
+    "deep-seek-api-key"
   );
-  const model = readEnv("VITE_LLM_EXTERNAL_MODEL", "VITE_LLM_MODEL", "VITE_OPENAI_MODEL", "VITE_DEEPSEEK_MODEL") || DEFAULT_OPENAI_COMPATIBLE_MODEL;
-  const simpleModel = readEnv(
-    "VITE_LLM_EXTERNAL_SIMPLE_MODEL",
-    "VITE_LLM_SIMPLE_MODEL",
-    "VITE_OPENAI_SIMPLE_MODEL",
-    "VITE_DEEPSEEK_SIMPLE_MODEL",
-  ) || model;
-  const simpleModelFallback = readEnv(
-    "VITE_LLM_EXTERNAL_SIMPLE_MODEL_FALLBACK",
-    "VITE_LLM_SIMPLE_MODEL_FALLBACK",
-    "VITE_OPENAI_SIMPLE_MODEL_FALLBACK",
-    "VITE_DEEPSEEK_SIMPLE_MODEL_FALLBACK",
-  ) || model;
+  const baseUrl = custom.baseUrl || normalizeBaseUrl(readEnv(
+    `VITE_LLM_${envPrefix}_BASE_URL`,
+    "VITE_LLM_BASE_URL",
+    "VITE_OPENAI_BASE_URL",
+    "VITE_DEEPSEEK_BASE_URL"
+  )) || (profile === "local" ? "http://localhost:11434/v1" : DEFAULT_OPENAI_COMPATIBLE_BASE_URL);
+
+  const modelPro = custom.modelPro || readEnv(`VITE_LLM_${envPrefix}_MODEL`, "VITE_LLM_MODEL") || (profile === "local" ? "deepseek-r1:70b" : "deepseek-v4-pro");
+  const modelFlash = custom.modelFlash || readEnv(`VITE_LLM_${envPrefix}_SIMPLE_MODEL`, "VITE_LLM_SIMPLE_MODEL") || (profile === "local" ? "qwen2.5:14b" : "deepseek-v4-flash");
+
   return {
-    provider: "openai-compatible",
     apiKey,
     baseUrl,
-    model,
-    simpleModel,
-    simpleModelFallback,
+    modelPro,
+    modelFlash
   };
-}
-
-interface GeminiResponse {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{
-        text?: string;
-      }>;
-    };
-  }>;
 }
 
 interface OpenAiCompatibleResponse {
@@ -241,27 +177,8 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
-function getConfiguredProvider(): ProviderName {
-  return resolveLlmConfig().provider;
-}
-
-export function buildGeminiRequestBody(prompt: string) {
-  return {
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: prompt }],
-      },
-    ],
-    generationConfig: {
-      temperature: 0.2,
-      responseMimeType: "application/json",
-    },
-  };
-}
-
-export function buildOpenAiCompatibleRequestBody(prompt: string, model = DEFAULT_OPENAI_COMPATIBLE_MODEL) {
-  return {
+export function buildOpenAiCompatibleRequestBody(prompt: string, model: string) {
+  const body: Record<string, any> = {
     model,
     messages: [
       {
@@ -269,25 +186,29 @@ export function buildOpenAiCompatibleRequestBody(prompt: string, model = DEFAULT
         content: prompt,
       },
     ],
-    temperature: 0.2,
-    response_format: {
-      type: "json_object",
-    },
   };
-}
 
-export function extractJsonText(response: GeminiResponse): string {
-  const text = response.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
-  if (!text) {
-    throw new RuntimeError("Gemini returned an empty response.", "EMPTY_LLM_RESPONSE");
+  // deepseek reasoning models (e.g. deepseek-reasoner, deepseek-v4-pro) do not support response_format = json_object and custom temperature.
+  // We exclude these parameters dynamically to avoid API 400 validation failures.
+  if (
+    model !== "deepseek-reasoner" &&
+    model !== "deepseek-v4-pro" &&
+    !model.includes("reasoner") &&
+    !model.includes("v4-pro")
+  ) {
+    body.temperature = 0.2;
+    body.response_format = {
+      type: "json_object",
+    };
   }
-  return text.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+
+  return body;
 }
 
 export function extractOpenAiCompatibleJsonText(response: OpenAiCompatibleResponse): string {
   const text = response.choices?.[0]?.message?.content?.trim();
   if (!text) {
-    throw new RuntimeError("OpenAI-compatible model returned an empty response.", "EMPTY_LLM_RESPONSE");
+    throw new RuntimeError("Model returned an empty response.", "EMPTY_LLM_RESPONSE");
   }
   return text.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
 }
@@ -349,22 +270,12 @@ export function parseModelJson(raw: string) {
   }
 }
 
-export function getModelCandidates(task: "simple" | "default", provider: ProviderName = getConfiguredProvider()) {
-  const config = provider === "gemini" ? resolveLlmConfig("external") : resolveLlmConfig();
-
-  if (provider === "openai-compatible") {
-    if (task === "simple") {
-      return Array.from(new Set([config.simpleModel, config.model].filter(isDefined)));
-    }
-
-    return Array.from(new Set([config.model].filter(isDefined)));
-  }
-
+export function getModelCandidates(task: "simple" | "default") {
+  const config = resolveLlmConfig();
   if (task === "simple") {
-    return Array.from(new Set([config.simpleModel, config.simpleModelFallback, config.model].filter(isDefined)));
+    return [config.modelFlash];
   }
-
-  return Array.from(new Set([config.model].filter(isDefined)));
+  return [config.modelPro];
 }
 
 function throwIfAborted(signal?: AbortSignal) {
@@ -382,86 +293,9 @@ function joinUrl(baseUrl: string, path: string) {
   return `${normalizedBaseUrl}/${normalizedPath}`;
 }
 
-async function requestGemini(prompt: string, modelCandidates: string[], options: RequestOptions = {}) {
-  const config = resolveLlmConfig("external");
-  if (!config.apiKey) {
-    throw new RuntimeError("Missing LLM API key.", "MISSING_API_KEY");
-  }
-
-  throwIfAborted(options.signal);
-
-  let lastError: unknown;
-
-  for (const model of modelCandidates) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), LIMITS.LLM_TIMEOUT_MS);
-    const abortListener = () => controller.abort();
-    options.signal?.addEventListener("abort", abortListener, { once: true });
-
-    try {
-      const response = await fetch(
-        `${joinUrl(config.baseUrl, model)}:generateContent?key=${config.apiKey}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(buildGeminiRequestBody(prompt)),
-          signal: controller.signal,
-        },
-      );
-
-      if (!response.ok) {
-        const body = await response.text();
-        const error = new RuntimeError(`Gemini request failed: ${response.status}`, "LLM_HTTP_ERROR");
-        (error as RuntimeError & { cause?: string }).cause = body;
-
-        if ((response.status === 400 || response.status === 404) && model !== modelCandidates.at(-1)) {
-          lastError = error;
-          continue;
-        }
-
-        throw error;
-      }
-
-      const data = (await response.json()) as GeminiResponse;
-      return {
-        raw: extractJsonText(data),
-        model,
-      };
-    } catch (error) {
-      if (error instanceof RuntimeError) {
-        lastError = error;
-        if (error.code === "LLM_HTTP_ERROR" && model !== modelCandidates.at(-1)) {
-          continue;
-        }
-        throw error;
-      }
-
-      throwIfAborted(options.signal);
-
-      if (error instanceof Error && error.name === "AbortError") {
-        throw new RuntimeError("Gemini request timed out.", "LLM_TIMEOUT");
-      }
-
-      lastError = error;
-      if (model === modelCandidates.at(-1)) {
-        throw new RuntimeError(error instanceof Error ? error.message : "Gemini request failed.", "LLM_UNKNOWN_ERROR");
-      }
-    } finally {
-      clearTimeout(timeoutId);
-      options.signal?.removeEventListener("abort", abortListener);
-    }
-  }
-
-  throw lastError instanceof RuntimeError
-    ? lastError
-    : new RuntimeError(lastError instanceof Error ? lastError.message : "Gemini request failed.", "LLM_UNKNOWN_ERROR");
-}
-
 async function requestOpenAiCompatible(prompt: string, modelCandidates: string[], options: RequestOptions = {}) {
   const config = resolveLlmConfig();
-  if (!config.apiKey) {
+  if (!config.apiKey && activeLlmProfile === "external") {
     throw new RuntimeError("Missing LLM API key.", "MISSING_API_KEY");
   }
 
@@ -471,24 +305,31 @@ async function requestOpenAiCompatible(prompt: string, modelCandidates: string[]
 
   for (const model of modelCandidates) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), LIMITS.LLM_TIMEOUT_MS);
+    // Allow extended 60s timeout for deep reasoning Pro models, 30s for fast Flash models
+    const isPro = model === config.modelPro;
+    const timeoutMs = isPro ? 60_000 : LIMITS.LLM_TIMEOUT_MS;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     const abortListener = () => controller.abort();
     options.signal?.addEventListener("abort", abortListener, { once: true });
 
     try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (config.apiKey) {
+        headers.Authorization = `Bearer ${config.apiKey}`;
+      }
+
       const response = await fetch(joinUrl(config.baseUrl, "chat/completions"), {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${config.apiKey}`,
-        },
+        headers,
         body: JSON.stringify(buildOpenAiCompatibleRequestBody(prompt, model)),
         signal: controller.signal,
       });
 
       if (!response.ok) {
         const body = await response.text();
-        const error = new RuntimeError(`OpenAI-compatible request failed: ${response.status}`, "LLM_HTTP_ERROR");
+        const error = new RuntimeError(`Model request failed: ${response.status}`, "LLM_HTTP_ERROR");
         (error as RuntimeError & { cause?: string }).cause = body;
         throw error;
       }
@@ -510,12 +351,12 @@ async function requestOpenAiCompatible(prompt: string, modelCandidates: string[]
       throwIfAborted(options.signal);
 
       if (error instanceof Error && error.name === "AbortError") {
-        throw new RuntimeError("OpenAI-compatible request timed out.", "LLM_TIMEOUT");
+        throw new RuntimeError("Model request timed out.", "LLM_TIMEOUT");
       }
 
       lastError = error;
       if (model === modelCandidates.at(-1)) {
-        throw new RuntimeError(error instanceof Error ? error.message : "OpenAI-compatible request failed.", "LLM_UNKNOWN_ERROR");
+        throw new RuntimeError(error instanceof Error ? error.message : "Model request failed.", "LLM_UNKNOWN_ERROR");
       }
     } finally {
       clearTimeout(timeoutId);
@@ -525,18 +366,12 @@ async function requestOpenAiCompatible(prompt: string, modelCandidates: string[]
 
   throw lastError instanceof RuntimeError
     ? lastError
-    : new RuntimeError(lastError instanceof Error ? lastError.message : "OpenAI-compatible request failed.", "LLM_UNKNOWN_ERROR");
+    : new RuntimeError(lastError instanceof Error ? lastError.message : "Model request failed.", "LLM_UNKNOWN_ERROR");
 }
 
 async function requestProvider(prompt: string, task: "simple" | "default", options: RequestOptions = {}) {
-  const provider = getConfiguredProvider();
-  const candidates = getModelCandidates(task, provider);
-
-  if (provider === "openai-compatible") {
-    return requestOpenAiCompatible(prompt, candidates, options);
-  }
-
-  return requestGemini(prompt, candidates, options);
+  const candidates = getModelCandidates(task);
+  return requestOpenAiCompatible(prompt, candidates, options);
 }
 
 async function requestProviderJson<T>(
@@ -550,7 +385,7 @@ async function requestProviderJson<T>(
   return {
     data: parsed,
     model: response.model,
-    provider: getConfiguredProvider(),
+    provider: "openai-compatible" as const,
   };
 }
 
