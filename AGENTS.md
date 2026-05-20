@@ -9,6 +9,11 @@
 - 当前主链：`LLM-driven bounded tool loop + RuntimeBrowserDriver + content bridge`。
 - 默认事实源读取顺序：`doc/checkpoint.md` → `doc/constraints.md` → `doc/spec.md`；涉及验收范围时再读 `doc/acceptance.md`。
 
+## 本地目录约定
+
+- `tmp/`：短生命周期中间文件和一次性调试输入输出；目录保留，内容默认不进入 Git。
+- `output/`：浏览器、Playwright、真实运行 smoke 等可复现或可审查的运行输出；默认不进入 Git。
+
 ## 架构约束
 
 - 面向 runtime / LLM 可见的能力，优先进入稳定 tool 或当前 `RuntimeBrowserDriver` / content bridge 主链。
