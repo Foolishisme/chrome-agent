@@ -2,8 +2,7 @@ import type {
   BrowserActionResult,
   BrowserClickInput,
   BrowserControlObservation,
-  BrowserEvaluateInput,
-  BrowserEvaluateResult,
+  BrowserDriver,
   BrowserLinkObservation,
   BrowserNavigateInput,
   BrowserObservation,
@@ -11,8 +10,6 @@ import type {
   BrowserOperationOptions,
   BrowserPressInput,
   BrowserRiskLevel,
-  BrowserScreenshot,
-  BrowserScreenshotInput,
   BrowserScrollInput,
   BrowserTabRef,
   BrowserTargetRef,
@@ -20,7 +17,6 @@ import type {
 } from "../../shared/browser-capability-contract";
 import { createBrowserPageProblem } from "../../shared/browser-capability-contract";
 import type { ActionResult, AgentAction, InteractiveElement, SnapshotData } from "../../shared/agent-domain-model";
-import type { BrowserDriver } from "../browser/capability/browser-driver-contract";
 import type { ExecuteActionResponse, SnapshotResponse } from "../../shared/extension-message-protocol";
 import { sendMessageToTab, waitForTabComplete } from "../runtime/tab-host";
 
@@ -306,23 +302,6 @@ class RuntimeBrowserDriver implements BrowserDriver {
     };
   }
 
-  async screenshot(_tabId: number, input?: BrowserScreenshotInput, options?: BrowserOperationOptions): Promise<BrowserScreenshot> {
-    throwIfAborted(options);
-    return {
-      mimeType: "image/png",
-      base64: "",
-      width: 0,
-      height: 0,
-      fullPage: input?.fullPage ?? false,
-      sanitized: false,
-      problems: [
-        createBrowserPageProblem("screenshot_failed", "Runtime BrowserDriver does not support screenshots yet.", {
-          recoverable: true,
-        }),
-      ],
-    };
-  }
-
   async click(tabId: number, input: BrowserClickInput, options?: BrowserOperationOptions): Promise<BrowserActionResult> {
     throwIfAborted(options);
     if (blockedRisk(input.riskLevel)) {
@@ -382,18 +361,6 @@ class RuntimeBrowserDriver implements BrowserDriver {
     return toBrowserActionResult(result.message, result);
   }
 
-  async evaluateLimited(_tabId: number, _input: BrowserEvaluateInput, options?: BrowserOperationOptions): Promise<BrowserEvaluateResult> {
-    throwIfAborted(options);
-    return {
-      status: "blocked",
-      message: "Runtime BrowserDriver does not expose evaluateLimited.",
-      problems: [
-        createBrowserPageProblem("evaluate_blocked", "Raw evaluate is blocked in the runtime BrowserDriver.", {
-          recoverable: false,
-        }),
-      ],
-    };
-  }
 }
 
 export function createRuntimeBrowserDriver(callbacks?: RuntimeBrowserDriverCallbacks) {

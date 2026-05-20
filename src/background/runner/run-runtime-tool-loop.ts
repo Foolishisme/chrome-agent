@@ -2,7 +2,7 @@ import { LIMITS } from "../../shared/agent-runtime-config";
 import { RuntimeError } from "../../shared/runtime-error";
 import type { SessionMemory } from "../../shared/agent-domain-model";
 import type { ActiveSession } from "../runtime/runtime-session-state";
-import type { BrowserDriver } from "../browser/capability/browser-driver-contract";
+import type { BrowserDriver } from "../../shared/browser-capability-contract";
 import {
   executeCommerceTask,
   executeDirectAnswerTask,

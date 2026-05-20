@@ -8,7 +8,7 @@ import type {
 } from "../../shared/agent-domain-model";
 import type { ToolExecutionContext } from "./tool-execution-context";
 
-function normalizeText(text: string | undefined) {
+function stripWhitespace(text: string | undefined) {
   return (text ?? "").replace(/\s+/g, "").toLowerCase();
 }
 
@@ -27,18 +27,18 @@ function getSearchPageSignals(snapshot: SnapshotData) {
 }
 
 export function hasMatchingQuery(snapshot: SnapshotData, searchQuery: string) {
-  const normalizedQuery = normalizeText(searchQuery);
+  const normalizedQuery = stripWhitespace(searchQuery);
   if (!normalizedQuery) {
     return false;
   }
 
   const queryTokens = searchQuery
     .split(/\s+/)
-    .map((token) => normalizeText(token))
+    .map((token) => stripWhitespace(token))
     .filter((token) => token.length >= 2);
 
   return getSearchPageSignals(snapshot).some((signal) => {
-    const normalizedSignal = normalizeText(signal);
+    const normalizedSignal = stripWhitespace(signal);
     return (
       normalizedSignal.includes(normalizedQuery) ||
       (queryTokens.length > 0 && queryTokens.every((token) => normalizedSignal.includes(token)))

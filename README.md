@@ -20,13 +20,15 @@
 - `src/background/tools/`
 - `src/background/llm/`
 - `src/background/browser/overview/explicit-url-overview.ts`
-- `src/background/browser/capability/types.ts`
 - `src/content/bridge.ts`
-- `src/content/index.ts`
+- `src/content/content-script-host.ts`
 - `src/content/scanner.ts`
-- `src/content/actions.ts`
+- `src/content/content-action-executor.ts`
 - `src/content/research.ts`
 - `src/content/extractor.ts`
+- `src/shared/agent-domain-model.ts`
+- `src/shared/extension-message-protocol.ts`
+- `src/shared/browser-capability-contract.ts`
 - `src/shared/`
 - `src/sidepanel/`
 
@@ -105,4 +107,4 @@ VITE_GEMINI_SIMPLE_MODEL_FALLBACK=gemini-2.5-flash-lite
 4. 选择“加载已解压的扩展程序”。
 5. 选择项目的 `dist/` 目录。
 
-更新日期：2026-05-11
+更新日期：2026-05-20

@@ -1,33 +1,20 @@
-import type { BrowserDriver } from "../browser/capability/browser-driver-contract";
+import type { BrowserDriver } from "../../shared/browser-capability-contract";
 import { decideRoundAction, type RoundDecisionResult } from "../llm/llm-client";
 import { appendLog } from "../runtime/runtime-session-state";
 import { ensureTerminalResult } from "../runtime/public-state";
-import { openCommerceSearchResults } from "../tools/commerce/open-commerce-search-results";
-import type { StepOptions } from "../tools/tool-execution-context";
-import type {
-  BrowserSearchResult,
-  BrowserSiteOverviewToolOutput,
-  BrowserWebDetailToolOutput,
-  CommerceResearchToolInput,
-  CommerceResearchToolOutput,
-} from "../tools/first-party-tool-contracts";
-import type {
-  FirstPartyToolHandlerContext,
-  FirstPartyToolRegistry,
-} from "../tools/first-party-tool-registry";
+import { runCommerceResearchDelegate } from "../tools/commerce/run-commerce-research-delegate";
+import type { StepOptions, ToolExecutionContext } from "../tools/tool-execution-context";
+import type { FirstPartyToolRegistry } from "../tools/first-party-tool-registry";
 import { executeFirstPartyTool } from "../tools/first-party-tool-registry";
 import type {
   ActionResult,
   AgentAction,
-  CommerceTaskSpec,
   FinalStatus,
   PlanStepStatus,
-  PublicResearchTaskSpec,
   ResearchCandidate,
   ResearchSourceResult,
   SessionMemory,
   SnapshotData,
-  SiteOverviewTaskSpec,
   ToolName,
 } from "../../shared/agent-domain-model";
 import type { ActiveSession } from "../runtime/runtime-session-state";
@@ -35,10 +22,22 @@ import {
   finalizeTaskResult,
 } from "../tools/adapters/finalize-task-result";
 import {
-  prepareCommerceCandidates,
   preparePublicResearchCandidates,
 } from "../tools/adapters/prepare-task-candidates";
 import { buildRuntimeTaskPlan } from "./task-plan-builder";
+import {
+  collectIssuesFromProblems,
+  dedupeStrings,
+  mergeResearchSources,
+  toResearchSourceResult,
+  toSiteOverviewSources,
+  toSourceCandidate,
+} from "../tools/data-mappers";
+import {
+  applyCommercePatch,
+  applyPublicResearchPatch,
+  applySiteOverviewPatch,
+} from "./task-spec-patch";
 
 export interface RuntimeToolLoopDeps {
   publishState(session: ActiveSession, asError?: boolean): Promise<void>;
@@ -62,21 +61,6 @@ const MAX_RUNTIME_ROUNDS = 2;
 
 function getPlanStep(memory: SessionMemory, stepId: string) {
   return memory.plan.find((step) => step.stepId === stepId);
-}
-
-function createAdapterContext(context: RuntimeToolExecutorContext) {
-  return {
-    memory: context.session.memory,
-    signal: context.session.abortController.signal,
-    scanPage: () => context.deps.scanPage(),
-    ensureUsableSnapshot: () => context.deps.ensureUsableSnapshot(),
-    executeAction: (action: AgentAction, stepSummary: string) => context.deps.executeAction(action, stepSummary),
-    settleAfterAction: (action: AgentAction) => context.deps.settleAfterAction(action),
-    appendLog: (source: "runtime" | "llm" | "content", level: "info" | "warn" | "error", message: string, detail?: unknown) =>
-      appendLog(context.session, source, level, message, detail),
-    recordStep: (options: StepOptions) => context.deps.recordStep(options),
-    pushState: (stepSummary?: string) => context.deps.pushState(stepSummary),
-  };
 }
 
 async function beginPlanStep(
@@ -117,118 +101,6 @@ async function finishPlanStep(
   await context.deps.publishState(context.session);
 }
 
-function toSourceCandidate(result: BrowserSearchResult, rank: number): ResearchCandidate {
-  return {
-    title: result.title,
-    url: result.url,
-    snippet: result.snippet,
-    source: result.source,
-    rank,
-  };
-}
-
-function collectIssuesFromProblems(
-  coverage: { limitations?: string[] } | undefined,
-  problems: Array<{ message: string }>,
-) {
-  return [
-    ...(coverage?.limitations ?? []),
-    ...problems.map((problem) => problem.message),
-  ].filter(Boolean);
-}
-
-function dedupeStrings(items: string[]) {
-  return Array.from(new Set(items.filter(Boolean)));
-}
-
-function mergeResearchSources(existing: ResearchSourceResult[], incoming: ResearchSourceResult[]) {
-  const merged = new Map<string, ResearchSourceResult>();
-
-  for (const source of existing) {
-    merged.set(source.sourceUrl, source);
-  }
-
-  for (const source of incoming) {
-    const current = merged.get(source.sourceUrl);
-    if (!current) {
-      merged.set(source.sourceUrl, source);
-      continue;
-    }
-
-    const nextIsBetter =
-      (source.status === "success" && current.status !== "success") || source.textLength > current.textLength;
-
-    merged.set(source.sourceUrl, {
-      ...(nextIsBetter ? source : current),
-      unresolvedIssues: dedupeStrings([...current.unresolvedIssues, ...source.unresolvedIssues]),
-    });
-  }
-
-  return Array.from(merged.values());
-}
-
-function clampPositiveInt(value: number | undefined, fallback: number, min: number, max: number) {
-  if (!Number.isFinite(value) || !value) {
-    return fallback;
-  }
-  return Math.min(max, Math.max(min, Math.round(value)));
-}
-
-function appendTaskNotes(notes: string[], notesAppend?: string[]) {
-  return dedupeStrings([...notes, ...(notesAppend ?? [])]);
-}
-
-function applyPublicResearchPatch(taskSpec: PublicResearchTaskSpec, decision: RoundDecisionResult): PublicResearchTaskSpec {
-  const patch = decision.taskSpecPatch ?? {};
-  return {
-    ...taskSpec,
-    searchQuery: patch.searchQuery?.trim() || taskSpec.searchQuery,
-    candidateLimit: clampPositiveInt(patch.candidateLimit, taskSpec.candidateLimit, 1, 10),
-    sourceTargetCount: clampPositiveInt(patch.sourceTargetCount, taskSpec.sourceTargetCount, 1, 5),
-    notes: appendTaskNotes(taskSpec.notes, patch.notesAppend),
-  };
-}
-
-function applySiteOverviewPatch(taskSpec: SiteOverviewTaskSpec, decision: RoundDecisionResult): SiteOverviewTaskSpec {
-  const patch = decision.taskSpecPatch ?? {};
-  const entryUrl = patch.entryUrl ?? taskSpec.entryUrl;
-  const nextTaskSpec: SiteOverviewTaskSpec = {
-    ...taskSpec,
-    entryUrl,
-    candidateLimit: clampPositiveInt(patch.candidateLimit, taskSpec.candidateLimit, 1, 10),
-    sourceTargetCount: clampPositiveInt(patch.sourceTargetCount, taskSpec.sourceTargetCount, 1, 5),
-    pageReadLimit: clampPositiveInt(patch.pageReadLimit, taskSpec.pageReadLimit, 1, 8),
-    notes: appendTaskNotes(taskSpec.notes, patch.notesAppend),
-  };
-
-  if (patch.officialSearchQuery?.trim()) {
-    nextTaskSpec.officialSearchQuery = patch.officialSearchQuery.trim();
-  }
-
-  if (entryUrl) {
-    nextTaskSpec.entryMode = "explicit_url";
-    try {
-      nextTaskSpec.targetDomain = new URL(entryUrl).hostname.replace(/^www\./, "");
-    } catch {
-      nextTaskSpec.targetDomain = taskSpec.targetDomain;
-    }
-  }
-
-  return nextTaskSpec;
-}
-
-function applyCommercePatch(taskSpec: CommerceTaskSpec, decision: RoundDecisionResult): CommerceTaskSpec {
-  const patch = decision.taskSpecPatch ?? {};
-  return {
-    ...taskSpec,
-    searchQuery: patch.searchQuery?.trim() || taskSpec.searchQuery,
-    topK: clampPositiveInt(patch.topK, taskSpec.topK, 1, 8),
-    llmInputLimit: clampPositiveInt(patch.llmInputLimit, taskSpec.llmInputLimit, 1, 10),
-    extractLimit: clampPositiveInt(patch.extractLimit, taskSpec.extractLimit, 1, 20),
-    notes: appendTaskNotes(taskSpec.notes, patch.notesAppend),
-  };
-}
-
 function rebuildPlanForTaskSpec(context: RuntimeToolExecutorContext, stepId: string) {
   const taskSpec = context.session.memory.taskSpec;
   if (!taskSpec) {
@@ -247,108 +119,6 @@ function rebuildPlanForTaskSpec(context: RuntimeToolExecutorContext, stepId: str
   });
 }
 
-function toResearchSourceResult(candidate: ResearchCandidate, detail: BrowserWebDetailToolOutput): ResearchSourceResult {
-  const unresolvedIssues = collectIssuesFromProblems(detail.coverage, detail.problems);
-  const facts = detail.keyFacts.map((fact) => ({
-    text: fact.text,
-    evidenceUrl: fact.evidenceUrl ?? candidate.url,
-    evidenceTitle: fact.evidenceTitle ?? detail.pageTitle,
-  }));
-
-  return {
-    candidate,
-    status: detail.status === "success" ? "success" : detail.status === "partial" ? "partial" : "failed",
-    pageTitle: detail.pageTitle,
-    bodyExcerpt: detail.pageSummary,
-    sourceUrl: candidate.url,
-    unresolvedIssues,
-    textLength: detail.pageSummary.length,
-    sourceFactCard: {
-      title: detail.pageTitle,
-      url: candidate.url,
-      summary: detail.pageSummary,
-      facts,
-      caveats: unresolvedIssues,
-      status: detail.status === "success" ? "success" : "partial",
-    },
-  };
-}
-
-function toSiteOverviewSources(result: BrowserSiteOverviewToolOutput): ResearchSourceResult[] {
-  return result.pagesRead.map((page, index) => {
-    const unresolvedIssues = [
-      ...(page.status !== "success" ? [`${page.title} was only partially covered during site overview.`] : []),
-      ...(index === 0 ? result.gaps : []),
-    ];
-    const summary =
-      index === 0
-        ? result.siteSummary
-        : `${page.title} was included as the ${page.role} page during the same-site overview.`;
-
-    return {
-      candidate: {
-        title: page.title,
-        url: page.url,
-        source: (() => {
-          try {
-            return new URL(page.url).hostname.replace(/^www\./, "");
-          } catch {
-            return undefined;
-          }
-        })(),
-        rank: index + 1,
-      },
-      status: page.status,
-      pageTitle: page.title,
-      bodyExcerpt: summary,
-      sourceUrl: page.url,
-      unresolvedIssues,
-      textLength: summary.length,
-      sourceFactCard: {
-        title: page.title,
-        url: page.url,
-        summary,
-        facts: [
-          {
-            text: `${page.title} was classified as the ${page.role} page in the overview.`,
-            evidenceUrl: page.url,
-            evidenceTitle: page.title,
-          },
-        ],
-        caveats: unresolvedIssues,
-        status: page.status === "success" ? "success" : "partial",
-      },
-    };
-  });
-}
-
-function toCommerceShortlist(memory: SessionMemory) {
-  return memory.extractedItems.map((item) => ({
-    title: item.title,
-    url: item.url,
-    priceText: item.priceText,
-    shopText: item.shopText,
-    summary: item.summary,
-  }));
-}
-
-function toCommerceEvidence(memory: SessionMemory) {
-  const evidence = [];
-  if ("searchQuery" in (memory.taskSpec ?? {})) {
-    evidence.push({
-      text: `Candidates were collected for query "${(memory.taskSpec as { searchQuery?: string }).searchQuery ?? memory.goal}".`,
-      evidenceTitle: "Commerce search helper",
-    });
-  }
-  if (memory.filterDiagnostics?.kind === "commerce") {
-    evidence.push({
-      text: `Filter kept ${memory.filterDiagnostics.finalCount} items out of ${memory.filterDiagnostics.inputCount}.`,
-      evidenceTitle: "Commerce filter diagnostics",
-    });
-  }
-  return evidence;
-}
-
 async function executeSearchStep(
   context: RuntimeToolExecutorContext,
   stepId: string,
@@ -364,7 +134,6 @@ async function executeSearchStep(
     {
       driver: context.driver,
       signal: context.session.abortController.signal,
-      commerceResearchDelegate: (input, handlerContext) => runCommerceDelegate(context, input, handlerContext),
     },
   );
 
@@ -441,7 +210,6 @@ async function executeWebDetailBatch(context: RuntimeToolExecutorContext, stepId
       {
         driver: context.driver,
         signal: context.session.abortController.signal,
-        commerceResearchDelegate: (input, handlerContext) => runCommerceDelegate(context, input, handlerContext),
       },
     );
 
@@ -550,7 +318,6 @@ async function executeSiteOverviewStep(context: RuntimeToolExecutorContext, step
     {
       driver: context.driver,
       signal: context.session.abortController.signal,
-      commerceResearchDelegate: (input, handlerContext) => runCommerceDelegate(context, input, handlerContext),
     },
   );
 
@@ -584,6 +351,17 @@ async function executeCommerceSkillStep(context: RuntimeToolExecutorContext, ste
 
   await context.ensureBudget();
   await beginPlanStep(context, stepId, "skill.commerceResearch", getPlanStep(context.session.memory, stepId)?.goal ?? "Commerce research");
+  const toolContext: ToolExecutionContext = {
+    memory: context.session.memory,
+    signal: context.session.abortController.signal,
+    scanPage: () => context.deps.scanPage(),
+    ensureUsableSnapshot: () => context.deps.ensureUsableSnapshot(),
+    executeAction: (action, stepSummary) => context.deps.executeAction(action, stepSummary),
+    settleAfterAction: (action) => context.deps.settleAfterAction(action),
+    appendLog: (source, level, message, detail) => appendLog(context.session, source, level, message, detail),
+    recordStep: (options) => context.deps.recordStep(options),
+    pushState: (stepSummary) => context.deps.pushState(stepSummary),
+  };
   const result = await executeFirstPartyTool(
     context.registry,
     "skill.commerceResearch",
@@ -600,7 +378,7 @@ async function executeCommerceSkillStep(context: RuntimeToolExecutorContext, ste
     {
       driver: context.driver,
       signal: context.session.abortController.signal,
-      commerceResearchDelegate: (input, handlerContext) => runCommerceDelegate(context, input, handlerContext),
+      commerceResearchDelegate: () => runCommerceResearchDelegate(toolContext, taskSpec),
     },
   );
 
@@ -698,80 +476,18 @@ async function executeFinalizeTaskResultStep(context: RuntimeToolExecutorContext
     "finalizeTaskResult",
     getPlanStep(context.session.memory, stepId)?.goal ?? "Generate the final result",
   );
-  const result = await finalizeTaskResult(createAdapterContext(context));
+  const result = await finalizeTaskResult({
+    memory: context.session.memory,
+    signal: context.session.abortController.signal,
+    appendLog: (source, level, message, detail) => appendLog(context.session, source, level, message, detail),
+    recordStep: (options) => context.deps.recordStep(options),
+    pushState: (stepSummary) => context.deps.pushState(stepSummary),
+  });
   await finishPlanStep(context, stepId, "succeeded", result.summary);
   context.session.memory.runtimeMeta.status = "done";
   context.session.memory.runtimeMeta.currentTool = undefined;
   context.session.memory.liveStepSummary = "Final result is ready.";
   await context.deps.publishState(context.session);
-}
-
-async function runCommerceDelegate(
-  context: RuntimeToolExecutorContext,
-  _input: CommerceResearchToolInput,
-  _handlerContext: FirstPartyToolHandlerContext,
-): Promise<CommerceResearchToolOutput> {
-  const openResult = await openCommerceSearchResults(createAdapterContext(context));
-  if (openResult.stepStatus !== "succeeded") {
-    const openStatus: CommerceResearchToolOutput["status"] =
-      openResult.stepStatus === "blocked"
-        ? "blocked"
-        : openResult.status === "partial"
-          ? "partial"
-          : "failed";
-    return {
-      status: openStatus,
-      shortlist: [],
-      evidence: [],
-      gaps: [openResult.summary],
-      coverage: {
-        scope: "Commerce helper path inside runtime tool loop.",
-        limitations: ["Search preparation failed before candidate extraction."],
-      },
-      problems: [
-        {
-          code: openResult.errorCode ?? "COMMERCE_SEARCH_PREP_FAILED",
-          message: openResult.summary,
-        },
-      ],
-    };
-  }
-
-  const taskSpec = context.session.memory.taskSpec;
-  if (!taskSpec || taskSpec.taskType !== "commerce_search") {
-    throw new Error("Commerce candidate preparation requires a commerce task spec.");
-  }
-
-  const collectResult = await prepareCommerceCandidates(createAdapterContext(context), taskSpec);
-  const shortlist = toCommerceShortlist(context.session.memory);
-  const evidence = toCommerceEvidence(context.session.memory);
-  const gaps = shortlist.length > 0 ? [] : [collectResult.summary];
-  const collectStatus: CommerceResearchToolOutput["status"] =
-    collectResult.status === "success"
-      ? "success"
-      : collectResult.status === "partial"
-        ? "partial"
-        : "failed";
-
-  return {
-    status: shortlist.length > 0 ? collectStatus : collectStatus,
-    shortlist,
-    evidence,
-    gaps,
-    coverage: {
-      scope: "Runtime adapter commerce path.",
-      limitations: shortlist.length > 0 ? [] : ["No shortlisted items were preserved after adapter candidate preparation."],
-    },
-    problems:
-      shortlist.length > 0
-        ? []
-        : [
-            {
-              code: collectResult.errorCode ?? "NO_COMMERCE_SHORTLIST",
-              message: collectResult.summary,
-            },
-          ],
-  };
 }
 
 function applyRoundDecisionPatch(context: RuntimeToolExecutorContext, decision: RoundDecisionResult) {

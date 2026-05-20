@@ -38,10 +38,8 @@ export type BrowserPageProblemCode =
   | "cdp_attach_failed"
   | "permission_denied"
   | "stale_target"
-  | "screenshot_failed"
   | "operation_failed"
-  | "operation_aborted"
-  | "evaluate_blocked";
+  | "operation_aborted";
 
 export interface BrowserPageProblem {
   code: BrowserPageProblemCode;
@@ -115,20 +113,6 @@ export interface BrowserActionResult {
   observation?: Record<string, unknown>;
 }
 
-export interface BrowserScreenshot {
-  mimeType: "image/png" | "image/jpeg" | "image/webp";
-  base64: string;
-  width: number;
-  height: number;
-  fullPage: boolean;
-  sanitized: boolean;
-  problems: BrowserPageProblem[];
-}
-
-export interface BrowserEvaluateResult extends BrowserActionResult {
-  value?: unknown;
-}
-
 export interface BrowserOperationOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
@@ -143,10 +127,6 @@ export interface BrowserOpenTabInput {
 export interface BrowserNavigateInput {
   url: string;
   active?: boolean;
-}
-
-export interface BrowserScreenshotInput {
-  fullPage?: boolean;
 }
 
 export interface BrowserClickInput {
@@ -172,8 +152,17 @@ export interface BrowserScrollInput {
   amount?: number;
 }
 
-export interface BrowserEvaluateInput {
-  scriptId: string;
-  args?: Record<string, unknown>;
-  riskLevel?: BrowserRiskLevel;
+export interface BrowserDriver {
+  listTabs(options?: BrowserOperationOptions): Promise<BrowserTabRef[]>;
+  openTab(input: BrowserOpenTabInput, options?: BrowserOperationOptions): Promise<BrowserTabRef>;
+  closeTab(tabId: number, options?: BrowserOperationOptions): Promise<BrowserActionResult>;
+  focusTab(tabId: number, options?: BrowserOperationOptions): Promise<BrowserTabRef>;
+  navigate(tabId: number, input: BrowserNavigateInput, options?: BrowserOperationOptions): Promise<BrowserActionResult>;
+  reload(tabId: number, options?: BrowserOperationOptions): Promise<BrowserActionResult>;
+  waitForStable(tabId: number, options?: BrowserOperationOptions): Promise<BrowserActionResult>;
+  observe(tabId: number, options?: BrowserOperationOptions): Promise<BrowserObservation>;
+  click(tabId: number, input: BrowserClickInput, options?: BrowserOperationOptions): Promise<BrowserActionResult>;
+  type(tabId: number, input: BrowserTypeInput, options?: BrowserOperationOptions): Promise<BrowserActionResult>;
+  press(tabId: number, input: BrowserPressInput, options?: BrowserOperationOptions): Promise<BrowserActionResult>;
+  scroll(tabId: number, input: BrowserScrollInput, options?: BrowserOperationOptions): Promise<BrowserActionResult>;
 }

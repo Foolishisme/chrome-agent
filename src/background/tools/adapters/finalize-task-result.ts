@@ -1,5 +1,5 @@
 import { RuntimeError } from "../../../shared/runtime-error";
-import type { DebugLogEntry, DirectAnswerTaskSpec, FinalResult, PublicResearchTaskSpec, SearchTaskSpec, SessionMemory, SiteOverviewTaskSpec } from "../../../shared/agent-domain-model";
+import type { DirectAnswerTaskSpec, FinalResult, PublicResearchTaskSpec, SearchTaskSpec, SessionMemory, SiteOverviewTaskSpec } from "../../../shared/agent-domain-model";
 import { generateDirectAnswerResult, generateFinalResult } from "../../llm/llm-client";
 import {
   buildCommerceFinalMarkdown,
@@ -13,15 +13,9 @@ import {
   getFinalStatusForResearch,
 } from "../final-result-builders";
 import { isCommerceTask, isDirectAnswerTask, isReadableResearchTask } from "../task-spec-guards";
-import type { StepOptions } from "../tool-execution-context";
+import type { ToolExecutionContext } from "../tool-execution-context";
 
-export interface FinalizeTaskResultContext {
-  memory: SessionMemory;
-  signal: AbortSignal;
-  appendLog(source: DebugLogEntry["source"], level: DebugLogEntry["level"], message: string, detail?: unknown): void;
-  recordStep(options: StepOptions): void;
-  pushState(stepSummary?: string): Promise<void>;
-}
+type FinalizeTaskResultContext = Pick<ToolExecutionContext, "memory" | "signal" | "appendLog" | "recordStep" | "pushState">;
 
 export interface FinalizeTaskResultOutput {
   finalResult: FinalResult;

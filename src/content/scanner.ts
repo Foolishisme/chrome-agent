@@ -103,7 +103,7 @@ function textOf(element: Element | null | undefined): string {
   return element?.textContent?.replace(/\s+/g, " ").trim() ?? "";
 }
 
-function normalizeText(value: string, limit: number) {
+function truncateNormalized(value: string, limit: number) {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (!normalized) {
     return "";
@@ -494,7 +494,7 @@ function computeSemanticName(element: HTMLElement, role: SemanticRole) {
     name = element.getAttribute("alt") ?? "";
   }
 
-  return normalizeText(name, SEMANTIC_NAME_LIMIT);
+  return truncateNormalized(name, SEMANTIC_NAME_LIMIT);
 }
 
 function getHeadingLevel(element: HTMLElement) {
@@ -516,7 +516,7 @@ function getSemanticText(element: HTMLElement, role: SemanticRole) {
     return undefined;
   }
 
-  const text = normalizeText(textOf(element), SEMANTIC_TEXT_LIMIT);
+  const text = truncateNormalized(textOf(element), SEMANTIC_TEXT_LIMIT);
   return text || undefined;
 }
 

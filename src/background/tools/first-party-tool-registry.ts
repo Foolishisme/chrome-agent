@@ -1,5 +1,4 @@
-import type { BrowserDriver } from "../browser/capability/browser-driver-contract";
-import type { BrowserLinkObservation, BrowserObservation, BrowserPageProblem } from "../../shared/browser-capability-contract";
+import type { BrowserDriver, BrowserLinkObservation, BrowserObservation, BrowserPageProblem } from "../../shared/browser-capability-contract";
 import { runExplicitUrlOverview } from "../browser/overview/explicit-url-overview";
 import {
   FIRST_PARTY_LLM_VISIBLE_TOOL_CONTRACTS,
@@ -432,7 +431,7 @@ export function createDefaultFirstPartyToolRegistry() {
   return createFirstPartyToolRegistry(DEFAULT_FIRST_PARTY_TOOL_HANDLERS);
 }
 
-export function validateFirstPartyToolRegistry(registry: FirstPartyToolRegistry) {
+function validateFirstPartyToolRegistry(registry: FirstPartyToolRegistry) {
   const registryKeys = Object.keys(registry).sort();
   const expectedKeys = [...FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES].sort();
 

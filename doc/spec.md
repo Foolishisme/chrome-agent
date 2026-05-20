@@ -14,7 +14,6 @@
 - `src/background/runner/`
 - `src/background/tools/`
 - `src/background/browser/overview/explicit-url-overview.ts`
-- `src/background/browser/capability/browser-driver-contract.ts`
 - `src/content/bridge.ts`
 - `src/content/content-script-host.ts`
 - `src/content/scanner.ts`

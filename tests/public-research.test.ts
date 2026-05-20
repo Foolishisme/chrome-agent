@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  filterResearchCandidates,
-  preparePublicResearchCandidates,
-} from "../src/background/tools/adapters/prepare-task-candidates";
+import { preparePublicResearchCandidates } from "../src/background/tools/adapters/prepare-task-candidates";
 import { finalizeTaskResult } from "../src/background/tools/adapters/finalize-task-result";
 import { extractGoogleSearchResults, extractPageFacts } from "../src/content/research";
 import type { SessionMemory } from "../src/shared/agent-domain-model";
@@ -140,9 +137,17 @@ describe("public research candidate handling", () => {
     });
   });
 
-  it("filters ads, duplicates, Google internal urls, and pdf links", () => {
-    const result = filterResearchCandidates(
-      [
+  it("filters ads, duplicates, Google internal urls, and pdf links", async () => {
+    reorderResearchCandidatesMock.mockImplementationOnce(async (input) => ({
+      candidates: input.candidates,
+      reason: "rule order",
+      source: "rule" as const,
+    }));
+
+    const result = await preparePublicResearchCandidates({
+      goal: "Research browser automation",
+      searchQuery: "browser automation",
+      candidates: [
         { title: "Ad", url: "https://example.com/ad", rank: 1, isAd: true },
         { title: "Doc", url: "https://example.com/doc", rank: 2 },
         { title: "Doc duplicate", url: "https://example.com/doc#intro", rank: 3 },
@@ -150,8 +155,19 @@ describe("public research candidate handling", () => {
         { title: "Pdf", url: "https://example.com/file.pdf", rank: 5 },
         { title: "Guide", url: "https://example.com/guide", rank: 6 },
       ],
-      5,
-    );
+      taskSpec: {
+        taskType: "public_research",
+        originalGoal: "Research browser automation",
+        outputMode: "inline",
+        searchQuery: "browser automation",
+        querySource: "rule",
+        notes: [],
+        searchEngine: "google",
+        candidateLimit: 5,
+        sourceTargetCount: 3,
+      },
+      signal: new AbortController().signal,
+    });
 
     expect(result.candidates.map((candidate) => candidate.url)).toEqual([
       "https://example.com/doc",

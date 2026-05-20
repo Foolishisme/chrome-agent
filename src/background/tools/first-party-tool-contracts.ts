@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 export const FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES = [
   "browser.search",
@@ -441,24 +441,3 @@ export const FIRST_PARTY_LLM_VISIBLE_TOOL_CONTRACTS = {
   "browser.siteOverview": siteOverviewContract,
   "skill.commerceResearch": commerceResearchContract,
 } as const satisfies Record<FirstPartyLlmVisibleToolName, FirstPartyToolContract<z.ZodTypeAny, z.ZodTypeAny>>;
-
-export function getFirstPartyToolContract(name: FirstPartyLlmVisibleToolName) {
-  return FIRST_PARTY_LLM_VISIBLE_TOOL_CONTRACTS[name];
-}
-
-export function listFirstPartyToolContracts() {
-  return FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES.map((name) => FIRST_PARTY_LLM_VISIBLE_TOOL_CONTRACTS[name]);
-}
-
-export function buildFirstPartyToolPromptCatalog() {
-  return listFirstPartyToolContracts()
-    .map((contract) =>
-      [
-        `Tool: ${contract.name}`,
-        `Description: ${contract.description}`,
-        `When to use: ${contract.promptGuidance.whenToUse}`,
-        `When not to use: ${contract.promptGuidance.whenNotToUse}`,
-      ].join("\n"),
-    )
-    .join("\n\n");
-}

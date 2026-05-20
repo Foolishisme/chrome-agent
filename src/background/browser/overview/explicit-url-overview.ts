@@ -1,4 +1,4 @@
-import type { BrowserDriver } from "../capability/browser-driver-contract";
+import type { BrowserDriver } from "../../../shared/browser-capability-contract";
 
 export interface ExplicitUrlOverviewInput {
   url: string;

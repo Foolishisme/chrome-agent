@@ -5,7 +5,6 @@ import {
   createDefaultFirstPartyToolRegistry,
   createFirstPartyToolRegistry,
   executeFirstPartyTool,
-  validateFirstPartyToolRegistry,
 } from "../../src/background/tools/first-party-tool-registry";
 
 function createObservation(overrides: Partial<BrowserObservation> = {}): BrowserObservation {
@@ -40,7 +39,6 @@ describe("first-party tool registry", () => {
   it("validates the default registry shape and metadata completeness", () => {
     const registry = createDefaultFirstPartyToolRegistry();
 
-    expect(() => validateFirstPartyToolRegistry(registry)).not.toThrow();
     expect(Object.keys(registry)).toEqual([
       "browser.search",
       "browser.webDetail",

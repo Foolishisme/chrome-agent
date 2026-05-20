@@ -23,7 +23,6 @@
 - `src/background/tools/`
 - `src/background/llm/`
 - `src/background/browser/overview/explicit-url-overview.ts`
-- `src/background/browser/capability/browser-driver-contract.ts`
 - `src/content/bridge.ts`
 - `src/content/content-script-host.ts`
 - `src/content/scanner.ts`
@@ -59,7 +58,7 @@
 ## 当前边界
 
 - 当前只保留实际运行链；未接入主链的平行 driver、content bridge、低层 facade、QA route 和 future helper 已不属于当前事实源。
-- `RuntimeBrowserDriver` 是默认浏览器驱动；测试中的 mock driver 位于 `tests/test-support/`。
+- `RuntimeBrowserDriver` 是默认浏览器驱动；`BrowserDriver` 合约位于 `src/shared/browser-capability-contract.ts`；测试中的 mock driver 位于 `tests/test-support/`。
 - first-party tool contracts 仍是当前稳定 LLM-visible 能力边界。
 - 思考链、中间推理过程、raw prompt 和 raw model intermediate text 不进入前端、archive 或 run log。
 - 继续开发时，新增能力必须先证明 active call site、当前测试保护、安全/数据风险保护或事实源要求。
@@ -68,9 +67,12 @@
 
 最近记录通过的检查：
 
+- `npm run check:fast`
+- `npm run check:repo`
 - `npx tsc --noEmit`
-- `npm test -- tests/runtime.test.ts tests/runtime-bootstrap.test.ts tests/runtime-tools.test.ts tests/public-research.test.ts tests/site-overview.test.ts tests/sidepanel.test.ts tests/session-archive.test.ts tests/run-log-store.test.ts tests/result-filter.test.ts`
+- `npm test -- tests/query-compiler.test.ts tests/agent-runtime.test.ts tests/runtime-tool-loop/runtime-tool-loop.test.ts tests/public-research.test.ts tests/site-overview.test.ts tests/sidepanel-interactions.test.ts tests/session-archive.test.ts tests/run-log-store.test.ts`
 - `npm test`
+- `npm run check:docs`
 - `npm run build`
 - future-pattern `git grep` 静态检查
 

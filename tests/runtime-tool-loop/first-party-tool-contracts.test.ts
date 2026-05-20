@@ -2,9 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   FIRST_PARTY_LLM_VISIBLE_TOOL_CONTRACTS,
   FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES,
-  buildFirstPartyToolPromptCatalog,
-  getFirstPartyToolContract,
-  listFirstPartyToolContracts,
 } from "../../src/background/tools/first-party-tool-contracts";
 
 describe("first-party tool contracts", () => {
@@ -16,14 +13,14 @@ describe("first-party tool contracts", () => {
       "skill.commerceResearch",
     ]);
     expect(Object.keys(FIRST_PARTY_LLM_VISIBLE_TOOL_CONTRACTS)).toEqual(FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES);
-    expect(buildFirstPartyToolPromptCatalog()).not.toContain("Tool: open");
-    expect(buildFirstPartyToolPromptCatalog()).not.toContain("Tool: navigate");
-    expect(buildFirstPartyToolPromptCatalog()).not.toContain("Tool: observe");
-    expect(buildFirstPartyToolPromptCatalog()).not.toContain("Tool: extractLinksAndControls");
+    expect(FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES).not.toContain("open");
+    expect(FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES).not.toContain("navigate");
+    expect(FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES).not.toContain("observe");
+    expect(FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES).not.toContain("extractLinksAndControls");
   });
 
   it("keeps browser.search on first-page rule-filtered results without topK", () => {
-    const contract = getFirstPartyToolContract("browser.search");
+    const contract = FIRST_PARTY_LLM_VISIBLE_TOOL_CONTRACTS["browser.search"];
 
     expect(() => contract.inputSchema.parse({ query: "OpenAI", topK: 5 })).toThrow();
     expect(contract.inputSchema.parse(contract.examples.minimalInput)).toEqual(contract.examples.minimalInput);
@@ -38,8 +35,8 @@ describe("first-party tool contracts", () => {
   });
 
   it("keeps webDetail and siteOverview as separate tools with validated examples", () => {
-    const webDetailContract = getFirstPartyToolContract("browser.webDetail");
-    const siteOverviewContract = getFirstPartyToolContract("browser.siteOverview");
+    const webDetailContract = FIRST_PARTY_LLM_VISIBLE_TOOL_CONTRACTS["browser.webDetail"];
+    const siteOverviewContract = FIRST_PARTY_LLM_VISIBLE_TOOL_CONTRACTS["browser.siteOverview"];
 
     expect(webDetailContract.outputSchema.parse(webDetailContract.examples.successOutput)).toMatchObject({
       status: "success",
@@ -55,7 +52,7 @@ describe("first-party tool contracts", () => {
   });
 
   it("marks commerce research as a black-box skill with navigation side effects", () => {
-    const contract = getFirstPartyToolContract("skill.commerceResearch");
+    const contract = FIRST_PARTY_LLM_VISIBLE_TOOL_CONTRACTS["skill.commerceResearch"];
 
     expect(contract.sideEffectLevel).toBe("external_navigation");
     expect(contract.parallelPolicy).toBe("singleton");
@@ -70,7 +67,8 @@ describe("first-party tool contracts", () => {
   });
 
   it("exposes complete metadata and prompt guidance for every first-party tool", () => {
-    for (const contract of listFirstPartyToolContracts()) {
+    for (const name of FIRST_PARTY_LLM_VISIBLE_TOOL_NAMES) {
+      const contract = FIRST_PARTY_LLM_VISIBLE_TOOL_CONTRACTS[name];
       expect(contract.description.length).toBeGreaterThan(0);
       expect(contract.sideEffectLevel).toMatch(/read_only|external_navigation/);
       expect(contract.parallelPolicy).toMatch(/same_resource_serial|singleton/);

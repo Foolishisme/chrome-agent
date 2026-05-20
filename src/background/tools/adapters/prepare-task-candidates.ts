@@ -1,46 +1,21 @@
 import type {
-  ActionResult,
   CommerceFilterDiagnostics,
   ExtractedItem,
   PublicResearchTaskSpec,
   ResearchCandidate,
   ResearchFilterDiagnostics,
   SearchTaskSpec,
-  SessionMemory,
-  SiteOverviewTaskSpec,
-  SnapshotData,
 } from "../../../shared/agent-domain-model";
-import { reorderResearchCandidates, reorderSiteCandidates } from "../../llm/llm-client";
+import { reorderResearchCandidates } from "../../llm/llm-client";
 import { dedupeIssues } from "../final-result-builders";
 import { ensureUsableSnapshotWithDialogRecovery, scrollForMoreCandidates } from "../commerce-search-page-flow";
-import type { StepOptions, ToolExecutionContext } from "../tool-execution-context";
-
-export interface CandidatePreparationContext {
-  memory: SessionMemory;
-  signal: AbortSignal;
-  scanPage(): Promise<SnapshotData>;
-  ensureUsableSnapshot(): Promise<SnapshotData>;
-  executeAction(action: { type: "EXTRACT_LIST"; limit?: number } | { type: "EXTRACT_SEARCH_RESULTS"; limit?: number } | { type: "EXTRACT_SITE_NAV_LINKS"; limit?: number; baseUrl?: string } | { type: "SCROLL"; direction: "up" | "down"; amount?: number } | { type: "RECOVER_CLOSE_DIALOG" } | { type: "NAVIGATE"; url: string }, stepSummary: string): Promise<ActionResult>;
-  settleAfterAction(action: { type: "EXTRACT_LIST"; limit?: number } | { type: "EXTRACT_SEARCH_RESULTS"; limit?: number } | { type: "EXTRACT_SITE_NAV_LINKS"; limit?: number; baseUrl?: string } | { type: "SCROLL"; direction: "up" | "down"; amount?: number } | { type: "RECOVER_CLOSE_DIALOG" } | { type: "NAVIGATE"; url: string }): Promise<void>;
-  appendLog: ToolExecutionContext["appendLog"];
-  recordStep(options: StepOptions): void;
-  pushState(stepSummary?: string): Promise<void>;
-}
+import type { ToolExecutionContext } from "../tool-execution-context";
 
 export interface PreparedPublicResearchCandidates {
   candidates: ResearchCandidate[];
   diagnostics: ResearchFilterDiagnostics;
   reason: string;
   source: "llm-lite" | "rule";
-}
-
-export interface PreparedSiteOverviewCandidates {
-  homepageCandidate: ResearchCandidate;
-  candidates: ResearchCandidate[];
-  diagnostics: ResearchFilterDiagnostics;
-  reason: string;
-  source: "llm-lite" | "rule";
-  targetDomain: string;
 }
 
 export interface PrepareCommerceCandidatesResult {
@@ -85,78 +60,6 @@ function isPdfUrl(url: string) {
   return /\.pdf(?:$|[?#])/i.test(url);
 }
 
-function getHostname(url: string) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
-}
-
-function isSameOrTrustedSubdomain(url: string, targetDomain: string | undefined) {
-  if (!targetDomain) {
-    return true;
-  }
-
-  const hostname = getHostname(url);
-  const normalizedTarget = targetDomain.replace(/^www\./, "");
-  return hostname === normalizedTarget || hostname.endsWith(`.${normalizedTarget}`);
-}
-
-function isLowValueSiteLink(candidate: ResearchCandidate) {
-  const text = `${candidate.title} ${candidate.linkText ?? ""} ${candidate.url}`.toLowerCase();
-  return /login|sign.?in|sign.?up|account|cookie|privacy|terms|policy|legal|careers?|jobs?|mailto:|facebook|twitter|x\.com|linkedin|instagram|youtube|weibo|wechat|github\.com|濞夈劌鍞絴閻ц缍峾闂呮劗顫唡閺夆剝顑檤濞夋洖绶閹锋稖浠抾閼卞奔缍厊缁€鎯х崯|閼辨梻閮撮幋鎴滄粦|contact/.test(text);
-}
-
-function pathDepth(url: string) {
-  try {
-    return new URL(url).pathname.split("/").filter(Boolean).length;
-  } catch {
-    return 99;
-  }
-}
-
-function scoreSiteCandidate(candidate: ResearchCandidate, goal: string) {
-  const text = `${candidate.title} ${candidate.linkText ?? ""} ${candidate.url}`.toLowerCase();
-  let score = 0;
-
-  if (candidate.linkLocation === "header" || candidate.linkLocation === "nav") {
-    score += 40;
-  } else if (candidate.linkLocation === "main") {
-    score += 20;
-  } else if (candidate.linkLocation === "footer") {
-    score -= 10;
-  }
-
-  if (/products?|product|platform|solutions?|docs?|documentation|pricing|features?|developers?|api/.test(text)) {
-    score += 30;
-  }
-  if (/about|company|customers?|case|blog|news|resources?/.test(text)) {
-    score += 10;
-  }
-  if (/login|sign.?in|sign.?up|account|privacy|terms|legal|careers?|jobs?/.test(text)) {
-    score -= 60;
-  }
-
-  const normalizedGoal = goal.toLowerCase();
-  for (const token of normalizedGoal.split(/\s+/).filter((item) => item.length >= 3)) {
-    if (text.includes(token)) {
-      score += 5;
-    }
-  }
-
-  const depth = pathDepth(candidate.url);
-  if (depth <= 1) {
-    score += 12;
-  } else if (depth === 2) {
-    score += 6;
-  } else if (depth >= 4) {
-    score -= 10;
-  }
-
-  return score;
-}
-
 function parsePrice(priceText: string) {
   const matched = priceText.replace(/,/g, "").match(/(\d{2,6}(?:\.\d{1,2})?)/);
   return matched ? Number(matched[1]) : undefined;
@@ -181,7 +84,7 @@ function formatBudgetRange(spec: SearchTaskSpec) {
   return `${spec.budgetMin ?? 0}-${spec.budgetMax ?? "max"} RMB`;
 }
 
-export function filterExtractedItems(items: ExtractedItem[], taskSpec: SearchTaskSpec) {
+function filterExtractedItems(items: ExtractedItem[], taskSpec: SearchTaskSpec) {
   const dedupedItems = dedupeItems(items);
   const budgetMatchedItems =
     taskSpec.budgetMin || taskSpec.budgetMax
@@ -220,7 +123,7 @@ export function filterExtractedItems(items: ExtractedItem[], taskSpec: SearchTas
   };
 }
 
-export function filterResearchCandidates(candidates: ResearchCandidate[], candidateLimit: number) {
+function filterResearchCandidates(candidates: ResearchCandidate[], candidateLimit: number) {
   const seen = new Set<string>();
   let skippedAdCount = 0;
   let skippedInternalCount = 0;
@@ -286,111 +189,6 @@ export function filterResearchCandidates(candidates: ResearchCandidate[], candid
   };
 }
 
-export function filterSiteNavCandidates(
-  candidates: ResearchCandidate[],
-  taskSpec: SiteOverviewTaskSpec,
-  options: {
-    homepageUrl: string;
-    goal: string;
-  },
-) {
-  const seen = new Set<string>();
-  let skippedExternalCount = 0;
-  let skippedDuplicateCount = 0;
-  let skippedPdfCount = 0;
-  let skippedInvalidCount = 0;
-  let skippedLowValueCount = 0;
-  const targetDomain = taskSpec.targetDomain ?? getHostname(options.homepageUrl);
-
-  const scoredCandidates: ResearchCandidate[] = [];
-
-  for (const candidate of candidates) {
-    const normalizedUrl = normalizeResearchUrl(candidate.url);
-    if (!normalizedUrl) {
-      skippedInvalidCount += 1;
-      continue;
-    }
-
-    if (normalizedUrl === normalizeResearchUrl(options.homepageUrl)) {
-      skippedDuplicateCount += 1;
-      continue;
-    }
-
-    if (!isSameOrTrustedSubdomain(normalizedUrl, targetDomain)) {
-      skippedExternalCount += 1;
-      continue;
-    }
-
-    if (isPdfUrl(normalizedUrl)) {
-      skippedPdfCount += 1;
-      continue;
-    }
-
-    if (isLowValueSiteLink({ ...candidate, url: normalizedUrl })) {
-      skippedLowValueCount += 1;
-      continue;
-    }
-
-    if (seen.has(normalizedUrl)) {
-      skippedDuplicateCount += 1;
-      continue;
-    }
-
-    seen.add(normalizedUrl);
-    scoredCandidates.push({
-      ...candidate,
-      url: normalizedUrl,
-      source: getHostname(normalizedUrl),
-      score: scoreSiteCandidate({ ...candidate, url: normalizedUrl }, options.goal),
-    });
-  }
-
-  scoredCandidates.sort((left, right) => (right.score ?? 0) - (left.score ?? 0) || left.rank - right.rank);
-
-  return {
-    candidates: scoredCandidates.slice(0, taskSpec.candidateLimit),
-    diagnostics: {
-      kind: "research" as const,
-      inputCount: candidates.length,
-      dedupedCount: seen.size,
-      finalCount: Math.min(scoredCandidates.length, taskSpec.candidateLimit),
-      skippedAdCount: 0,
-      skippedInternalCount: skippedExternalCount + skippedLowValueCount,
-      skippedDuplicateCount,
-      skippedPdfCount,
-      skippedInvalidCount,
-    } satisfies ResearchFilterDiagnostics,
-    targetDomain,
-  };
-}
-
-function buildHomepageCandidate(snapshot: SnapshotData): ResearchCandidate {
-  return {
-    title: snapshot.title || "Homepage",
-    url: snapshot.url,
-    snippet: "Site homepage",
-    source: getHostname(snapshot.url) || undefined,
-    displayUrl: snapshot.url,
-    rank: 0,
-    linkLocation: "header",
-    score: 100,
-  };
-}
-
-function toToolExecutionContext(context: CandidatePreparationContext): ToolExecutionContext {
-  return {
-    memory: context.memory,
-    signal: context.signal,
-    scanPage: context.scanPage,
-    ensureUsableSnapshot: context.ensureUsableSnapshot,
-    executeAction: context.executeAction,
-    settleAfterAction: context.settleAfterAction,
-    appendLog: context.appendLog,
-    recordStep: context.recordStep,
-    pushState: context.pushState,
-  };
-}
-
 export async function preparePublicResearchCandidates(
   options: {
     goal: string;
@@ -418,47 +216,11 @@ export async function preparePublicResearchCandidates(
   };
 }
 
-export async function prepareSiteOverviewCandidates(
-  options: {
-    goal: string;
-    homepageSnapshot: SnapshotData;
-    candidates: ResearchCandidate[];
-    taskSpec: SiteOverviewTaskSpec;
-    signal: AbortSignal;
-  },
-): Promise<PreparedSiteOverviewCandidates> {
-  const filtered = filterSiteNavCandidates(options.candidates, options.taskSpec, {
-    homepageUrl: options.homepageSnapshot.url,
-    goal: options.goal,
-  });
-  const reordered = await reorderSiteCandidates(
-    {
-      goal: options.goal,
-      targetDomain: filtered.targetDomain,
-      candidates: filtered.candidates,
-    },
-    { signal: options.signal },
-  );
-
-  return {
-    homepageCandidate: buildHomepageCandidate(options.homepageSnapshot),
-    candidates: reordered.candidates.map((candidate, index) => ({
-      ...candidate,
-      rank: index + 1,
-    })),
-    diagnostics: filtered.diagnostics,
-    reason: reordered.reason,
-    source: reordered.source,
-    targetDomain: filtered.targetDomain,
-  };
-}
-
 export async function prepareCommerceCandidates(
-  context: CandidatePreparationContext,
+  context: ToolExecutionContext,
   taskSpec: SearchTaskSpec,
 ): Promise<PrepareCommerceCandidatesResult> {
-  const toolContext = toToolExecutionContext(context);
-  let snapshot = await ensureUsableSnapshotWithDialogRecovery(toolContext, "Extraction page blocked by an overlay.");
+  let snapshot = await ensureUsableSnapshotWithDialogRecovery(context, "Extraction page blocked by an overlay.");
   if (snapshot.pageType !== "search") {
     return {
       status: "retryable_error",
@@ -499,7 +261,7 @@ export async function prepareCommerceCandidates(
 
   let rawItems = extractionResult.items ?? [];
   if (rawItems.length === 0) {
-    const recovery = await scrollForMoreCandidates(toolContext, snapshot, "No product items were extracted.");
+    const recovery = await scrollForMoreCandidates(context, snapshot, "No product items were extracted.");
     snapshot = recovery.snapshot;
 
     const retryResult = await context.executeAction(extractAction, "Extract structured search result items after scroll recovery.");

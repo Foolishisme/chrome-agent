@@ -1,20 +1,16 @@
 import type {
   BrowserActionResult,
   BrowserClickInput,
-  BrowserEvaluateInput,
-  BrowserEvaluateResult,
+  BrowserDriver,
   BrowserNavigateInput,
   BrowserObservation,
   BrowserOpenTabInput,
   BrowserOperationOptions,
   BrowserPressInput,
-  BrowserScreenshot,
-  BrowserScreenshotInput,
   BrowserScrollInput,
   BrowserTabRef,
   BrowserTypeInput,
 } from "../../src/shared/browser-capability-contract";
-import type { BrowserDriver } from "../../src/background/browser/capability/browser-driver-contract";
 
 type BrowserDriverMethod = keyof BrowserDriver;
 
@@ -27,13 +23,11 @@ interface MockActionResults {
   type?: BrowserActionResult;
   press?: BrowserActionResult;
   scroll?: BrowserActionResult;
-  evaluateLimited?: BrowserEvaluateResult;
 }
 
 export interface MockBrowserDriverOptions {
   tabs?: BrowserTabRef[];
   observations?: Record<number, BrowserObservation>;
-  screenshots?: Record<number, BrowserScreenshot>;
   actionResults?: MockActionResults;
   failures?: Partial<Record<BrowserDriverMethod, Error | string>>;
 }
@@ -70,7 +64,6 @@ export class MockBrowserDriver implements BrowserDriver {
 
   private readonly tabs = new Map<number, BrowserTabRef>();
   private readonly observations = new Map<number, BrowserObservation>();
-  private readonly screenshots = new Map<number, BrowserScreenshot>();
   private readonly actionResults: MockActionResults;
   private readonly failures: Partial<Record<BrowserDriverMethod, Error | string>>;
   private nextTabId = 1;
@@ -82,9 +75,6 @@ export class MockBrowserDriver implements BrowserDriver {
     }
     for (const [tabId, observation] of Object.entries(options.observations ?? {})) {
       this.observations.set(Number(tabId), clone(observation));
-    }
-    for (const [tabId, screenshot] of Object.entries(options.screenshots ?? {})) {
-      this.screenshots.set(Number(tabId), clone(screenshot));
     }
     this.actionResults = options.actionResults ?? {};
     this.failures = options.failures ?? {};
@@ -158,18 +148,6 @@ export class MockBrowserDriver implements BrowserDriver {
     return clone(observation);
   }
 
-  async screenshot(tabId: number, input?: BrowserScreenshotInput, options?: BrowserOperationOptions): Promise<BrowserScreenshot> {
-    this.record("screenshot", tabId, input, options);
-    const screenshot = this.screenshots.get(tabId);
-    if (!screenshot) {
-      throw new Error(`No mock screenshot for tab ${tabId}.`);
-    }
-    return clone({
-      ...screenshot,
-      fullPage: input?.fullPage ?? screenshot.fullPage,
-    });
-  }
-
   async click(tabId: number, input: BrowserClickInput, options?: BrowserOperationOptions): Promise<BrowserActionResult> {
     this.record("click", tabId, input, options);
     return clone(this.actionResults.click ?? defaultAction(`Clicked ${input.targetRef.refId}.`, { targetRef: input.targetRef }));
@@ -188,18 +166,6 @@ export class MockBrowserDriver implements BrowserDriver {
   async scroll(tabId: number, input: BrowserScrollInput, options?: BrowserOperationOptions): Promise<BrowserActionResult> {
     this.record("scroll", tabId, input, options);
     return clone(this.actionResults.scroll ?? defaultAction(`Scrolled ${input.direction}.`));
-  }
-
-  async evaluateLimited(tabId: number, input: BrowserEvaluateInput, options?: BrowserOperationOptions): Promise<BrowserEvaluateResult> {
-    this.record("evaluateLimited", tabId, input, options);
-    return clone(
-      this.actionResults.evaluateLimited ?? {
-        status: "success",
-        message: `Evaluated ${input.scriptId}.`,
-        problems: [],
-        value: undefined,
-      },
-    );
   }
 
   private record(method: BrowserDriverMethod, ...args: unknown[]) {

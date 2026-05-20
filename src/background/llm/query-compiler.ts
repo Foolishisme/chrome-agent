@@ -29,7 +29,7 @@ function buildExtractLimit(llmInputLimit: number) {
 }
 
 function extractTopK(goal: string) {
-  const matched = goal.match(/(?:鍓峾TOP|top)\s*(\d{1,2})/);
+  const matched = goal.match(/(?:前|top)\s*(\d{1,2})/i);
   if (matched) {
     return Math.max(1, Number(matched[1]));
   }
@@ -160,7 +160,7 @@ function detectTaskTypeWithContext(
     return "public_research";
   }
 
-  if (hasBudgetSignal(goal) || hasCommerceCategory(goal) || /涔皘鎺ㄨ崘|閫夎喘|鍟嗗搧|涓嬪崟/.test(goal)) {
+  if (hasBudgetSignal(goal) || hasCommerceCategory(goal) || /购买|推荐|选购|商品|下单/.test(goal)) {
     return "commerce_search";
   }
 
@@ -326,7 +326,7 @@ async function compileCommerceTask(
     extractLimit,
     searchQuery,
     querySource: "llm-lite",
-    notes: [refined?.reason ?? "灏忔ā鍨嬬敓鎴愭悳绱㈣瘝"],
+    notes: [refined?.reason ?? "小模型生成搜索词"],
   };
 }
 
@@ -372,7 +372,7 @@ export async function compilePublicResearchTask(
       sourceTargetCount: 3,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "灏忔ā鍨嬬敓鎴愭煡璇㈣瘝澶辫触";
+    const message = error instanceof Error ? error.message : "小模型生成查询词失败";
     return {
       taskType: "public_research",
       originalGoal: goal,

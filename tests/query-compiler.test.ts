@@ -28,6 +28,24 @@ describe("query compiler", () => {
     expect(task.outputMode).toBe("inline");
   });
 
+  it("extracts Chinese top-k wording for commerce tasks", async () => {
+    const task = await compileSearchTask("帮我找适合出差的降噪耳机，前 3 个推荐", {
+      refineWithLiteModel: async () => ({
+        searchQuery: "出差 降噪耳机",
+        reason: "保留场景和品类",
+      }),
+    });
+
+    expect(task.topK).toBe(3);
+    expect(task.llmInputLimit).toBe(10);
+    expect(task.extractLimit).toBeGreaterThanOrEqual(12);
+  });
+
+  it("routes Chinese shopping intent words to commerce_search", () => {
+    expect(detectTaskType("推荐一个适合学生办公的电脑")).toBe("commerce_search");
+    expect(detectTaskType("帮我选购一个人体工学椅")).toBe("commerce_search");
+  });
+
   it("requires the lite model planner to produce the final on-site query", async () => {
     const task = await compileSearchTask("推荐一个适合学生办公的电脑", {
       refineWithLiteModel: async () => ({
