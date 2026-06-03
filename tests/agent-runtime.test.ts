@@ -414,8 +414,6 @@ describe("runtime tool loop orchestration", () => {
         querySource: "rule",
         notes: [],
         searchEngine: "google",
-        candidateLimit: 5,
-        sourceTargetCount: 3,
       },
       plan: [
         {

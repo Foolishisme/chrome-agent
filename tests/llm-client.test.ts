@@ -15,6 +15,7 @@ import {
 import {
   buildFinalMarkdownPrompt,
   buildResearchQueryRefinementPrompt,
+  buildRoundDecisionPrompt,
 } from "../src/background/llm/llm-prompt-builders";
 
 afterEach(() => {
@@ -71,8 +72,6 @@ describe("llm client helpers", () => {
         querySource: "llm-lite",
         notes: [],
         searchEngine: "google",
-        candidateLimit: 5,
-        sourceTargetCount: 3,
       },
       evidence: {
         kind: "public_research",
@@ -84,6 +83,76 @@ describe("llm client helpers", () => {
     expect(prompt).toContain("Current absolute time: 2026-06-03T04:00:00.000Z");
     expect(prompt).toContain("User timezone: Asia/Shanghai");
     expect(prompt).toContain("do not silently treat old evidence as current");
+  });
+
+  it("omits runtime strategy fields from final markdown prompts", () => {
+    const prompt = buildFinalMarkdownPrompt({
+      goal: "推荐 3 个轻薄本",
+      taskType: "commerce_search",
+      taskSpec: {
+        taskType: "commerce_search",
+        originalGoal: "推荐 3 个轻薄本",
+        outputMode: "inline",
+        searchQuery: "轻薄本",
+        querySource: "rule",
+        notes: [],
+        topK: 3,
+        llmInputLimit: 10,
+        extractLimit: 12,
+      },
+      evidence: {
+        kind: "commerce_search",
+        items: [],
+      },
+      unresolvedIssues: [],
+    });
+
+    expect(prompt).toContain("轻薄本");
+    expect(prompt).not.toContain("topK");
+    expect(prompt).not.toContain("llmInputLimit");
+    expect(prompt).not.toContain("extractLimit");
+  });
+
+  it("keeps round decision prompts focused on evidence instead of runtime strategy", () => {
+    const prompt = buildRoundDecisionPrompt({
+      goal: "调研 OpenAI 定价",
+      taskType: "public_research",
+      taskSpec: {
+        taskType: "public_research",
+        originalGoal: "调研 OpenAI 定价",
+        outputMode: "inline",
+        searchQuery: "OpenAI pricing",
+        querySource: "rule",
+        notes: [],
+        searchEngine: "google",
+      },
+      roundIndex: 1,
+      maxRounds: 2,
+      researchEvidence: {
+        query: "OpenAI pricing",
+        pageCount: 1,
+        readable: 1,
+        partial: 0,
+        failed: 0,
+        limitations: [],
+        pages: [
+          {
+            title: "Pricing",
+            url: "https://openai.com/pricing",
+            status: "success",
+            caveats: [],
+          },
+        ],
+      },
+      unresolvedIssues: [],
+    });
+
+    expect(prompt).toContain("Research evidence summary");
+    expect(prompt).not.toContain("Filter diagnostics");
+    expect(prompt).not.toContain("candidateLimit");
+    expect(prompt).not.toContain("sourceTargetCount");
+    expect(prompt).not.toContain("llmInputLimit");
+    expect(prompt).not.toContain("extractLimit");
   });
 
   it("parses OpenAI-compatible stream events", () => {
@@ -189,8 +258,6 @@ describe("llm client helpers", () => {
         querySource: "rule",
         notes: [],
         searchEngine: "google",
-        candidateLimit: 4,
-        sourceTargetCount: 1,
       },
       roundIndex: 1,
       maxRounds: 2,

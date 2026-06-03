@@ -131,13 +131,6 @@ const roundDecisionPatchSchema = z
   .object({
     searchQuery: z.string().min(1).optional(),
     officialSearchQuery: z.string().min(1).optional(),
-    entryUrl: z.string().url().optional(),
-    candidateLimit: z.number().int().positive().optional(),
-    sourceTargetCount: z.number().int().positive().optional(),
-    pageReadLimit: z.number().int().positive().optional(),
-    topK: z.number().int().positive().optional(),
-    llmInputLimit: z.number().int().positive().optional(),
-    extractLimit: z.number().int().positive().optional(),
     notesAppend: z.array(z.string().min(1)).default([]),
   })
   .strict();

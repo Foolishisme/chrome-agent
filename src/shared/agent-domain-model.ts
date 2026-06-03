@@ -228,8 +228,6 @@ export interface PublicResearchTaskSpec {
   querySource: "rule" | "llm-lite";
   notes: string[];
   searchEngine: "google";
-  candidateLimit: number;
-  sourceTargetCount: number;
 }
 
 export interface SiteOverviewTaskSpec {
@@ -333,7 +331,7 @@ export interface PageFactExtraction {
   reason?: string;
 }
 
-interface SourceFact {
+export interface SourceFact {
   text: string;
   evidenceUrl: string;
   evidenceTitle?: string;
@@ -357,6 +355,28 @@ export interface ResearchSourceResult {
   unresolvedIssues: string[];
   textLength: number;
   sourceFactCard?: SourceFactCard;
+}
+
+export interface ResearchPageResult {
+  title: string;
+  url: string;
+  source?: string;
+  rank: number;
+  status: "success" | "partial" | "failed";
+  trimmedSummary: string;
+  keyFacts: SourceFact[];
+  caveats: string[];
+}
+
+export interface ResearchEvidenceBundle {
+  query: string;
+  pages: ResearchPageResult[];
+  coverage: {
+    readable: number;
+    partial: number;
+    failed: number;
+    limitations: string[];
+  };
 }
 
 export interface FinalSynthesisInput {
@@ -473,6 +493,7 @@ export interface SessionMemory {
   extractedItems: ExtractedItem[];
   researchCandidates: ResearchCandidate[];
   researchSources: ResearchSourceResult[];
+  researchEvidence?: ResearchEvidenceBundle;
   filterDiagnostics?: FilterDiagnostics;
   liveStepSummary?: string;
   nextIntent?: string;

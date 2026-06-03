@@ -1,4 +1,5 @@
 import type { BrowserDriver, BrowserLinkObservation, BrowserObservation, BrowserPageProblem } from "../../shared/browser-capability-contract";
+import { RESEARCH_RUNTIME_POLICY } from "../../shared/agent-runtime-config";
 import { runExplicitUrlOverview } from "../browser/overview/explicit-url-overview";
 import {
   FIRST_PARTY_LLM_VISIBLE_TOOL_CONTRACTS,
@@ -22,9 +23,6 @@ interface FirstPartyToolInputMap {
   "browser.siteOverview": BrowserSiteOverviewToolInput;
   "skill.commerceResearch": CommerceResearchToolInput;
 }
-
-const PAGE_BODY_CHAR_LIMIT = 2_000;
-const BROWSER_READ_CONCURRENCY = 2;
 
 export interface FirstPartyToolOutputMap {
   "browser.search": BrowserSearchToolOutput;
@@ -77,7 +75,7 @@ function compactText(text: string | undefined, maxLength = 180) {
   return normalized.length > maxLength ? `${normalized.slice(0, Math.max(0, maxLength - 3))}...` : normalized;
 }
 
-function truncateBodyText(text: string | undefined, maxLength = PAGE_BODY_CHAR_LIMIT) {
+function truncateBodyText(text: string | undefined, maxLength = RESEARCH_RUNTIME_POLICY.pageBodyCharLimit) {
   const normalized = normalizeText(text);
   if (normalized.length <= maxLength) {
     return {
@@ -388,7 +386,7 @@ async function runBrowserWebDetailTool(
       scope: "Single explicitly requested page after trimming and observation extraction.",
       limitations: [
         ...(partial ? ["Readable content was partial or insufficient for a fully stable detail summary."] : []),
-        ...(normalizedObservation.truncated ? [`Readable content was truncated to ${PAGE_BODY_CHAR_LIMIT} characters.`] : []),
+        ...(normalizedObservation.truncated ? [`Readable content was truncated to ${RESEARCH_RUNTIME_POLICY.pageBodyCharLimit} characters.`] : []),
       ],
     },
     links: [],
@@ -428,7 +426,7 @@ async function runBrowserSiteOverviewTool(
   ];
   const problems = [...toToolProblems(entryObservation.problems)];
 
-  const linkedPages = await mapWithConcurrency(selectedLinks, BROWSER_READ_CONCURRENCY, async (link) => {
+  const linkedPages = await mapWithConcurrency(selectedLinks, RESEARCH_RUNTIME_POLICY.pageReadConcurrency, async (link) => {
     try {
       const observation = await runExplicitUrlOverview(driver, {
         url: link.url,

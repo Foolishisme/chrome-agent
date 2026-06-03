@@ -1,4 +1,5 @@
 import type {
+  ResearchEvidenceBundle,
   ResearchCandidate,
   ResearchSourceResult,
   SessionMemory,
@@ -82,6 +83,34 @@ export function toResearchSourceResult(candidate: ResearchCandidate, detail: Bro
       facts,
       caveats: unresolvedIssues,
       status: detail.status === "success" ? "success" : "partial",
+    },
+  };
+}
+
+export function toResearchEvidenceBundle(query: string, sources: ResearchSourceResult[]): ResearchEvidenceBundle {
+  const readable = sources.filter((source) => source.status === "success").length;
+  const partial = sources.filter((source) => source.status === "partial").length;
+  const failed = sources.filter((source) => source.status === "failed").length;
+  return {
+    query,
+    pages: sources.map((source) => {
+      const factCard = source.sourceFactCard;
+      return {
+        title: source.pageTitle || source.candidate.title,
+        url: source.sourceUrl,
+        source: source.candidate.source,
+        rank: source.candidate.rank,
+        status: source.status,
+        trimmedSummary: factCard?.summary ?? source.bodyExcerpt,
+        keyFacts: factCard?.facts ?? [],
+        caveats: source.unresolvedIssues,
+      };
+    }),
+    coverage: {
+      readable,
+      partial,
+      failed,
+      limitations: dedupeStrings(sources.flatMap((source) => source.unresolvedIssues)),
     },
   };
 }

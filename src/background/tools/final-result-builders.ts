@@ -206,11 +206,7 @@ export function getFinalStatusForResearch(
     }
   }
 
-  if (
-    successfulSourceCount < taskSpec.sourceTargetCount ||
-    unresolvedIssues.length > 0 ||
-    sources.some((source) => source.status !== "success")
-  ) {
+  if (unresolvedIssues.length > 0 || sources.some((source) => source.status !== "success")) {
     return "partial" as const;
   }
 

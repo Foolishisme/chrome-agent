@@ -399,8 +399,6 @@ export async function compilePublicResearchTask(
       querySource: "llm-lite",
       notes: ["合并 planner 生成 Google 查询词"],
       searchEngine: "google",
-      candidateLimit: 5,
-      sourceTargetCount: 3,
     };
   }
 
@@ -414,8 +412,6 @@ export async function compilePublicResearchTask(
       querySource: "rule",
       notes: ["小模型不可用，回退到规则生成 Google 查询词"],
       searchEngine: "google",
-      candidateLimit: 5,
-      sourceTargetCount: 3,
     };
   }
 
@@ -435,8 +431,6 @@ export async function compilePublicResearchTask(
       querySource: "llm-lite",
       notes: [refined?.reason ?? "lite model generated the Google query"],
       searchEngine: "google",
-      candidateLimit: 5,
-      sourceTargetCount: 3,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "小模型生成查询词失败";
@@ -449,8 +443,6 @@ export async function compilePublicResearchTask(
       querySource: "rule",
       notes: [`小模型不可用，回退到规则生成 Google 查询词：${message}`],
       searchEngine: "google",
-      candidateLimit: 5,
-      sourceTargetCount: 3,
     };
   }
 }

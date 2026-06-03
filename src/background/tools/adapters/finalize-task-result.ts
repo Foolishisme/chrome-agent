@@ -4,6 +4,7 @@ import type {
   FinalResult,
   FinalSynthesisInput,
   PublicResearchTaskSpec,
+  ResearchEvidenceBundle,
   ResearchSourceResult,
   SearchTaskSpec,
   SessionMemory,
@@ -85,6 +86,32 @@ function buildResearchEvidenceSources(sources: ResearchSourceResult[]) {
   }));
 }
 
+function buildResearchEvidenceForPrompt(
+  taskSpec: PublicResearchTaskSpec | SiteOverviewTaskSpec,
+  evidence: ResearchEvidenceBundle | undefined,
+  sources: ResearchSourceResult[],
+) {
+  if (taskSpec.taskType === "public_research" && evidence) {
+    return {
+      kind: "public_research",
+      query: evidence.query,
+      pages: evidence.pages.map((page) => ({
+        title: page.title,
+        url: page.url,
+        status: page.status,
+        trimmedSummary: page.trimmedSummary,
+        keyFacts: page.keyFacts,
+        caveats: page.caveats,
+      })),
+    };
+  }
+
+  return {
+    kind: taskSpec.taskType,
+    sources: buildResearchEvidenceSources(sources),
+  };
+}
+
 function buildConversationContext(turns: SessionMemory["conversationTurns"]) {
   return (turns ?? [])
     .slice(-3)
@@ -125,10 +152,7 @@ function buildResearchInput(
     goal: memory.goal,
     taskType: memory.taskType,
     taskSpec,
-    evidence: {
-      kind: taskSpec.taskType,
-      sources: buildResearchEvidenceSources(memory.researchSources),
-    },
+    evidence: buildResearchEvidenceForPrompt(taskSpec, memory.researchEvidence, memory.researchSources),
     unresolvedIssues,
     conversationContext: buildConversationContext(memory.conversationTurns),
   };
@@ -148,7 +172,6 @@ function buildCommerceInput(memory: SessionMemory, taskSpec: SearchTaskSpec): Fi
         shopText: item.shopText,
         summary: item.summary,
       })),
-      filterDiagnostics: memory.filterDiagnostics,
     },
     unresolvedIssues: memory.unresolvedIssues,
     conversationContext: buildConversationContext(memory.conversationTurns),

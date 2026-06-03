@@ -204,8 +204,6 @@ describe("runtime tool loop", () => {
       querySource: "rule",
       notes: [],
       searchEngine: "google",
-      candidateLimit: 5,
-      sourceTargetCount: 2,
     };
     streamFinalMarkdownMock.mockResolvedValue({
       markdown: "OpenAI provides products, docs, and pricing entry points.",
@@ -543,8 +541,6 @@ describe("runtime tool loop", () => {
       querySource: "rule",
       notes: [],
       searchEngine: "google",
-      candidateLimit: 4,
-      sourceTargetCount: 1,
     };
     streamFinalMarkdownMock.mockResolvedValue({
       markdown: "The second round added a clearer pricing source and the result can now be summarized.",
@@ -558,8 +554,6 @@ describe("runtime tool loop", () => {
         nextRoundSummary: "使用更具体的查询补读来源。",
         taskSpecPatch: {
           searchQuery: "OpenAI pricing official",
-          candidateLimit: 5,
-          sourceTargetCount: 1,
           notesAppend: ["Round 2 narrow query."],
         },
         source: "llm-lite",
@@ -644,8 +638,6 @@ describe("runtime tool loop", () => {
       querySource: "rule",
       notes: [],
       searchEngine: "google",
-      candidateLimit: 4,
-      sourceTargetCount: 1,
     };
     streamFinalMarkdownMock.mockResolvedValue({
       markdown: "Use the current pricing source instead of replanning again.",

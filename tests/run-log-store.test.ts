@@ -18,8 +18,6 @@ function createMemory(): SessionMemory {
       querySource: "rule",
       notes: [],
       searchEngine: "google",
-      candidateLimit: 5,
-      sourceTargetCount: 3,
     },
     toolHistory: [],
     currentFacts: {},

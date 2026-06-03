@@ -85,8 +85,6 @@ describe("research search quality pipeline", () => {
         querySource: "llm-lite",
         notes: [],
         searchEngine: "google",
-        candidateLimit: 5,
-        sourceTargetCount: 3,
       },
     });
     const taskSpec = memory.taskSpec as PublicResearchTaskSpec;
@@ -100,7 +98,7 @@ describe("research search quality pipeline", () => {
         { title: "Google cache", url: "https://www.google.com/search?q=ai+agents", rank: 3 },
         { title: "Pdf whitepaper", url: "https://example.net/whitepaper.pdf", rank: 4 },
       ],
-      taskSpec,
+      candidateLimit: 5,
       signal: new AbortController().signal,
     });
 
@@ -133,8 +131,6 @@ describe("research search quality pipeline", () => {
         querySource: "llm-lite",
         notes: [],
         searchEngine: "google",
-        candidateLimit: 5,
-        sourceTargetCount: 3,
       },
     });
     const taskSpec = memory.taskSpec as PublicResearchTaskSpec;
@@ -146,7 +142,7 @@ describe("research search quality pipeline", () => {
         { title: "Research blog", url: "https://example.com/blog", rank: 1, snippet: "A broad summary of AI agents." },
         { title: "Official AI guide", url: "https://example.org/official", rank: 2, snippet: "Official technical documentation." },
       ],
-      taskSpec,
+      candidateLimit: 5,
       signal: new AbortController().signal,
     });
 

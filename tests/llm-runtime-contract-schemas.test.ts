@@ -40,11 +40,23 @@ describe("schema contracts", () => {
       reason: "Need another round.",
       taskSpecPatch: {
         searchQuery: "OpenAI pricing official",
-        candidateLimit: 5,
       },
     });
 
     expect(parsed.taskSpecPatch?.searchQuery).toBe("OpenAI pricing official");
+  });
+
+  it("rejects runtime strategy fields in a round patch", () => {
+    expect(() =>
+      roundDecisionSchema.parse({
+        decision: "replan",
+        reason: "Need another round.",
+        taskSpecPatch: {
+          searchQuery: "OpenAI pricing official",
+          candidateLimit: 5,
+        },
+      }),
+    ).toThrow();
   });
 
   it("accepts the site overview route", () => {

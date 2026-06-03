@@ -1,7 +1,6 @@
 import type {
   CommerceFilterDiagnostics,
   ExtractedItem,
-  PublicResearchTaskSpec,
   ResearchCandidate,
   ResearchFilterDiagnostics,
   SearchTaskSpec,
@@ -194,11 +193,11 @@ export async function preparePublicResearchCandidates(
     goal: string;
     searchQuery: string;
     candidates: ResearchCandidate[];
-    taskSpec: PublicResearchTaskSpec;
+    candidateLimit: number;
     signal: AbortSignal;
   },
 ): Promise<PreparedPublicResearchCandidates> {
-  const filtered = filterResearchCandidates(options.candidates, options.taskSpec.candidateLimit);
+  const filtered = filterResearchCandidates(options.candidates, options.candidateLimit);
   const reordered = await reorderResearchCandidates(
     {
       goal: options.goal,

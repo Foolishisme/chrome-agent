@@ -16,6 +16,22 @@ export const LIMITS = {
   PAGE_TEXT_MIN_LENGTH: 200,
 } as const;
 
+export interface ResearchRuntimePolicy {
+  candidatePoolSize: number;
+  defaultPageReadCount: number;
+  pageReadConcurrency: number;
+  pageBodyCharLimit: number;
+  maxRuntimeRounds: number;
+}
+
+export const RESEARCH_RUNTIME_POLICY: ResearchRuntimePolicy = {
+  candidatePoolSize: 5,
+  defaultPageReadCount: 5,
+  pageReadConcurrency: 2,
+  pageBodyCharLimit: 2_000,
+  maxRuntimeRounds: 2,
+} as const;
+
 export const DEFAULT_GOAL = "帮我调研一下 Playwright 和 Selenium 的区别，进入前 3 个页面总结";
 
 export const DEFAULT_LOCALE = "zh-CN" as const;

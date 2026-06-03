@@ -1,6 +1,7 @@
 import type { BrowserDriver } from "../../shared/browser-capability-contract";
 import { decideRoundAction, type RoundDecisionResult } from "../llm/llm-client";
 import { appendLog } from "../runtime/runtime-session-state";
+import { RESEARCH_RUNTIME_POLICY } from "../../shared/agent-runtime-config";
 import { ensureTerminalResult } from "../runtime/public-state";
 import { runCommerceResearchDelegate } from "../tools/commerce/run-commerce-research-delegate";
 import type { StepOptions, ToolExecutionContext } from "../tools/tool-execution-context";
@@ -29,6 +30,7 @@ import {
   collectIssuesFromProblems,
   dedupeStrings,
   mergeResearchSources,
+  toResearchEvidenceBundle,
   toResearchSourceResult,
   toSiteOverviewSources,
   toSourceCandidate,
@@ -56,9 +58,6 @@ export interface RuntimeToolExecutorContext {
   registry: FirstPartyToolRegistry;
   ensureBudget(): Promise<void>;
 }
-
-const MAX_RUNTIME_ROUNDS = 2;
-const RUNTIME_PAGE_READ_CONCURRENCY = 2;
 
 function getPlanStep(memory: SessionMemory, stepId: string) {
   return memory.plan.find((step) => step.stepId === stepId);
@@ -215,12 +214,12 @@ async function executeWebDetailBatch(context: RuntimeToolExecutorContext, stepId
     throw new Error("Public research detail execution requires a public research task spec.");
   }
 
-  const candidates = context.session.memory.researchCandidates.slice(0, taskSpec.sourceTargetCount);
+  const candidates = context.session.memory.researchCandidates.slice(0, RESEARCH_RUNTIME_POLICY.defaultPageReadCount);
 
   await context.ensureBudget();
   await beginPlanStep(context, stepId, "browser.webDetail", getPlanStep(context.session.memory, stepId)?.goal ?? "Read pages");
 
-  const readResults = await mapWithConcurrency(candidates, RUNTIME_PAGE_READ_CONCURRENCY, async (candidate) => {
+  const readResults = await mapWithConcurrency(candidates, RESEARCH_RUNTIME_POLICY.pageReadConcurrency, async (candidate) => {
     await context.ensureBudget();
     const startedAt = Date.now();
     try {
@@ -286,6 +285,7 @@ async function executeWebDetailBatch(context: RuntimeToolExecutorContext, stepId
   }
 
   context.session.memory.researchSources = mergeResearchSources(context.session.memory.researchSources, sources);
+  context.session.memory.researchEvidence = toResearchEvidenceBundle(taskSpec.searchQuery, context.session.memory.researchSources);
   context.session.memory.unresolvedIssues = dedupeStrings([...context.session.memory.unresolvedIssues, ...pageIssues]);
   const successCount = sources.length - partialCount;
   const status: PlanStepStatus = sources.length > 0 ? "succeeded" : "failed";
@@ -326,7 +326,7 @@ async function executePrepareTaskCandidatesStep(context: RuntimeToolExecutorCont
     goal: context.session.memory.goal,
     searchQuery: taskSpec.searchQuery,
     candidates: context.session.memory.researchCandidates,
-    taskSpec,
+    candidateLimit: RESEARCH_RUNTIME_POLICY.candidatePoolSize,
     signal: context.session.abortController.signal,
   });
 
@@ -502,7 +502,7 @@ async function executeRoundDecisionStep(context: RuntimeToolExecutorContext, ste
       candidates: context.session.memory.researchCandidates,
       sources: context.session.memory.researchSources,
       items: context.session.memory.extractedItems,
-      filterDiagnostics: context.session.memory.filterDiagnostics,
+      researchEvidence: context.session.memory.researchEvidence,
     },
     { signal: context.session.abortController.signal },
   );
@@ -585,6 +585,7 @@ function applyRoundDecisionPatch(context: RuntimeToolExecutorContext, decision: 
 
 function clearRoundStateForReplan(context: RuntimeToolExecutorContext) {
   context.session.memory.researchCandidates = [];
+  context.session.memory.researchEvidence = undefined;
   context.session.memory.filterDiagnostics = undefined;
   context.session.memory.runtimeMeta.currentRound += 1;
   rebuildPlanForTaskSpec(context, "decide-round-action");
@@ -635,7 +636,7 @@ export async function executeDirectAnswerTask(context: RuntimeToolExecutorContex
 
 export async function executePublicResearchTask(context: RuntimeToolExecutorContext) {
   context.session.memory.runtimeMeta.currentRound = Math.max(1, context.session.memory.runtimeMeta.currentRound || 1);
-  context.session.memory.runtimeMeta.maxRounds = MAX_RUNTIME_ROUNDS;
+  context.session.memory.runtimeMeta.maxRounds = RESEARCH_RUNTIME_POLICY.maxRuntimeRounds;
 
   for (;;) {
     const taskSpec = context.session.memory.taskSpec;
@@ -686,7 +687,7 @@ export async function executePublicResearchTask(context: RuntimeToolExecutorCont
 
 export async function executeSiteOverviewTask(context: RuntimeToolExecutorContext) {
   context.session.memory.runtimeMeta.currentRound = Math.max(1, context.session.memory.runtimeMeta.currentRound || 1);
-  context.session.memory.runtimeMeta.maxRounds = MAX_RUNTIME_ROUNDS;
+  context.session.memory.runtimeMeta.maxRounds = RESEARCH_RUNTIME_POLICY.maxRuntimeRounds;
 
   for (;;) {
     const taskSpec = context.session.memory.taskSpec;
@@ -756,7 +757,7 @@ export async function executeSiteOverviewTask(context: RuntimeToolExecutorContex
 
 export async function executeCommerceTask(context: RuntimeToolExecutorContext) {
   context.session.memory.runtimeMeta.currentRound = Math.max(1, context.session.memory.runtimeMeta.currentRound || 1);
-  context.session.memory.runtimeMeta.maxRounds = MAX_RUNTIME_ROUNDS;
+  context.session.memory.runtimeMeta.maxRounds = RESEARCH_RUNTIME_POLICY.maxRuntimeRounds;
 
   for (;;) {
     const skillResult = await executeCommerceSkillStep(context, "commerce-research");

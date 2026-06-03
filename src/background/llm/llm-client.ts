@@ -15,6 +15,7 @@ import type {
   LlmProfile,
   PublicResearchTaskSpec,
   ResearchCandidate,
+  ResearchEvidenceBundle,
   ResearchSourceResult,
   SearchTaskSpec,
   SiteOverviewTaskSpec,
@@ -823,13 +824,6 @@ export async function streamFinalMarkdown(input: FinalSynthesisInput, options: S
 interface RoundDecisionTaskSpecPatch {
   searchQuery?: string;
   officialSearchQuery?: string;
-  entryUrl?: string;
-  candidateLimit?: number;
-  sourceTargetCount?: number;
-  pageReadLimit?: number;
-  topK?: number;
-  llmInputLimit?: number;
-  extractLimit?: number;
   notesAppend?: string[];
 }
 
@@ -851,19 +845,23 @@ function buildFallbackRoundDecision(
     maxRounds: number;
     items?: ExtractedItem[];
     sources?: ResearchSourceResult[];
+    researchEvidence?: ResearchEvidenceBundle;
     unresolvedIssues?: string[];
   },
   fallbackReason: string,
 ): RoundDecisionResult {
-  const successSourceCount = (input.sources ?? []).filter((source) => source.status === "success").length;
-  const usableSourceCount = (input.sources ?? []).filter((source) => source.status !== "failed").length;
+  const successSourceCount =
+    input.researchEvidence?.coverage.readable ?? (input.sources ?? []).filter((source) => source.status === "success").length;
+  const usableSourceCount =
+    input.researchEvidence
+      ? input.researchEvidence.coverage.readable + input.researchEvidence.coverage.partial
+      : (input.sources ?? []).filter((source) => source.status !== "failed").length;
   const itemCount = input.items?.length ?? 0;
   const hasEvidence = itemCount > 0 || usableSourceCount > 0;
   const reachedMaxRounds = input.roundIndex >= input.maxRounds;
   const reasonPrefix = `fallback: ${fallbackReason}`;
 
   if (input.taskType === "commerce_search") {
-    const commerceTaskSpec = input.taskSpec as SearchTaskSpec;
     if (itemCount > 0) {
       return {
         decision: "finalize",
@@ -885,8 +883,6 @@ function buildFallbackRoundDecision(
       reason: `${reasonPrefix}；先再尝试一轮更宽的商品收集。`,
       nextRoundSummary: "调整搜索词并扩大候选收集范围。",
       taskSpecPatch: {
-        llmInputLimit: Math.min(commerceTaskSpec.llmInputLimit + 1, commerceTaskSpec.extractLimit + 2),
-        extractLimit: commerceTaskSpec.extractLimit + 2,
         notesAppend: ["Fallback replan after insufficient commerce evidence."],
       },
       source: "rule",
@@ -911,29 +907,12 @@ function buildFallbackRoundDecision(
     };
   }
 
-  if (input.taskType === "site_overview") {
-    const siteTaskSpec = input.taskSpec as SiteOverviewTaskSpec;
-    return {
-      decision: "replan",
-      reason: `${reasonPrefix}；先补读更多站内页面再决定是否收尾。`,
-      nextRoundSummary: "继续同站补读高价值页面。",
-      taskSpecPatch: {
-        pageReadLimit: Math.min(siteTaskSpec.pageReadLimit + 2, 8),
-        notesAppend: ["Fallback replan after insufficient site coverage."],
-      },
-      source: "rule",
-    };
-  }
-
-  const researchTaskSpec = input.taskSpec as PublicResearchTaskSpec;
   return {
     decision: "replan",
-    reason: `${reasonPrefix}；先补读更多候选来源再决定是否收尾。`,
-    nextRoundSummary: "扩大候选读取范围并继续补证据。",
+    reason: `${reasonPrefix}；先换一个更明确的查询继续补证据。`,
+    nextRoundSummary: "调整查询词并继续补证据。",
     taskSpecPatch: {
-      candidateLimit: Math.min(researchTaskSpec.candidateLimit + 2, 8),
-      sourceTargetCount: Math.min(researchTaskSpec.sourceTargetCount + 1, 4),
-      notesAppend: ["Fallback replan after insufficient research evidence."],
+      notesAppend: [`Fallback replan after insufficient ${input.taskType} evidence.`],
     },
     source: "rule",
   };
@@ -950,8 +929,8 @@ export async function decideRoundAction(
     unresolvedIssues?: string[];
     candidates?: ResearchCandidate[];
     sources?: ResearchSourceResult[];
+    researchEvidence?: ResearchEvidenceBundle;
     items?: ExtractedItem[];
-    filterDiagnostics?: unknown;
   },
   options: RequestOptions = {},
 ): Promise<RoundDecisionResult> {
@@ -959,19 +938,28 @@ export async function decideRoundAction(
     const response = await requestProviderJson(
       buildRoundDecisionPrompt({
         ...input,
-        candidates: (input.candidates ?? []).slice(0, 6).map((candidate) => ({
-          title: candidate.title,
-          url: candidate.url,
-          source: candidate.source,
-          rank: candidate.rank,
-        })),
         sources: (input.sources ?? []).slice(0, 6).map((source) => ({
           title: source.pageTitle || source.candidate.title,
           url: source.sourceUrl,
           status: source.status,
-          textLength: source.textLength,
           unresolvedIssues: source.unresolvedIssues.slice(0, 3),
         })),
+        researchEvidence: input.researchEvidence
+          ? {
+              query: input.researchEvidence.query,
+              pageCount: input.researchEvidence.pages.length,
+              readable: input.researchEvidence.coverage.readable,
+              partial: input.researchEvidence.coverage.partial,
+              failed: input.researchEvidence.coverage.failed,
+              limitations: input.researchEvidence.coverage.limitations.slice(0, 5),
+              pages: input.researchEvidence.pages.slice(0, 6).map((page) => ({
+                title: page.title,
+                url: page.url,
+                status: page.status,
+                caveats: page.caveats.slice(0, 3),
+              })),
+            }
+          : undefined,
         items: (input.items ?? []).slice(0, 6).map((item) => ({
           title: item.title,
           url: item.url,

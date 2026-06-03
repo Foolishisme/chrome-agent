@@ -104,17 +104,7 @@ describe("public research candidate handling", () => {
         { title: "Blog summary", url: "https://example.com/blog", rank: 1 },
         { title: "Official guide", url: "https://example.com/official", rank: 2 },
       ],
-      taskSpec: {
-        taskType: "public_research",
-        originalGoal: "Research AI agents",
-        outputMode: "inline",
-        searchQuery: "AI agents",
-        querySource: "llm-lite",
-        notes: [],
-        searchEngine: "google",
-        candidateLimit: 5,
-        sourceTargetCount: 3,
-      },
+      candidateLimit: 5,
       signal: new AbortController().signal,
     });
 
@@ -161,17 +151,7 @@ describe("public research candidate handling", () => {
         { title: "Pdf", url: "https://example.com/file.pdf", rank: 5 },
         { title: "Guide", url: "https://example.com/guide", rank: 6 },
       ],
-      taskSpec: {
-        taskType: "public_research",
-        originalGoal: "Research browser automation",
-        outputMode: "inline",
-        searchQuery: "browser automation",
-        querySource: "rule",
-        notes: [],
-        searchEngine: "google",
-        candidateLimit: 5,
-        sourceTargetCount: 3,
-      },
+      candidateLimit: 5,
       signal: new AbortController().signal,
     });
 
@@ -243,8 +223,6 @@ describe("public research finalization", () => {
         querySource: "llm-lite",
         notes: [],
         searchEngine: "google",
-        candidateLimit: 5,
-        sourceTargetCount: 1,
       },
       researchSources: [
         {
@@ -292,8 +270,6 @@ describe("public research finalization", () => {
         querySource: "llm-lite",
         notes: [],
         searchEngine: "google",
-        candidateLimit: 5,
-        sourceTargetCount: 1,
       },
       researchSources: [
         {
@@ -324,8 +300,6 @@ describe("public research finalization", () => {
         querySource: "llm-lite",
         notes: [],
         searchEngine: "google",
-        candidateLimit: 5,
-        sourceTargetCount: 3,
       },
       researchSources: [
         {
@@ -371,8 +345,6 @@ describe("public research finalization", () => {
         querySource: "llm-lite",
         notes: [],
         searchEngine: "google",
-        candidateLimit: 5,
-        sourceTargetCount: 1,
       },
       researchSources: [
         {
@@ -405,8 +377,6 @@ describe("public research finalization", () => {
         querySource: "rule",
         notes: [],
         searchEngine: "google",
-        candidateLimit: 5,
-        sourceTargetCount: 3,
       },
       researchSources: [],
       unresolvedIssues: ["No usable research sources remained after filtering the first Google results page."],
