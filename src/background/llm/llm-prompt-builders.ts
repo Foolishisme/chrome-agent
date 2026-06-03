@@ -70,6 +70,86 @@ export function buildTaskRoutePromptWithContext(
   ].join("\n");
 }
 
+export function buildTaskPlannerPromptWithContext(
+  goal: string,
+  options: {
+    conversationContext?: string;
+    conversationTurns?: ConversationTurn[];
+    currentTimeIso?: string;
+    timezone?: string;
+    searchPreference?: SearchPreference;
+  } = {},
+) {
+  return [
+    "You plan one browser-agent task.",
+    "Return JSON only.",
+    'Schema: {"taskType":"direct_answer|commerce_search|public_research|site_overview","confidence":0.0,"decisionSignals":["..."],"reason":"...","searchQuery":"optional","officialSearchQuery":"optional","entryUrl":"optional url"}',
+    `Current absolute time: ${options.currentTimeIso ?? new Date().toISOString()}`,
+    `User timezone: ${options.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC"}`,
+    `Search preference: ${options.searchPreference ?? "auto"}`,
+    "Task routing rules:",
+    "1. If recent conversation already contains enough evidence for the user's follow-up, choose direct_answer and omit query fields.",
+    "2. Else if the user asks to buy, recommend, compare by budget, shortlist products, or otherwise shows clear purchase intent, choose commerce_search.",
+    "3. Else if the user gives a URL and asks to summarize or inspect that site, choose site_overview and set entryUrl to that URL.",
+    "4. Else if the user explicitly asks to inspect one official site/website/站点/官网, choose site_overview and set officialSearchQuery.",
+    "5. Else if the user asks about a company's products, platform, docs, features, pricing, current facts, sourced verification, reputation, reviews, market views, controversy, or third-party comparison, choose public_research.",
+    "6. Else if search preference is prefer_search and the case is ambiguous, choose public_research.",
+    "7. Else choose direct_answer for stable knowledge, explanations, and simple direct answers.",
+    "Query rules:",
+    "- For commerce_search, set searchQuery to a short JD.com on-site shopping query. Keep product category, budget, brand, and scene when present.",
+    "- For public_research, set searchQuery to a concise Google query. Keep key entities, topic words, comparisons, and current-time wording resolved against the absolute time.",
+    "- For site_overview without entryUrl, set officialSearchQuery to a concise official-site lookup query.",
+    "- Do not set searchQuery for direct_answer or site_overview.",
+    "- Do not set officialSearchQuery except for site_overview without a URL.",
+    "Decision signals: use short machine-readable strings such as has_recent_evidence, purchase_intent, explicit_url, explicit_site_scope, company_info_without_site_scope, needs_current_info, needs_sources, third_party_view, prefer_search, stable_knowledge.",
+    "Keep reason to one short sentence. Choose exactly one taskType.",
+    `Recent conversation turns: ${formatConversationTurns(options.conversationTurns)}`,
+    ...(options.conversationContext ? [`Recent conversation context:\n${options.conversationContext}`] : []),
+    `User goal: ${goal}`,
+  ].join("\n");
+}
+
+export function buildTaskPlanOrDirectAnswerPrompt(
+  goal: string,
+  options: {
+    conversationContext?: string;
+    conversationTurns?: ConversationTurn[];
+    currentTimeIso?: string;
+    timezone?: string;
+    searchPreference?: SearchPreference;
+  } = {},
+) {
+  return [
+    "You are the first model call for a browser agent.",
+    "You must choose exactly one output mode.",
+    "",
+    "Output mode A: direct answer",
+    "- Use this only when browsing/search/tools are unnecessary.",
+    "- Output exactly this header on the first line: DIRECT_ANSWER",
+    "- Then stream the final user-facing answer in concise Chinese Markdown.",
+    "- Do not output JSON in this mode.",
+    "",
+    "Output mode B: browser task plan",
+    "- Use this when the user needs search, current information, shopping, site overview, sources, or page reading.",
+    "- Output exactly this header on the first line: TASK_PLAN",
+    "- Then output JSON only after the header.",
+    'Schema: {"taskType":"commerce_search|public_research|site_overview","confidence":0.0,"decisionSignals":["..."],"reason":"...","searchQuery":"optional","officialSearchQuery":"optional","entryUrl":"optional url"}',
+    "",
+    `Current absolute time: ${options.currentTimeIso ?? new Date().toISOString()}`,
+    `User timezone: ${options.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC"}`,
+    `Search preference: ${options.searchPreference ?? "auto"}`,
+    "Task plan rules:",
+    "- For commerce_search, set searchQuery to a short JD.com on-site shopping query.",
+    "- For public_research, set searchQuery to a concise Google query.",
+    "- For site_overview with a URL, set entryUrl.",
+    "- For site_overview without a URL, set officialSearchQuery.",
+    "- Never choose direct answer when searchPreference is prefer_search.",
+    `Recent conversation turns: ${formatConversationTurns(options.conversationTurns)}`,
+    ...(options.conversationContext ? [`Recent conversation context:\n${options.conversationContext}`] : []),
+    `User goal: ${goal}`,
+  ].join("\n");
+}
+
 export function buildCommerceQueryRefinementPrompt(
   goal: string,
   options: {

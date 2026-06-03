@@ -58,9 +58,33 @@ export interface RuntimeToolExecutorContext {
 }
 
 const MAX_RUNTIME_ROUNDS = 2;
+const RUNTIME_PAGE_READ_CONCURRENCY = 2;
 
 function getPlanStep(memory: SessionMemory, stepId: string) {
   return memory.plan.find((step) => step.stepId === stepId);
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+) {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    for (;;) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) {
+        return;
+      }
+      results[index] = await mapper(items[index]!, index);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
 }
 
 async function beginPlanStep(
@@ -196,39 +220,86 @@ async function executeWebDetailBatch(context: RuntimeToolExecutorContext, stepId
   await context.ensureBudget();
   await beginPlanStep(context, stepId, "browser.webDetail", getPlanStep(context.session.memory, stepId)?.goal ?? "Read pages");
 
-  const sources: ResearchSourceResult[] = [];
-
-  for (const candidate of candidates) {
+  const readResults = await mapWithConcurrency(candidates, RUNTIME_PAGE_READ_CONCURRENCY, async (candidate) => {
     await context.ensureBudget();
-    const detail = await executeFirstPartyTool(
-      context.registry,
-      "browser.webDetail",
-      {
+    const startedAt = Date.now();
+    try {
+      const detail = await executeFirstPartyTool(
+        context.registry,
+        "browser.webDetail",
+        {
+          url: candidate.url,
+          goal: context.session.memory.goal,
+        },
+        {
+          driver: context.driver,
+          signal: context.session.abortController.signal,
+        },
+      );
+      appendLog(context.session, "runtime", detail.status === "success" ? "info" : "warn", "Read public research candidate page.", {
         url: candidate.url,
-        goal: context.session.memory.goal,
-      },
-      {
-        driver: context.driver,
-        signal: context.session.abortController.signal,
-      },
-    );
+        title: candidate.title,
+        status: detail.status,
+        elapsedMs: Date.now() - startedAt,
+        problems: detail.problems,
+      });
+      return {
+        candidate,
+        detail,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown page read error.";
+      appendLog(context.session, "runtime", "warn", "Public research candidate read failed.", {
+        url: candidate.url,
+        title: candidate.title,
+        elapsedMs: Date.now() - startedAt,
+        message,
+      });
+      return {
+        candidate,
+        error: message,
+      };
+    }
+  });
 
-    if (detail.status !== "blocked" && detail.status !== "failed") {
-      sources.push(toResearchSourceResult(candidate, detail));
-    } else {
-      context.session.memory.unresolvedIssues.push(...collectIssuesFromProblems(detail.coverage, detail.problems));
+  const sources: ResearchSourceResult[] = [];
+  const pageIssues: string[] = [];
+  let partialCount = 0;
+  let failedCount = 0;
+
+  for (const readResult of readResults) {
+    if ("error" in readResult) {
+      failedCount += 1;
+      pageIssues.push(`${readResult.candidate.title}: ${readResult.error}`);
+      continue;
     }
 
-    context.deps.recordStep({
-      stepSummary: `browser.webDetail read ${candidate.title}.`,
-      nextIntent: "Continue reading the next candidate or summarize.",
-      expectedOutcome: "A trimmed single-page summary is available.",
-      snapshotSummary: `${detail.status} | ${candidate.url}`,
-    });
+    if (readResult.detail.status !== "blocked" && readResult.detail.status !== "failed") {
+      if (readResult.detail.status === "partial") {
+        partialCount += 1;
+      }
+      sources.push(toResearchSourceResult(readResult.candidate, readResult.detail));
+    } else {
+      failedCount += 1;
+      pageIssues.push(...collectIssuesFromProblems(readResult.detail.coverage, readResult.detail.problems));
+    }
   }
 
   context.session.memory.researchSources = mergeResearchSources(context.session.memory.researchSources, sources);
+  context.session.memory.unresolvedIssues = dedupeStrings([...context.session.memory.unresolvedIssues, ...pageIssues]);
+  const successCount = sources.length - partialCount;
   const status: PlanStepStatus = sources.length > 0 ? "succeeded" : "failed";
+  context.deps.recordStep({
+    stepSummary: `browser.webDetail batch completed for ${candidates.length} candidate page(s).`,
+    nextIntent: "Decide whether the collected evidence is enough to summarize.",
+    expectedOutcome: "Trimmed single-page summaries are available.",
+    snapshotSummary: JSON.stringify({
+      requestedCount: candidates.length,
+      successCount,
+      partialCount,
+      failedCount,
+    }),
+  });
   await finishPlanStep(
     context,
     stepId,

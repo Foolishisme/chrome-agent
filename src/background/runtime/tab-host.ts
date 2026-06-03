@@ -209,14 +209,7 @@ export async function sendMessageToTab<TResponse>(
   }
 }
 
-export async function scanSessionPage(
-  session: ActiveSession,
-  options: {
-    pushState(stepSummary?: string): Promise<void>;
-  },
-): Promise<SnapshotData> {
-  await options.pushState("Scan the current page state.");
-
+export async function scanSessionPage(session: ActiveSession): Promise<SnapshotData> {
   let lastError: unknown;
   for (let attempt = 0; attempt < LIMITS.SNAPSHOT_RETRIES; attempt += 1) {
     throwIfStopped(session);
@@ -263,7 +256,6 @@ export async function executeSessionAction(
     pushState(stepSummary?: string): Promise<void>;
   },
 ): Promise<ActionResult> {
-  await options.pushState(stepSummary);
   appendLog(session, "runtime", "info", "Executing atomic action.", action);
 
   try {
@@ -359,7 +351,6 @@ export async function ensureSessionUsableSnapshot(
   session.memory.runtimeMeta.pageWaitRecoveryCount = 1;
   session.memory.recoveryHint = `${snapshot.pageReady.reason} (wait recovery 1/2)`;
   session.memory.liveStepSummary = "Waiting for the page to become usable.";
-  await options.publishState();
 
   await sleep(LIMITS.PAGE_READY_WAIT_MS);
   snapshot = await options.scanPage();

@@ -191,7 +191,43 @@ describe("first-party tool registry", () => {
       "openTab",
       "waitForStable",
       "observe",
+      "closeTab",
     ]);
+    expect(driver.calls[5]?.args[1]).toMatchObject({ observationMode: "bodyOnly", updateSessionSnapshot: false });
+  });
+
+  it("reads webDetail body only and truncates long page text", async () => {
+    const driver = new MockBrowserDriver({
+      observations: {
+        1: createObservation({
+          url: "https://example.com/long",
+          title: "Long",
+          mainText: `${"Long readable text. ".repeat(140)}tail`,
+          links: [{ text: "Pricing", url: "https://example.com/pricing" }],
+          coverage: {
+            mainTextChars: 2_525,
+            linkCount: 1,
+            controlCount: 0,
+            targetCount: 0,
+          },
+        }),
+      },
+    });
+    const registry = createDefaultFirstPartyToolRegistry();
+
+    const result = await executeFirstPartyTool(
+      registry,
+      "browser.webDetail",
+      { url: "https://example.com/long", goal: "read body" },
+      { driver },
+    );
+
+    expect(result.links).toEqual([]);
+    expect(result.coverage.limitations).toContain("Readable content was truncated to 2000 characters.");
+    expect(driver.calls.find((call) => call.method === "observe")?.args[1]).toMatchObject({
+      observationMode: "bodyOnly",
+      updateSessionSnapshot: false,
+    });
   });
 
   it("integrates siteOverview and commerceResearch over mock execution paths", async () => {
@@ -212,6 +248,7 @@ describe("first-party tool registry", () => {
             { text: "Home", url: "https://openai.com/" },
             { text: "Products", url: "https://openai.com/products" },
             { text: "Pricing", url: "https://openai.com/pricing" },
+            { text: "Privacy", url: "https://openai.com/privacy" },
             { text: "External", url: "https://example.com/" },
           ],
           coverage: {
@@ -224,14 +261,14 @@ describe("first-party tool registry", () => {
         2: createObservation({
           tab: {
             tabId: 2,
-            url: "https://openai.com/products",
-            title: "Products",
+            url: "https://openai.com/pricing",
+            title: "Pricing",
             active: false,
             status: "complete",
           },
-          url: "https://openai.com/products",
-          title: "Products",
-          mainText: "Products page",
+          url: "https://openai.com/pricing",
+          title: "Pricing",
+          mainText: "Pricing page",
           links: [],
           coverage: {
             mainTextChars: 13,
@@ -243,14 +280,14 @@ describe("first-party tool registry", () => {
         3: createObservation({
           tab: {
             tabId: 3,
-            url: "https://openai.com/pricing",
-            title: "Pricing",
+            url: "https://openai.com/products",
+            title: "Products",
             active: false,
             status: "complete",
           },
-          url: "https://openai.com/pricing",
-          title: "Pricing",
-          mainText: "Pricing page",
+          url: "https://openai.com/products",
+          title: "Products",
+          mainText: "Products page",
           links: [],
           coverage: {
             mainTextChars: 12,
@@ -306,7 +343,12 @@ describe("first-party tool registry", () => {
     );
 
     expect(siteOverviewResult.status).toBe("success");
-    expect(siteOverviewResult.pagesRead.map((page) => page.title)).toEqual(["OpenAI", "Products", "Pricing"]);
+    expect(siteOverviewResult.pagesRead.map((page) => page.title)).toEqual(["OpenAI", "Pricing", "Products"]);
+    expect(driver.calls.filter((call) => call.method === "openTab").map((call) => (call.args[0] as { url: string }).url)).toEqual([
+      "https://openai.com/",
+      "https://openai.com/pricing",
+      "https://openai.com/products",
+    ]);
     expect(commerceResult.shortlist[0]?.title).toBe("Mock Laptop");
   });
 });

@@ -23,6 +23,9 @@ interface FirstPartyToolInputMap {
   "skill.commerceResearch": CommerceResearchToolInput;
 }
 
+const PAGE_BODY_CHAR_LIMIT = 2_000;
+const BROWSER_READ_CONCURRENCY = 2;
+
 export interface FirstPartyToolOutputMap {
   "browser.search": BrowserSearchToolOutput;
   "browser.webDetail": BrowserWebDetailToolOutput;
@@ -72,6 +75,21 @@ function compactText(text: string | undefined, maxLength = 180) {
     return "";
   }
   return normalized.length > maxLength ? `${normalized.slice(0, Math.max(0, maxLength - 3))}...` : normalized;
+}
+
+function truncateBodyText(text: string | undefined, maxLength = PAGE_BODY_CHAR_LIMIT) {
+  const normalized = normalizeText(text);
+  if (normalized.length <= maxLength) {
+    return {
+      text: normalized,
+      truncated: false,
+    };
+  }
+
+  return {
+    text: normalized.slice(0, maxLength),
+    truncated: true,
+  };
 }
 
 function toToolProblems(problems: BrowserPageProblem[]) {
@@ -136,7 +154,7 @@ function toSearchResults(observation: BrowserObservation) {
 }
 
 function toDetailFacts(observation: BrowserObservation, url: string): BrowserWebDetailFact[] {
-  const normalized = normalizeText(observation.mainText);
+  const normalized = truncateBodyText(observation.mainText).text;
   if (!normalized) {
     return [];
   }
@@ -230,6 +248,74 @@ function sameSiteLinks(entryUrl: string, links: BrowserLinkObservation[]) {
   return uniqueByUrl(filtered);
 }
 
+function isLowValueSiteLink(link: BrowserLinkObservation) {
+  const text = `${link.text} ${link.url}`.toLowerCase();
+  return /(?:login|signin|sign-in|signup|sign-up|account|auth|privacy|terms|legal|cookies?|careers?|jobs?|press|contact|support|status|download|language|locale|中文|隐私|条款|登录|注册|账号|招聘|工作|联系我们|下载)/i.test(text) ||
+    /\.(?:pdf|zip|dmg|exe|pkg)(?:$|[?#])/i.test(link.url);
+}
+
+function scoreSiteLink(link: BrowserLinkObservation) {
+  const text = `${link.text} ${link.url}`.toLowerCase();
+  let score = 0;
+
+  if (/(?:pricing|price|plans|定价|价格|费用)/i.test(text)) {
+    score += 90;
+  }
+  if (/(?:docs|documentation|api|guide|guides|文档|开发者)/i.test(text)) {
+    score += 80;
+  }
+  if (/(?:product|products|platform|features?|solutions?|模型|产品|平台|功能|方案)/i.test(text)) {
+    score += 70;
+  }
+  if (/(?:about|company|team|关于|公司)/i.test(text)) {
+    score += 50;
+  }
+  if (/(?:blog|news|resources?|case-stud|客户|案例|新闻|博客|资源)/i.test(text)) {
+    score += 35;
+  }
+  if (link.targetRef?.source === "content_script") {
+    score += 5;
+  }
+
+  return score;
+}
+
+function selectSiteOverviewLinks(entryUrl: string, links: BrowserLinkObservation[], maxCount: number) {
+  return sameSiteLinks(entryUrl, links)
+    .filter((link) => !isLowValueSiteLink(link))
+    .map((link, index) => ({
+      link,
+      index,
+      score: scoreSiteLink(link),
+    }))
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, Math.max(0, maxCount))
+    .map((item) => item.link);
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+) {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    for (;;) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) {
+        return;
+      }
+      results[index] = await mapper(items[index]!, index);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
+}
+
 async function runBrowserSearchTool(
   input: BrowserSearchToolInput,
   context: FirstPartyToolHandlerContext,
@@ -272,33 +358,42 @@ async function runBrowserWebDetailTool(
   const driver = ensureDriver(context, "browser.webDetail");
   const observation = await runExplicitUrlOverview(driver, {
     url: input.url,
-    active: true,
+    active: false,
+    observationMode: "bodyOnly",
+    closeAfterRead: true,
+    signal: context.signal,
   });
-  const keyFacts = toDetailFacts(observation, input.url);
+  const body = truncateBodyText(observation.mainText);
+  const normalizedObservation = {
+    ...observation,
+    mainText: body.text,
+    truncated: observation.truncated || body.truncated,
+    coverage: {
+      ...observation.coverage,
+      mainTextChars: body.text.length,
+    },
+  };
+  const keyFacts = toDetailFacts(normalizedObservation, input.url);
   const pageSummary =
-    compactText(observation.mainText, 180) ||
-    compactText(observation.links.map((link) => link.text).join(" "), 180) ||
+    compactText(normalizedObservation.mainText, 180) ||
     "页面可打开，但正文提取不足以形成稳定摘要。";
-  const partial = keyFacts.length === 0 || observation.problems.length > 0 || observation.coverage.mainTextChars === 0;
+  const partial = keyFacts.length === 0 || normalizedObservation.problems.length > 0 || normalizedObservation.coverage.mainTextChars === 0;
 
   return {
     status: partial ? "partial" : "success",
-    pageTitle: observation.title || input.url,
+    pageTitle: normalizedObservation.title || input.url,
     pageSummary,
     keyFacts,
     coverage: {
       scope: "Single explicitly requested page after trimming and observation extraction.",
-      limitations: partial ? ["Readable content was partial or insufficient for a fully stable detail summary."] : [],
+      limitations: [
+        ...(partial ? ["Readable content was partial or insufficient for a fully stable detail summary."] : []),
+        ...(normalizedObservation.truncated ? [`Readable content was truncated to ${PAGE_BODY_CHAR_LIMIT} characters.`] : []),
+      ],
     },
-    links: observation.links
-      .filter((link) => Boolean(link.text) && Boolean(link.url))
-      .slice(0, 5)
-      .map((link) => ({
-        title: link.text || link.url,
-        url: link.url,
-      })),
+    links: [],
     problems:
-      partial && observation.problems.length === 0
+      partial && normalizedObservation.problems.length === 0
         ? [
             {
               code: "READABILITY_PARTIAL",
@@ -306,7 +401,7 @@ async function runBrowserWebDetailTool(
               suggestedNextAction: "改用 browser.siteOverview 读取同站高价值页面，或手动指定更高价值的单页。",
             },
           ]
-        : toToolProblems(observation.problems),
+        : toToolProblems(normalizedObservation.problems),
   };
 }
 
@@ -318,9 +413,11 @@ async function runBrowserSiteOverviewTool(
   const entryObservation = await runExplicitUrlOverview(driver, {
     url: input.entryUrl,
     active: true,
+    observationMode: "bodyAndLinks",
+    signal: context.signal,
   });
 
-  const selectedLinks = sameSiteLinks(entryObservation.url, entryObservation.links).slice(0, Math.max(0, input.maxPages - 1));
+  const selectedLinks = selectSiteOverviewLinks(entryObservation.url, entryObservation.links, input.maxPages - 1);
   const pagesRead: BrowserSiteOverviewPage[] = [
     {
       title: entryObservation.title || entryObservation.url,
@@ -331,10 +428,44 @@ async function runBrowserSiteOverviewTool(
   ];
   const problems = [...toToolProblems(entryObservation.problems)];
 
-  for (const link of selectedLinks) {
-    const tab = await driver.openTab({ url: link.url, active: false }, { signal: context.signal });
-    await driver.waitForStable(tab.tabId, { signal: context.signal });
-    const observation = await driver.observe(tab.tabId, { signal: context.signal });
+  const linkedPages = await mapWithConcurrency(selectedLinks, BROWSER_READ_CONCURRENCY, async (link) => {
+    try {
+      const observation = await runExplicitUrlOverview(driver, {
+        url: link.url,
+        active: false,
+        observationMode: "bodyOnly",
+        closeAfterRead: true,
+        signal: context.signal,
+      });
+      return {
+        link,
+        observation,
+      };
+    } catch (error) {
+      return {
+        link,
+        error: error instanceof Error ? error.message : "Unknown same-site page read error.",
+      };
+    }
+  });
+
+  for (const linkedPage of linkedPages) {
+    if ("error" in linkedPage) {
+      pagesRead.push({
+        title: linkedPage.link.text || linkedPage.link.url,
+        url: linkedPage.link.url,
+        role: inferSitePageRole(linkedPage.link),
+        status: "failed",
+      });
+      problems.push({
+        code: "operation_failed",
+        message: linkedPage.error ?? "Same-site page read failed.",
+        suggestedNextAction: "Retry with fewer same-site pages or open the failed page manually.",
+      });
+      continue;
+    }
+
+    const { link, observation } = linkedPage;
     pagesRead.push({
       title: observation.title || link.text || observation.url,
       url: observation.url,

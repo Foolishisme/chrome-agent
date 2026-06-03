@@ -191,7 +191,7 @@ describe("runtime tool loop", () => {
     await runRuntimeToolLoop(session, deps, { driver });
 
     expect(session.memory.finalResult?.status).toBe("success");
-    expect(session.memory.plan.map((step) => step.status)).toEqual(["succeeded"]);
+    expect(session.memory.plan).toEqual([]);
     expect(driver.calls).toEqual([]);
   });
 
@@ -280,11 +280,13 @@ describe("runtime tool loop", () => {
       "waitForStable",
       "observe",
       "openTab",
-      "waitForStable",
-      "observe",
       "openTab",
       "waitForStable",
+      "waitForStable",
       "observe",
+      "observe",
+      "closeTab",
+      "closeTab",
     ]);
   });
 
@@ -622,12 +624,14 @@ describe("runtime tool loop", () => {
       "openTab",
       "waitForStable",
       "observe",
+      "closeTab",
       "openTab",
       "waitForStable",
       "observe",
       "openTab",
       "waitForStable",
       "observe",
+      "closeTab",
     ]);
   });
 

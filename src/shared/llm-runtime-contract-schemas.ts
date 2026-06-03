@@ -109,6 +109,12 @@ export const taskRouteSchema = z.object({
   decisionSignals: z.array(z.string().min(1)).default([]),
 });
 
+export const taskPlannerSchema = taskRouteSchema.extend({
+  searchQuery: z.string().min(1).optional(),
+  officialSearchQuery: z.string().min(1).optional(),
+  entryUrl: z.string().url().optional(),
+});
+
 export const researchCandidateReorderSchema = z.object({
   orderedIndexes: z.array(z.number().int().nonnegative()),
   reason: z.string().min(1).optional(),

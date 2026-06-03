@@ -102,12 +102,22 @@ export class BrowserAgentRuntime {
       const { session } = await createInitialSession(goal, {
         ...options,
         signal: startAbortController.signal,
+        publishBootstrapState: (currentSession) => this.publishSessionState(currentSession),
       });
       this.throwIfStartStopped(startAbortController);
 
       this.activeSession = session;
       this.pendingStartAbortController = undefined;
       await this.publishSessionState(session);
+      if (session.memory.finalResult && session.memory.runtimeMeta.status === "done") {
+        await this.persistTerminalState(session);
+        this.lastPublicState = session.lastPublicState;
+        this.activeSession = undefined;
+        return {
+          ok: true,
+          payload: session.lastPublicState,
+        };
+      }
       void this.runSession(session);
 
       return {
@@ -254,9 +264,7 @@ export class BrowserAgentRuntime {
   }
 
   private async scanPage(session: ActiveSession): Promise<SnapshotData> {
-    return scanSessionPage(session, {
-      pushState: (stepSummary) => this.pushState(session, stepSummary),
-    });
+    return scanSessionPage(session);
   }
 
   private async executeAction(

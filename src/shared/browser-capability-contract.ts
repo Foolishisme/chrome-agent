@@ -117,6 +117,8 @@ export interface BrowserOperationOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   reason?: string;
+  observationMode?: "bodyOnly" | "bodyAndLinks";
+  updateSessionSnapshot?: boolean;
 }
 
 export interface BrowserOpenTabInput {

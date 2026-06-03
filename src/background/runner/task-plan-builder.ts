@@ -12,7 +12,7 @@ function createPlanStep(stepId: string, goal: string, toolName: ToolName): PlanS
 
 export function buildRuntimeTaskPlan(taskSpec: TaskSpec): PlanStep[] {
   if (taskSpec.taskType === "direct_answer") {
-    return [createPlanStep("finalize-direct-answer", "Generate the direct answer.", "finalizeTaskResult")];
+    return [];
   }
 
   if (taskSpec.taskType === "commerce_search") {
@@ -42,4 +42,3 @@ export function buildRuntimeTaskPlan(taskSpec: TaskSpec): PlanStep[] {
     createPlanStep("finalize-research-result", "Summarize the research sources.", "finalizeTaskResult"),
   ];
 }
-

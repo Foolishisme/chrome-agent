@@ -25,6 +25,8 @@ interface RuntimeBrowserDriverCallbacks {
   onSnapshot?(snapshot: SnapshotData): void;
 }
 
+const BODY_EXCERPT_CHAR_LIMIT = 2_000;
+
 function throwIfAborted(options?: BrowserOperationOptions) {
   if (options?.signal?.aborted) {
     throw new Error("Runtime browser driver was aborted.");
@@ -161,6 +163,21 @@ function toObservationCoverage(snapshot: SnapshotData, links: BrowserLinkObserva
   };
 }
 
+function truncateMainText(text: string) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= BODY_EXCERPT_CHAR_LIMIT) {
+    return {
+      text: normalized,
+      truncated: false,
+    };
+  }
+
+  return {
+    text: normalized.slice(0, BODY_EXCERPT_CHAR_LIMIT),
+    truncated: true,
+  };
+}
+
 function toActionStatus(success: boolean): BrowserActionResult["status"] {
   return success ? "success" : "failed";
 }
@@ -196,7 +213,9 @@ class RuntimeBrowserDriver implements BrowserDriver {
     if (!tab.id) {
       throw new Error("Failed to open a browser tab.");
     }
-    this.callbacks.onTabChanged?.(tab.id);
+    if (input.active ?? true) {
+      this.callbacks.onTabChanged?.(tab.id);
+    }
     return toTabRef(tab);
   }
 
@@ -229,7 +248,9 @@ class RuntimeBrowserDriver implements BrowserDriver {
     if (!tab?.id) {
       throw new Error(`Failed to navigate tab ${tabId}.`);
     }
-    this.callbacks.onTabChanged?.(tab.id);
+    if (input.active !== false) {
+      this.callbacks.onTabChanged?.(tab.id);
+    }
     return {
       status: "success",
       message: `Navigated to ${input.url}.`,
@@ -264,40 +285,46 @@ class RuntimeBrowserDriver implements BrowserDriver {
     throwIfAborted(options);
 
     const snapshot = await requestSnapshot(tabId);
-    this.callbacks.onSnapshot?.(snapshot);
-    this.callbacks.onTabChanged?.(tabId);
+    if (options?.updateSessionSnapshot !== false) {
+      this.callbacks.onSnapshot?.(snapshot);
+      this.callbacks.onTabChanged?.(tabId);
+    }
 
     let detailResult: ActionResult | undefined;
     let links: BrowserLinkObservation[] = [];
+    const observationMode = options?.observationMode ?? "bodyAndLinks";
 
     if (snapshot.pageType === "google_search") {
       links = toSearchLinks(await runTabAction(tabId, { type: "EXTRACT_SEARCH_RESULTS", limit: 10 }));
     } else {
       detailResult = await runTabAction(tabId, { type: "EXTRACT_PAGE_FACTS" });
-      const navResult = await runTabAction(tabId, { type: "EXTRACT_SITE_NAV_LINKS", limit: 20, baseUrl: snapshot.url });
-      links = toNavLinks(navResult);
+      if (observationMode === "bodyAndLinks") {
+        const navResult = await runTabAction(tabId, { type: "EXTRACT_SITE_NAV_LINKS", limit: 20, baseUrl: snapshot.url });
+        links = toNavLinks(navResult);
+      }
     }
 
     const tab = await chrome.tabs.get(tabId);
     const targets = snapshot.interactiveElements.map((element) => toTargetRef(tabId, element));
     const controls = toControls(tabId, snapshot.interactiveElements);
-    const mainText =
+    const mainTextResult = truncateMainText(
       detailResult?.pageFactsResult?.bodyExcerpt ??
       (snapshot.pageType === "google_search"
         ? links.map((link) => link.text).join("\n")
-        : "");
+        : ""),
+    );
 
     return {
       tab: toTabRef(tab),
       url: snapshot.url,
       title: snapshot.title,
-      mainText,
+      mainText: mainTextResult.text,
       links,
       controls,
       semanticSnapshot: snapshot.semanticSnapshot,
       targets,
       problems: toProblems(snapshot, detailResult),
-      truncated: snapshot.semanticSnapshot?.truncated ?? false,
+      truncated: (snapshot.semanticSnapshot?.truncated ?? false) || mainTextResult.truncated,
       coverage: toObservationCoverage(snapshot, links, controls),
     };
   }
@@ -366,5 +393,3 @@ class RuntimeBrowserDriver implements BrowserDriver {
 export function createRuntimeBrowserDriver(callbacks?: RuntimeBrowserDriverCallbacks) {
   return new RuntimeBrowserDriver(callbacks);
 }
-
-

@@ -20,6 +20,17 @@ interface ClassifyTaskType {
   (goal: string): Promise<{ taskType: TaskType; reason: string; confidence?: number; decisionSignals?: string[] } | undefined>;
 }
 
+export interface LiteTaskPlan {
+  taskType: TaskType;
+  reason: string;
+  confidence?: number;
+  decisionSignals?: string[];
+  searchQuery?: string;
+  officialSearchQuery?: string;
+  entryUrl?: string;
+  source: "llm-lite" | "rule";
+}
+
 function buildLlmInputLimit(topK: number) {
   return Math.max(10, topK);
 }
@@ -125,6 +136,13 @@ function buildFallbackResearchQuery(goal: string) {
     .trim();
 
   return normalized || goal.trim();
+}
+
+function buildFallbackCommerceQuery(goal: string) {
+  return buildFallbackResearchQuery(goal)
+    .replace(/(?:推荐|选购|购买|下单|帮我|请|麻烦你)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim() || goal.trim();
 }
 
 export function detectOutputMode(goal: string): OutputMode {
@@ -262,11 +280,13 @@ export function compileSiteOverviewTask(
   options: {
     currentTimeIso?: string;
     timezone?: string;
+    plannedEntryUrl?: string;
+    plannedOfficialSearchQuery?: string;
   } = {},
 ): SiteOverviewTaskSpec {
-  const entryUrl = extractExplicitUrl(goal);
+  const entryUrl = extractExplicitUrl(goal) ?? options.plannedEntryUrl;
   const siteName = normalizeDomainFromUrl(entryUrl) ?? extractSiteName(goal);
-  const officialSearchQuery = siteName ? `${siteName} official website` : buildFallbackResearchQuery(goal);
+  const officialSearchQuery = options.plannedOfficialSearchQuery ?? (siteName ? `${siteName} official website` : buildFallbackResearchQuery(goal));
   const runtimeTime = resolveRuntimeTimeContext(options);
 
   return {
@@ -316,6 +336,7 @@ async function compileCommerceTask(
   goal: string,
   options: {
     refineWithLiteModel?: RefineSearchQuery;
+    plannedSearchQuery?: string;
     conversationContext?: string;
     currentTimeIso?: string;
     timezone?: string;
@@ -325,14 +346,19 @@ async function compileCommerceTask(
   const llmInputLimit = buildLlmInputLimit(topK);
   const extractLimit = buildExtractLimit(llmInputLimit);
   const runtimeTime = resolveRuntimeTimeContext(options);
-  if (!options.refineWithLiteModel) {
-    throw new RuntimeError("Search query planning requires the lite model.", "SEARCH_QUERY_PLANNER_MISSING");
+  let searchQuery = options.plannedSearchQuery?.trim();
+  let querySource: CommerceTaskSpec["querySource"] = searchQuery ? "llm-lite" : "rule";
+  let reason = searchQuery ? "合并 planner 生成站内搜索词" : "规则生成站内搜索词";
+
+  if (!searchQuery && options.refineWithLiteModel) {
+    const refined = await options.refineWithLiteModel(goal, runtimeTime);
+    searchQuery = refined?.searchQuery?.trim();
+    querySource = searchQuery ? "llm-lite" : "rule";
+    reason = refined?.reason ?? reason;
   }
 
-  const refined = await options.refineWithLiteModel(goal, runtimeTime);
-  const searchQuery = refined?.searchQuery?.trim();
   if (!searchQuery) {
-    throw new RuntimeError("The lite model did not return a usable search query.", "SEARCH_QUERY_EMPTY");
+    searchQuery = buildFallbackCommerceQuery(goal);
   }
 
   return {
@@ -344,8 +370,8 @@ async function compileCommerceTask(
     llmInputLimit,
     extractLimit,
     searchQuery,
-    querySource: "llm-lite",
-    notes: [refined?.reason ?? "小模型生成搜索词"],
+    querySource,
+    notes: [reason],
   };
 }
 
@@ -355,12 +381,29 @@ export async function compilePublicResearchTask(
   goal: string,
   options: {
     refineWithLiteModel?: RefineSearchQuery;
+    plannedSearchQuery?: string;
     conversationContext?: string;
     currentTimeIso?: string;
     timezone?: string;
   } = {},
 ): Promise<PublicResearchTaskSpec> {
   const runtimeTime = resolveRuntimeTimeContext(options);
+  const plannedSearchQuery = options.plannedSearchQuery?.trim();
+  if (plannedSearchQuery) {
+    return {
+      taskType: "public_research",
+      originalGoal: goal,
+      outputMode: detectOutputMode(goal),
+      ...runtimeTime,
+      searchQuery: plannedSearchQuery,
+      querySource: "llm-lite",
+      notes: ["合并 planner 生成 Google 查询词"],
+      searchEngine: "google",
+      candidateLimit: 5,
+      sourceTargetCount: 3,
+    };
+  }
+
   if (!options.refineWithLiteModel) {
     return {
       taskType: "public_research",
@@ -425,12 +468,14 @@ export async function compileTaskSpec(
     currentTimeIso?: string;
     timezone?: string;
     searchPreference?: SearchPreference;
+    plannedTask?: LiteTaskPlan;
   } = {},
 ): Promise<{
   taskType: TaskType;
   taskSpec: TaskSpec;
 }> {
   const taskType =
+    options.plannedTask?.taskType ??
     options.taskType ??
     (
       await detectTaskTypeWithLiteModel(goal, {
@@ -457,6 +502,7 @@ export async function compileTaskSpec(
   if (taskType === "commerce_search") {
     const taskSpec = await compileCommerceTask(goal, {
       refineWithLiteModel: options.refineCommerceWithLiteModel,
+      plannedSearchQuery: options.plannedTask?.taskType === "commerce_search" ? options.plannedTask.searchQuery : undefined,
       currentTimeIso: options.currentTimeIso,
       timezone: options.timezone,
     });
@@ -470,6 +516,8 @@ export async function compileTaskSpec(
     const taskSpec = compileSiteOverviewTask(goal, {
       currentTimeIso: options.currentTimeIso,
       timezone: options.timezone,
+      plannedEntryUrl: options.plannedTask?.taskType === "site_overview" ? options.plannedTask.entryUrl : undefined,
+      plannedOfficialSearchQuery: options.plannedTask?.taskType === "site_overview" ? options.plannedTask.officialSearchQuery : undefined,
     });
     return {
       taskType,
@@ -479,6 +527,7 @@ export async function compileTaskSpec(
 
   const taskSpec = await compilePublicResearchTask(goal, {
     refineWithLiteModel: options.refineResearchWithLiteModel,
+    plannedSearchQuery: options.plannedTask?.taskType === "public_research" ? options.plannedTask.searchQuery : undefined,
     currentTimeIso: options.currentTimeIso,
     timezone: options.timezone,
   });

@@ -5,6 +5,7 @@ import {
   queryRefinementSchema,
   researchCandidateReorderSchema,
   roundDecisionSchema,
+  taskPlannerSchema,
   taskRouteSchema,
 } from "../../shared/llm-runtime-contract-schemas";
 import type {
@@ -25,6 +26,8 @@ import {
   buildRoundDecisionPrompt,
   buildResearchCandidateReorderPrompt,
   buildResearchQueryRefinementPrompt,
+  buildTaskPlannerPromptWithContext,
+  buildTaskPlanOrDirectAnswerPrompt,
   buildSiteCandidateReorderPrompt,
   buildTaskRoutePromptWithContext,
 } from "./llm-prompt-builders";
@@ -626,6 +629,154 @@ export async function classifyTaskType(
     ...response.data,
     model: response.model,
     provider: response.provider,
+  };
+}
+
+export async function planTaskWithLiteModel(
+  goal: string,
+  options: RequestOptions & {
+    conversationContext?: string;
+    conversationTurns?: ConversationTurn[];
+    currentTimeIso?: string;
+    timezone?: string;
+    searchPreference?: "auto" | "prefer_search";
+  } = {},
+): Promise<{
+  taskType: TaskType;
+  reason: string;
+  confidence?: number;
+  decisionSignals?: string[];
+  searchQuery?: string;
+  officialSearchQuery?: string;
+  entryUrl?: string;
+  model: string;
+  provider: ProviderName;
+}> {
+  const response = await requestProviderJson(
+    buildTaskPlannerPromptWithContext(goal, {
+      conversationContext: options.conversationContext,
+      conversationTurns: options.conversationTurns,
+      currentTimeIso: options.currentTimeIso,
+      timezone: options.timezone,
+      searchPreference: options.searchPreference,
+    }),
+    taskPlannerSchema,
+    "simple",
+    options,
+  );
+
+  return {
+    ...response.data,
+    model: response.model,
+    provider: response.provider,
+  };
+}
+
+function stripRoutingHeader(markdown: string, header: "DIRECT_ANSWER" | "TASK_PLAN") {
+  return markdown.replace(new RegExp(`^\\s*${header}\\s*`, "i"), "").trim();
+}
+
+export async function streamTaskPlanOrDirectAnswer(
+  goal: string,
+  options: StreamMarkdownOptions & {
+    conversationContext?: string;
+    conversationTurns?: ConversationTurn[];
+    currentTimeIso?: string;
+    timezone?: string;
+    searchPreference?: "auto" | "prefer_search";
+    onDirectAnswerDelta?: (markdown: string) => void | Promise<void>;
+  } = {},
+): Promise<
+  | {
+      kind: "direct_answer";
+      markdown: string;
+      model: string;
+      provider: ProviderName;
+    }
+  | {
+      kind: "task_plan";
+      taskType: Exclude<TaskType, "direct_answer">;
+      reason: string;
+      confidence?: number;
+      decisionSignals?: string[];
+      searchQuery?: string;
+      officialSearchQuery?: string;
+      entryUrl?: string;
+      model: string;
+      provider: ProviderName;
+    }
+> {
+  let mode: "unknown" | "direct_answer" | "task_plan" = "unknown";
+  let headerBuffer = "";
+
+  const response = await requestOpenAiCompatibleTextStream(
+    buildTaskPlanOrDirectAnswerPrompt(goal, {
+      conversationContext: options.conversationContext,
+      conversationTurns: options.conversationTurns,
+      currentTimeIso: options.currentTimeIso,
+      timezone: options.timezone,
+      searchPreference: options.searchPreference,
+    }),
+    getModelCandidates("simple"),
+    {
+      signal: options.signal,
+      onDelta: async (delta) => {
+        if (mode === "direct_answer") {
+          await options.onDirectAnswerDelta?.(delta);
+          return;
+        }
+        if (mode === "task_plan") {
+          return;
+        }
+
+        headerBuffer += delta;
+        const directMatch = headerBuffer.match(/^\s*DIRECT_ANSWER\s*(?:\r?\n)?/i);
+        if (directMatch) {
+          mode = "direct_answer";
+          const rest = headerBuffer.slice(directMatch[0].length);
+          if (rest) {
+            await options.onDirectAnswerDelta?.(rest);
+          }
+          return;
+        }
+
+        if (/^\s*TASK_PLAN\b/i.test(headerBuffer)) {
+          mode = "task_plan";
+        }
+      },
+    },
+  );
+
+  const markdown = response.markdown.trim();
+  if (/^DIRECT_ANSWER\b/i.test(markdown)) {
+    return {
+      kind: "direct_answer",
+      markdown: stripRoutingHeader(markdown, "DIRECT_ANSWER"),
+      model: response.model,
+      provider: "openai-compatible",
+    };
+  }
+
+  if (/^TASK_PLAN\b/i.test(markdown)) {
+    const rawPlan = stripRoutingHeader(markdown, "TASK_PLAN");
+    const parsed = taskPlannerSchema.parse(parseModelJson(rawPlan));
+    if (parsed.taskType === "direct_answer") {
+      throw new RuntimeError("TASK_PLAN must not return direct_answer.", "INVALID_TASK_PLAN");
+    }
+    return {
+      kind: "task_plan",
+      ...parsed,
+      taskType: parsed.taskType,
+      model: response.model,
+      provider: "openai-compatible",
+    };
+  }
+
+  return {
+    kind: "direct_answer",
+    markdown,
+    model: response.model,
+    provider: "openai-compatible",
   };
 }
 
