@@ -43,10 +43,12 @@ function buildConversationTurns(memory: SessionMemory) {
 
 export function ensureTerminalResult(memory: SessionMemory, reason: string, status?: "partial" | "failed" | "blocked") {
   if (memory.finalResult) {
+    memory.streamingFinalDraft = undefined;
     return;
   }
 
   memory.finalResult = buildFallbackFinalResult(memory, reason, status);
+  memory.streamingFinalDraft = undefined;
 }
 
 export function toPublicState(memory: SessionMemory): SessionPublicState {
@@ -61,6 +63,7 @@ export function toPublicState(memory: SessionMemory): SessionPublicState {
     status: memory.runtimeMeta.status,
     error: memory.lastError,
     unresolvedIssues: memory.unresolvedIssues,
+    streamingFinalDraft: memory.runtimeMeta.status === "running" ? memory.streamingFinalDraft : undefined,
     finalResult: memory.finalResult,
     updatedAt: Date.now(),
   };

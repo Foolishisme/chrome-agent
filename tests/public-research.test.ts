@@ -4,8 +4,8 @@ import { finalizeTaskResult } from "../src/background/tools/adapters/finalize-ta
 import { extractGoogleSearchResults, extractPageFacts } from "../src/content/research";
 import type { SessionMemory } from "../src/shared/agent-domain-model";
 
-const { generateFinalResultMock, reorderResearchCandidatesMock } = vi.hoisted(() => ({
-  generateFinalResultMock: vi.fn(),
+const { streamFinalMarkdownMock, reorderResearchCandidatesMock } = vi.hoisted(() => ({
+  streamFinalMarkdownMock: vi.fn(),
   reorderResearchCandidatesMock: vi.fn(),
 }));
 
@@ -13,15 +13,15 @@ vi.mock("../src/background/llm/llm-client", async () => {
   const actual = await vi.importActual<typeof import("../src/background/llm/llm-client")>("../src/background/llm/llm-client");
   return {
     ...actual,
-    generateFinalResult: generateFinalResultMock,
+    streamFinalMarkdown: streamFinalMarkdownMock,
     reorderResearchCandidates: reorderResearchCandidatesMock,
   };
 });
 
 beforeEach(() => {
-  generateFinalResultMock.mockReset();
+  streamFinalMarkdownMock.mockReset();
   reorderResearchCandidatesMock.mockReset();
-  generateFinalResultMock.mockRejectedValue(new Error("LLM unavailable"));
+  streamFinalMarkdownMock.mockRejectedValue(new Error("LLM unavailable"));
 });
 
 function createResearchMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
@@ -70,13 +70,19 @@ function createResearchMemory(overrides: Partial<SessionMemory> = {}): SessionMe
   return memory;
 }
 
-function createFinalizeContext(memory: SessionMemory) {
+function createFinalizeContext(
+  memory: SessionMemory,
+  overrides: Partial<{
+    publishFinalDraft: (markdown: string) => Promise<void>;
+  }> = {},
+) {
   return {
     memory,
     signal: new AbortController().signal,
     appendLog: vi.fn(),
     recordStep: vi.fn(),
     pushState: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
   };
 }
 
@@ -218,6 +224,97 @@ describe("public research page facts", () => {
 });
 
 describe("public research finalization", () => {
+  it("streams final markdown through the unified finalizer before committing the final result", async () => {
+    const drafts: string[] = [];
+    streamFinalMarkdownMock.mockImplementationOnce(async (_input: unknown, options: { onDelta?: (delta: string) => void | Promise<void> }) => {
+      await options.onDelta?.("## 结论\n");
+      await options.onDelta?.("Playwright 的自动等待能力更适合现代浏览器自动化。\n");
+      return {
+        markdown: "## 结论\nPlaywright 的自动等待能力更适合现代浏览器自动化。\n- 自动等待减少显式等待代码",
+        model: "mock-flash",
+        provider: "openai-compatible",
+      };
+    });
+    const memory = createResearchMemory({
+      taskSpec: {
+        taskType: "public_research",
+        originalGoal: "Research the difference between Playwright and Selenium",
+        searchQuery: "Playwright Selenium difference",
+        querySource: "llm-lite",
+        notes: [],
+        searchEngine: "google",
+        candidateLimit: 5,
+        sourceTargetCount: 1,
+      },
+      researchSources: [
+        {
+          candidate: { title: "Playwright docs", url: "https://example.com/a", rank: 1 },
+          status: "success",
+          pageTitle: "Playwright docs",
+          bodyExcerpt: "Playwright has built-in auto-waiting.",
+          sourceUrl: "https://example.com/a",
+          unresolvedIssues: [],
+          textLength: 320,
+        },
+      ],
+    });
+
+    await finalizeTaskResult(
+      createFinalizeContext(memory, {
+        publishFinalDraft: async (markdown) => {
+          drafts.push(markdown);
+          memory.streamingFinalDraft = { markdown, updatedAt: Date.now() };
+        },
+      }),
+      "research",
+    );
+
+    expect(streamFinalMarkdownMock).toHaveBeenCalledOnce();
+    expect(drafts.at(-1)).toContain("Playwright 的自动等待能力");
+    expect(memory.streamingFinalDraft).toBeUndefined();
+    expect(memory.finalResult?.status).toBe("success");
+    expect(memory.finalResult?.markdown).toContain("自动等待");
+    expect(memory.finalResult?.summary).toContain("Playwright 的自动等待能力");
+    expect(memory.finalResult?.keyResults).toContain("自动等待减少显式等待代码");
+  });
+
+  it("uses partial streamed markdown when final streaming is interrupted after chunks arrive", async () => {
+    streamFinalMarkdownMock.mockImplementationOnce(async (_input: unknown, options: { onDelta?: (delta: string) => void | Promise<void> }) => {
+      await options.onDelta?.("## 结论\n");
+      await options.onDelta?.("已生成部分研究结论。");
+      throw new Error("stream interrupted");
+    });
+    const memory = createResearchMemory({
+      taskSpec: {
+        taskType: "public_research",
+        originalGoal: "Research browser automation",
+        searchQuery: "browser automation",
+        querySource: "llm-lite",
+        notes: [],
+        searchEngine: "google",
+        candidateLimit: 5,
+        sourceTargetCount: 1,
+      },
+      researchSources: [
+        {
+          candidate: { title: "Automation guide", url: "https://example.com/a", rank: 1 },
+          status: "success",
+          pageTitle: "Automation guide",
+          bodyExcerpt: "Browser automation evidence.",
+          sourceUrl: "https://example.com/a",
+          unresolvedIssues: [],
+          textLength: 240,
+        },
+      ],
+    });
+
+    await finalizeTaskResult(createFinalizeContext(memory), "research");
+
+    expect(memory.finalResult?.status).toBe("partial");
+    expect(memory.finalResult?.markdown).toContain("已生成部分研究结论。");
+    expect(memory.finalResult?.errorsOrBlockers).toContain("Final answer streaming was interrupted: stream interrupted");
+  });
+
   it("builds partial final output with unresolved issues when sources are insufficient", async () => {
     const memory = createResearchMemory({
       taskSpec: {

@@ -80,6 +80,51 @@ export function dedupeIssues(issues: string[]) {
   return Array.from(new Set(issues.filter(Boolean)));
 }
 
+function stripMarkdownInlineSyntax(text: string) {
+  return text
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeMarkdownContentLine(line: string) {
+  const trimmed = line.trim();
+  if (!trimmed || /^#{1,6}\s+/.test(trimmed) || /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(trimmed)) {
+    return "";
+  }
+
+  return stripMarkdownInlineSyntax(trimmed.replace(/^[-*+]\s+/, "").replace(/^\d+\.\s+/, "").replace(/^>\s+/, ""));
+}
+
+function truncateText(text: string, maxLength: number) {
+  return text.length > maxLength ? `${text.slice(0, Math.max(0, maxLength - 1))}...` : text;
+}
+
+export function deriveSummaryFromMarkdown(markdown: string, fallbackSummary: string) {
+  const firstContentLine = markdown.split(/\r?\n/).map(normalizeMarkdownContentLine).find(Boolean);
+  return truncateText(firstContentLine || fallbackSummary, 120);
+}
+
+export function deriveKeyResultsFromMarkdown(markdown: string, fallbackKeyResults: string[] = []) {
+  const lines = markdown.split(/\r?\n/);
+  const listItems = lines
+    .map((line) => line.trim().match(/^(?:[-*+]|\d+\.)\s+(.+)$/)?.[1])
+    .filter((line): line is string => Boolean(line))
+    .map(stripMarkdownInlineSyntax)
+    .filter(Boolean)
+    .slice(0, 4);
+
+  if (listItems.length > 0) {
+    return listItems;
+  }
+
+  const paragraphs = lines.map(normalizeMarkdownContentLine).filter(Boolean).slice(0, 4);
+  return paragraphs.length > 0 ? paragraphs : fallbackKeyResults.slice(0, 4);
+}
+
 function countSuccessfulResearchSources(sources: ResearchSourceResult[]) {
   return sources.filter((source) => source.status === "success").length;
 }

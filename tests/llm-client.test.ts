@@ -5,12 +5,16 @@ import {
   extractOpenAiCompatibleJsonText,
   extractFirstJsonBlock,
   getModelCandidates,
+  parseOpenAiCompatibleStreamEvent,
   parseModelJson,
   reorderResearchCandidates,
   reorderSiteCandidates,
+  setActiveLlmProfile,
+  streamFinalMarkdown,
 } from "../src/background/llm/llm-client";
 
 afterEach(() => {
+  setActiveLlmProfile("external");
   vi.unstubAllGlobals();
 });
 
@@ -25,6 +29,32 @@ describe("llm client helpers", () => {
     expect(body.response_format.type).toBe("json_object");
     expect(body.messages[0]?.content).toBe("hello");
     expect(body.model).toBe("deepseek-v4-flash");
+  });
+
+  it("builds a streaming markdown request without JSON mode", () => {
+    const body = buildOpenAiCompatibleRequestBody("hello", "deepseek-v4-flash", {
+      jsonMode: false,
+      stream: true,
+    });
+
+    expect(body.stream).toBe(true);
+    expect(body.response_format).toBeUndefined();
+    expect(body.messages[0]?.content).toBe("hello");
+  });
+
+  it("parses OpenAI-compatible stream events", () => {
+    expect(parseOpenAiCompatibleStreamEvent('data: {"choices":[{"delta":{"content":"hello"}}]}')).toEqual({
+      done: false,
+      delta: "hello",
+    });
+    expect(parseOpenAiCompatibleStreamEvent("data: [DONE]")).toEqual({
+      done: true,
+      delta: "",
+    });
+    expect(parseOpenAiCompatibleStreamEvent("data: not-json")).toEqual({
+      done: false,
+      delta: "",
+    });
   });
 
   it("extracts the first JSON block when extra text is appended", () => {
@@ -45,6 +75,60 @@ describe("llm client helpers", () => {
     });
 
     expect(text).toBe('{"ok":true}');
+  });
+
+  it("streams final markdown chunks from an OpenAI-compatible response", async () => {
+    setActiveLlmProfile("local");
+    const deltas: string[] = [];
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"## 结论\\n"}}]}\n\n'));
+        controller.enqueue(encoder.encode("data: malformed\n\n"));
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"已经完成。"}}]}\n\n'));
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body,
+      }),
+    );
+
+    const result = await streamFinalMarkdown(
+      {
+        goal: "总结",
+        taskType: "direct_answer",
+        taskSpec: {
+          taskType: "direct_answer",
+          originalGoal: "总结",
+          outputMode: "inline",
+          routeReason: "test",
+          currentTimeIso: "2026-06-03T00:00:00.000Z",
+          timezone: "Asia/Shanghai",
+          evidenceTurnCount: 0,
+        },
+        evidence: {
+          kind: "direct_answer",
+          recentTurns: [],
+        },
+        unresolvedIssues: [],
+      },
+      {
+        onDelta: (delta) => {
+          deltas.push(delta);
+        },
+      },
+    );
+
+    expect(result.markdown).toBe("## 结论\n已经完成。");
+    expect(deltas).toEqual(["## 结论\n", "已经完成。"]);
+    const requestBody = JSON.parse((vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit).body as string);
+    expect(requestBody.stream).toBe(true);
+    expect(requestBody.response_format).toBeUndefined();
   });
 
   it("falls back to a rule-based round decision when the model is unavailable", async () => {
@@ -76,6 +160,7 @@ describe("llm client helpers", () => {
   });
 
   it("reorders research candidates when the model returns a valid index order", async () => {
+    setActiveLlmProfile("local");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -106,6 +191,7 @@ describe("llm client helpers", () => {
   });
 
   it("falls back to the filtered order when candidate reorder is invalid", async () => {
+    setActiveLlmProfile("local");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -136,6 +222,7 @@ describe("llm client helpers", () => {
   });
 
   it("reorders site candidates when the model returns a valid index order", async () => {
+    setActiveLlmProfile("local");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({

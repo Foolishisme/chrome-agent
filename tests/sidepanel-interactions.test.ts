@@ -172,6 +172,16 @@ function createRunningStateWithTransientError(): SessionPublicState {
   };
 }
 
+function createRunningStateWithFinalDraft(): SessionPublicState {
+  return {
+    ...createRunningState(),
+    streamingFinalDraft: {
+      markdown: "## 结论\n黄金上涨与避险情绪有关。\n- 战争风险会推高避险需求",
+      updatedAt: Date.now(),
+    },
+  };
+}
+
 async function loadSidepanel() {
   vi.resetModules();
   await import("../src/sidepanel/sidepanel-app");
@@ -454,6 +464,29 @@ describe("sidepanel result actions", () => {
     expect(document.body.textContent).toContain("对话");
     expect(document.querySelector(".status-grid")).toBeNull();
     expect(document.querySelector(".timeline-details")).toBeNull();
+  });
+
+  it("renders streamed final markdown in the live conversation while running", async () => {
+    await loadSidepanel();
+    onRuntimeMessage?.({
+      type: "SESSION_UPDATE",
+      payload: createRunningStateWithFinalDraft(),
+    });
+
+    expect(document.getElementById("start-button")).toBeNull();
+    expect(document.getElementById("stop-button")).not.toBeNull();
+    expect(document.body.textContent).toContain("黄金上涨与避险情绪有关。");
+    expect(document.body.textContent).toContain("战争风险会推高避险需求");
+    expect(document.body.textContent).not.toMatch(/正在处理请求|Working on it/);
+    expect(document.querySelectorAll("section.section")).toHaveLength(1);
+
+    const liveCopyButton = document.querySelector("[data-copy-live-result]");
+    expect(liveCopyButton).not.toBeNull();
+    (liveCopyButton as HTMLButtonElement).click();
+
+    await vi.waitFor(() => {
+      expect(clipboardWriteText).toHaveBeenCalledWith("## 结论\n黄金上涨与避险情绪有关。\n- 战争风险会推高避险需求");
+    });
   });
 
   it("does not submit stop when Enter is pressed during a running session", async () => {

@@ -15,10 +15,9 @@ import type {
 import { runRuntimeToolLoop } from "../../src/background/runner/run-runtime-tool-loop";
 import { buildRuntimeTaskPlan } from "../../src/background/runner/task-plan-builder";
 
-const { decideRoundActionMock, generateDirectAnswerResultMock, generateFinalResultMock } = vi.hoisted(() => ({
+const { decideRoundActionMock, streamFinalMarkdownMock } = vi.hoisted(() => ({
   decideRoundActionMock: vi.fn(),
-  generateDirectAnswerResultMock: vi.fn(),
-  generateFinalResultMock: vi.fn(),
+  streamFinalMarkdownMock: vi.fn(),
 }));
 
 vi.mock("../../src/background/llm/llm-client", async () => {
@@ -26,8 +25,7 @@ vi.mock("../../src/background/llm/llm-client", async () => {
   return {
     ...actual,
     decideRoundAction: decideRoundActionMock,
-    generateDirectAnswerResult: generateDirectAnswerResultMock,
-    generateFinalResult: generateFinalResultMock,
+    streamFinalMarkdown: streamFinalMarkdownMock,
   };
 });
 
@@ -166,8 +164,7 @@ function createSearchSnapshot(query: string): SnapshotData {
 describe("runtime tool loop", () => {
   beforeEach(() => {
     decideRoundActionMock.mockReset();
-    generateDirectAnswerResultMock.mockReset();
-    generateFinalResultMock.mockReset();
+    streamFinalMarkdownMock.mockReset();
   });
 
   it("finishes direct_answer without using the browser driver", async () => {
@@ -180,10 +177,8 @@ describe("runtime tool loop", () => {
       timezone: "Asia/Shanghai",
       evidenceTurnCount: 0,
     };
-    generateDirectAnswerResultMock.mockResolvedValue({
-      summary: "DOM is the browser's structured representation of a page.",
+    streamFinalMarkdownMock.mockResolvedValue({
       markdown: "DOM is the browser's structured representation of a page.",
-      keyResults: ["DOM represents the page structure."],
       model: "mock-model",
       provider: "openai-compatible",
     });
@@ -212,11 +207,8 @@ describe("runtime tool loop", () => {
       candidateLimit: 5,
       sourceTargetCount: 2,
     };
-    generateFinalResultMock.mockResolvedValue({
-      summary: "OpenAI provides products, docs, and pricing entry points.",
+    streamFinalMarkdownMock.mockResolvedValue({
       markdown: "OpenAI provides products, docs, and pricing entry points.",
-      keyResults: ["Products", "Docs"],
-      suggestedNextAction: "Review the cited sources if needed.",
       model: "mock-model",
       provider: "openai-compatible",
     });
@@ -311,11 +303,8 @@ describe("runtime tool loop", () => {
       minReadableTextLength: 120,
       notes: [],
     };
-    generateFinalResultMock.mockResolvedValue({
-      summary: "The OpenAI site exposes product, pricing, and documentation entry points.",
+    streamFinalMarkdownMock.mockResolvedValue({
       markdown: "The OpenAI site exposes product, pricing, and documentation entry points.",
-      keyResults: ["Products", "Pricing"],
-      suggestedNextAction: "Open the cited pages if you need more detail.",
       model: "mock-model",
       provider: "openai-compatible",
     });
@@ -415,11 +404,8 @@ describe("runtime tool loop", () => {
       querySource: "rule",
       notes: [],
     };
-    generateFinalResultMock.mockResolvedValue({
-      summary: "Two shortlist items were kept under the budget.",
+    streamFinalMarkdownMock.mockResolvedValue({
       markdown: "Two shortlist items were kept under the budget.",
-      keyResults: ["Mock Laptop A", "Mock Laptop B"],
-      suggestedNextAction: "Review the shortlist items before buying.",
       model: "mock-model",
       provider: "openai-compatible",
     });
@@ -558,11 +544,8 @@ describe("runtime tool loop", () => {
       candidateLimit: 4,
       sourceTargetCount: 1,
     };
-    generateFinalResultMock.mockResolvedValue({
-      summary: "The second round added a clearer pricing source and the result can now be summarized.",
+    streamFinalMarkdownMock.mockResolvedValue({
       markdown: "The second round added a clearer pricing source and the result can now be summarized.",
-      keyResults: ["Pricing page"],
-      suggestedNextAction: "Open the pricing page if you need more detail.",
       model: "mock-model",
       provider: "openai-compatible",
     });
@@ -660,11 +643,8 @@ describe("runtime tool loop", () => {
       candidateLimit: 4,
       sourceTargetCount: 1,
     };
-    generateFinalResultMock.mockResolvedValue({
-      summary: "Use the current pricing source instead of replanning again.",
+    streamFinalMarkdownMock.mockResolvedValue({
       markdown: "Use the current pricing source instead of replanning again.",
-      keyResults: ["Pricing page"],
-      suggestedNextAction: "Review the current source before retrying.",
       model: "mock-model",
       provider: "openai-compatible",
     });

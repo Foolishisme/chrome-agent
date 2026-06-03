@@ -353,6 +353,20 @@ export interface ResearchSourceResult {
   sourceFactCard?: SourceFactCard;
 }
 
+export interface FinalSynthesisInput {
+  goal: string;
+  taskType: TaskType;
+  taskSpec: TaskSpec;
+  evidence: Record<string, unknown>;
+  unresolvedIssues: string[];
+  conversationContext?: string;
+}
+
+export interface StreamingFinalDraft {
+  markdown: string;
+  updatedAt: number;
+}
+
 export type AgentAction =
   | { type: "CLICK"; agentId: string }
   | { type: "TYPE"; agentId: string; text: string; submit?: boolean }
@@ -461,6 +475,7 @@ export interface SessionMemory {
   failures: FailureRecord[];
   unresolvedIssues: string[];
   activeSourceIndex: number;
+  streamingFinalDraft?: StreamingFinalDraft;
   finalResult?: FinalResult;
   runtimeMeta: {
     sessionId: string;
@@ -500,6 +515,7 @@ export interface SessionPublicState {
   status: RuntimeStatus;
   error?: string;
   unresolvedIssues?: string[];
+  streamingFinalDraft?: StreamingFinalDraft;
   finalResult?: FinalResult;
   updatedAt: number;
 }
@@ -526,4 +542,3 @@ export interface UserLlmConfigs {
   external: LlmProfileConfig;
   local: LlmProfileConfig;
 }
-

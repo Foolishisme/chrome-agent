@@ -25,6 +25,7 @@ vi.mock("../src/background/runner/run-runtime-tool-loop", async () => {
 });
 
 import { BrowserAgentRuntime, evaluateRuntimeBudget, isReceiverMissingError, sendMessageToTab } from "../src/background/runtime/agent-runtime";
+import { ensureTerminalResult, toPublicState } from "../src/background/runtime/public-state";
 
 function createMemory(overrides: Partial<SessionMemory> = {}): SessionMemory {
   const memory: SessionMemory = {
@@ -179,6 +180,22 @@ describe("runtime messaging recovery", () => {
     );
 
     expect(budget.hardStopCode).toBe("MAX_ELAPSED_REACHED");
+  });
+
+  it("publishes streaming final drafts only while running and clears them on terminal fallback", () => {
+    const memory = createMemory({
+      streamingFinalDraft: {
+        markdown: "## 结论\n正在生成。",
+        updatedAt: Date.now(),
+      },
+    });
+
+    expect(toPublicState(memory).streamingFinalDraft?.markdown).toContain("正在生成");
+
+    ensureTerminalResult(memory, "Stopped.", "partial");
+
+    expect(memory.streamingFinalDraft).toBeUndefined();
+    expect(toPublicState(memory).streamingFinalDraft).toBeUndefined();
   });
 });
 

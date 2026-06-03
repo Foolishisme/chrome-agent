@@ -2,7 +2,6 @@ import { z } from "zod";
 import { LIMITS } from "../../shared/agent-runtime-config";
 import { RuntimeError } from "../../shared/runtime-error";
 import {
-  finalResultSynthesisSchema,
   queryRefinementSchema,
   researchCandidateReorderSchema,
   roundDecisionSchema,
@@ -10,21 +9,19 @@ import {
 } from "../../shared/llm-runtime-contract-schemas";
 import type {
   ConversationTurn,
-  DirectAnswerTaskSpec,
   ExtractedItem,
+  FinalSynthesisInput,
   LlmProfile,
   PublicResearchTaskSpec,
   ResearchCandidate,
   ResearchSourceResult,
   SearchTaskSpec,
   SiteOverviewTaskSpec,
-  SourceFactCard,
   TaskType,
 } from "../../shared/agent-domain-model";
 import {
-  buildDirectAnswerPrompt,
-  buildFinalResultPrompt,
   buildCommerceQueryRefinementPrompt,
+  buildFinalMarkdownPrompt,
   buildRoundDecisionPrompt,
   buildResearchCandidateReorderPrompt,
   buildResearchQueryRefinementPrompt,
@@ -177,7 +174,17 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
-export function buildOpenAiCompatibleRequestBody(prompt: string, model: string) {
+interface RequestBodyOptions {
+  jsonMode?: boolean;
+  stream?: boolean;
+}
+
+interface StreamMarkdownOptions extends RequestOptions {
+  onDelta?: (delta: string) => void | Promise<void>;
+}
+
+export function buildOpenAiCompatibleRequestBody(prompt: string, model: string, options: RequestBodyOptions = {}) {
+  const jsonMode = options.jsonMode ?? true;
   const body: Record<string, any> = {
     model,
     messages: [
@@ -188,6 +195,10 @@ export function buildOpenAiCompatibleRequestBody(prompt: string, model: string) 
     ],
   };
 
+  if (options.stream) {
+    body.stream = true;
+  }
+
   // deepseek reasoning models (e.g. deepseek-reasoner, deepseek-v4-pro) do not support response_format = json_object and custom temperature.
   // We exclude these parameters dynamically to avoid API 400 validation failures.
   if (
@@ -197,9 +208,11 @@ export function buildOpenAiCompatibleRequestBody(prompt: string, model: string) 
     !model.includes("v4-pro")
   ) {
     body.temperature = 0.2;
-    body.response_format = {
-      type: "json_object",
-    };
+    if (jsonMode) {
+      body.response_format = {
+        type: "json_object",
+      };
+    }
   }
 
   return body;
@@ -369,6 +382,170 @@ async function requestOpenAiCompatible(prompt: string, modelCandidates: string[]
     : new RuntimeError(lastError instanceof Error ? lastError.message : "Model request failed.", "LLM_UNKNOWN_ERROR");
 }
 
+export function parseOpenAiCompatibleStreamEvent(eventText: string): { done: boolean; delta: string } {
+  const data = eventText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.replace(/^data:\s*/, ""))
+    .join("\n")
+    .trim();
+
+  if (!data) {
+    return { done: false, delta: "" };
+  }
+
+  if (data === "[DONE]") {
+    return { done: true, delta: "" };
+  }
+
+  try {
+    const parsed = JSON.parse(data) as {
+      choices?: Array<{
+        delta?: { content?: string | null };
+        message?: { content?: string | null };
+      }>;
+    };
+    return {
+      done: false,
+      delta: parsed.choices?.[0]?.delta?.content ?? parsed.choices?.[0]?.message?.content ?? "",
+    };
+  } catch {
+    return { done: false, delta: "" };
+  }
+}
+
+async function readOpenAiCompatibleTextStream(response: Response, options: StreamMarkdownOptions) {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new RuntimeError("Model stream response body is empty.", "EMPTY_LLM_RESPONSE");
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let markdown = "";
+  let streamDone = false;
+
+  const handleEvent = async (eventText: string) => {
+    const event = parseOpenAiCompatibleStreamEvent(eventText);
+    if (event.done) {
+      streamDone = true;
+      return;
+    }
+
+    if (!event.delta) {
+      return;
+    }
+
+    markdown += event.delta;
+    await options.onDelta?.(event.delta);
+  };
+
+  try {
+    for (;;) {
+      throwIfAborted(options.signal);
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      const events = buffer.split(/\r?\n\r?\n/);
+      buffer = events.pop() ?? "";
+
+      for (const eventText of events) {
+        await handleEvent(eventText);
+      }
+
+      if (done || streamDone) {
+        break;
+      }
+    }
+
+    if (buffer.trim()) {
+      await handleEvent(buffer);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const trimmedMarkdown = markdown.trim();
+  if (!trimmedMarkdown) {
+    throw new RuntimeError("Model returned an empty streamed response.", "EMPTY_LLM_RESPONSE");
+  }
+
+  return trimmedMarkdown;
+}
+
+async function requestOpenAiCompatibleTextStream(prompt: string, modelCandidates: string[], options: StreamMarkdownOptions = {}) {
+  const config = resolveLlmConfig();
+  if (!config.apiKey && activeLlmProfile === "external") {
+    throw new RuntimeError("Missing LLM API key.", "MISSING_API_KEY");
+  }
+
+  throwIfAborted(options.signal);
+  let lastError: unknown;
+
+  for (const model of modelCandidates) {
+    const controller = new AbortController();
+    const isPro = model === config.modelPro;
+    const timeoutMs = isPro ? 60_000 : LIMITS.LLM_TIMEOUT_MS;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const abortListener = () => controller.abort();
+    options.signal?.addEventListener("abort", abortListener, { once: true });
+
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (config.apiKey) {
+        headers.Authorization = `Bearer ${config.apiKey}`;
+      }
+
+      const response = await fetch(joinUrl(config.baseUrl, "chat/completions"), {
+        method: "POST",
+        headers,
+        body: JSON.stringify(buildOpenAiCompatibleRequestBody(prompt, model, { jsonMode: false, stream: true })),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const body = await response.text();
+        const error = new RuntimeError(`Model request failed: ${response.status}`, "LLM_HTTP_ERROR");
+        (error as RuntimeError & { cause?: string }).cause = body;
+        throw error;
+      }
+
+      return {
+        markdown: await readOpenAiCompatibleTextStream(response, options),
+        model,
+      };
+    } catch (error) {
+      if (error instanceof RuntimeError) {
+        lastError = error;
+        if (error.code === "LLM_HTTP_ERROR" && model !== modelCandidates.at(-1)) {
+          continue;
+        }
+        throw error;
+      }
+
+      throwIfAborted(options.signal);
+
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new RuntimeError("Model request timed out.", "LLM_TIMEOUT");
+      }
+
+      lastError = error;
+      if (model === modelCandidates.at(-1)) {
+        throw new RuntimeError(error instanceof Error ? error.message : "Model request failed.", "LLM_UNKNOWN_ERROR");
+      }
+    } finally {
+      clearTimeout(timeoutId);
+      options.signal?.removeEventListener("abort", abortListener);
+    }
+  }
+
+  throw lastError instanceof RuntimeError
+    ? lastError
+    : new RuntimeError(lastError instanceof Error ? lastError.message : "Model request failed.", "LLM_UNKNOWN_ERROR");
+}
+
 async function requestProvider(prompt: string, task: "simple" | "default", options: RequestOptions = {}) {
   const candidates = getModelCandidates(task);
   return requestOpenAiCompatible(prompt, candidates, options);
@@ -466,99 +643,17 @@ export async function refineResearchQuery(
   };
 }
 
-function compactText(text: string | undefined, maxLength: number) {
-  const normalized = (text ?? "").replace(/\s+/g, " ").trim();
-  if (!normalized) {
-    return "";
-  }
-
-  return normalized.length > maxLength ? `${normalized.slice(0, Math.max(0, maxLength - 3))}...` : normalized;
-}
-
-function buildPromptFactCard(source: ResearchSourceResult): SourceFactCard {
-  if (source.sourceFactCard) {
-    return source.sourceFactCard;
-  }
-
-  const title = source.pageTitle || source.candidate.title;
-  const compactFact = compactText(source.bodyExcerpt, 220);
-  return {
-    title,
-    url: source.sourceUrl,
-    summary: compactFact || `No readable facts were extracted from ${title}.`,
-    facts: compactFact
-      ? [
-          {
-            text: compactFact,
-            evidenceUrl: source.sourceUrl,
-            evidenceTitle: title,
-          },
-        ]
-      : [],
-    caveats: source.unresolvedIssues,
-    status: source.status === "success" ? "success" : "partial",
-  };
-}
-
-function buildFinalPromptSources(sources: ResearchSourceResult[] | undefined) {
-  return (sources ?? []).map((source) => ({
-    title: source.pageTitle || source.candidate.title,
-    url: source.sourceUrl,
-    status: source.status,
-    textLength: source.textLength,
-    unresolvedIssues: source.unresolvedIssues,
-    sourceFactCard: buildPromptFactCard(source),
-  }));
-}
-
-export async function generateFinalResult(
-  input: {
-    goal: string;
-    taskType: TaskType;
-    taskSpec: SearchTaskSpec | PublicResearchTaskSpec | SiteOverviewTaskSpec;
-    items?: ExtractedItem[];
-    sources?: ResearchSourceResult[];
-    unresolvedIssues?: string[];
-    conversationContext?: string;
-  },
-  options: RequestOptions = {},
-) {
-  const response = await requestProviderJson(
-    buildFinalResultPrompt({
-      ...input,
-      sources: buildFinalPromptSources(input.sources),
-    }),
-    finalResultSynthesisSchema,
-    "default",
+export async function streamFinalMarkdown(input: FinalSynthesisInput, options: StreamMarkdownOptions = {}) {
+  const response = await requestOpenAiCompatibleTextStream(
+    buildFinalMarkdownPrompt(input),
+    getModelCandidates("simple"),
     options,
   );
 
   return {
-    ...response.data,
+    markdown: response.markdown,
     model: response.model,
-    provider: response.provider,
-  };
-}
-
-export async function generateDirectAnswerResult(
-  input: {
-    goal: string;
-    taskSpec: DirectAnswerTaskSpec;
-    conversationTurns?: ConversationTurn[];
-  },
-  options: RequestOptions = {},
-) {
-  const response = await requestProviderJson(
-    buildDirectAnswerPrompt(input),
-    finalResultSynthesisSchema,
-    "default",
-    options,
-  );
-
-  return {
-    ...response.data,
-    model: response.model,
-    provider: response.provider,
+    provider: "openai-compatible" as const,
   };
 }
 

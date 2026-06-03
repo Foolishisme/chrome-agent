@@ -71,7 +71,8 @@ function renderLiveConversationTurn(renderState: RenderState) {
   }
 
   const liveCopyText = renderState.finalResultDisplayMarkdown;
-  const assistantBody = renderState.currentState.finalResult
+  const hasLiveMarkdown = Boolean(renderState.finalResultDisplayMarkdown);
+  const assistantBody = hasLiveMarkdown
     ? renderMarkdownBlock(renderState.finalResultDisplayMarkdown, renderState.messages.resultsHint)
     : `<p class="muted">${escapeHtml(renderState.currentProgressText)}</p>`;
 

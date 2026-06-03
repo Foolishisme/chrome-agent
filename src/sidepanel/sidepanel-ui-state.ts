@@ -168,6 +168,7 @@ function getFinalResultDisplayMarkdown() {
   return (
     state.currentState.finalResult?.markdown?.trim() ||
     state.currentState.finalResult?.artifacts.find((artifact) => artifact.kind === "markdown")?.content?.trim() ||
+    state.currentState.streamingFinalDraft?.markdown?.trim() ||
     state.currentState.finalResult?.summary?.trim() ||
     ""
   );

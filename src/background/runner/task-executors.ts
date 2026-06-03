@@ -482,6 +482,13 @@ async function executeFinalizeTaskResultStep(context: RuntimeToolExecutorContext
     appendLog: (source, level, message, detail) => appendLog(context.session, source, level, message, detail),
     recordStep: (options) => context.deps.recordStep(options),
     pushState: (stepSummary) => context.deps.pushState(stepSummary),
+    publishFinalDraft: async (markdown) => {
+      context.session.memory.streamingFinalDraft = {
+        markdown,
+        updatedAt: Date.now(),
+      };
+      await context.deps.publishState(context.session);
+    },
   });
   await finishPlanStep(context, stepId, "succeeded", result.summary);
   context.session.memory.runtimeMeta.status = "done";
@@ -517,6 +524,7 @@ function finishTerminalState(context: RuntimeToolExecutorContext, summary: strin
   context.session.memory.runtimeMeta.status = "done";
   context.session.memory.runtimeMeta.currentTool = undefined;
   context.session.memory.liveStepSummary = status === "blocked" ? "Session stopped after a blocked step." : "Session completed with a terminal result.";
+  context.session.memory.streamingFinalDraft = undefined;
 }
 
 function hasFinalizableEvidence(memory: SessionMemory) {
@@ -707,4 +715,3 @@ export async function executeCommerceTask(context: RuntimeToolExecutorContext) {
     await context.deps.publishState(context.session);
   }
 }
-
