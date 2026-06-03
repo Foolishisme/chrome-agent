@@ -202,6 +202,8 @@ export interface CommerceTaskSpec {
   taskType: "commerce_search";
   originalGoal: string;
   outputMode?: OutputMode;
+  currentTimeIso?: string;
+  timezone?: string;
   category?: string;
   budget?: number;
   budgetMin?: number;
@@ -220,6 +222,8 @@ export interface PublicResearchTaskSpec {
   taskType: "public_research";
   originalGoal: string;
   outputMode?: OutputMode;
+  currentTimeIso?: string;
+  timezone?: string;
   searchQuery: string;
   querySource: "rule" | "llm-lite";
   notes: string[];
@@ -232,6 +236,8 @@ export interface SiteOverviewTaskSpec {
   taskType: "site_overview";
   originalGoal: string;
   outputMode?: OutputMode;
+  currentTimeIso?: string;
+  timezone?: string;
   entryMode: "explicit_url" | "resolve_official_home";
   entryUrl?: string;
   siteName?: string;

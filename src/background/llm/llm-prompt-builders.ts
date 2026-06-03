@@ -29,6 +29,13 @@ function formatConversationTurns(turns: ConversationTurn[] | undefined) {
   );
 }
 
+function resolvePromptTimeContext(options: { currentTimeIso?: string; timezone?: string }) {
+  return {
+    currentTimeIso: options.currentTimeIso ?? new Date().toISOString(),
+    timezone: options.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC",
+  };
+}
+
 export function buildTaskRoutePromptWithContext(
   goal: string,
   options: {
@@ -63,11 +70,21 @@ export function buildTaskRoutePromptWithContext(
   ].join("\n");
 }
 
-export function buildCommerceQueryRefinementPrompt(goal: string, conversationContext?: string) {
+export function buildCommerceQueryRefinementPrompt(
+  goal: string,
+  options: {
+    conversationContext?: string;
+    currentTimeIso?: string;
+    timezone?: string;
+  } = {},
+) {
+  const timeContext = resolvePromptTimeContext(options);
   return [
     "You rewrite JD.com on-site shopping queries.",
     "Return JSON only.",
     'Schema: {"searchQuery":"...","reason":"..."}',
+    `Current absolute time: ${timeContext.currentTimeIso}`,
+    `User timezone: ${timeContext.timezone}`,
     "One-shot examples:",
     'User goal: 3000 元以内轻薄本',
     'Output: {"searchQuery":"轻薄本 3000元","reason":"保留预算并收敛到更适合京东站内搜索的商品词"}',
@@ -83,24 +100,36 @@ export function buildCommerceQueryRefinementPrompt(goal: string, conversationCon
     "- Prefer scene, form factor, target user, or brand only when they are clearly implied by the goal.",
     "- Do not add recommendation reasons, sorting criteria, or marketing wording.",
     "- Keep the query short enough for an on-site search box.",
-    ...(conversationContext ? [`Recent conversation context:\n${conversationContext}`] : []),
+    "- Resolve relative time words in the user goal against the current absolute time.",
+    ...(options.conversationContext ? [`Recent conversation context:\n${options.conversationContext}`] : []),
     `User goal: ${goal}`,
   ].join("\n");
 }
 
-export function buildResearchQueryRefinementPrompt(goal: string, conversationContext?: string) {
+export function buildResearchQueryRefinementPrompt(
+  goal: string,
+  options: {
+    conversationContext?: string;
+    currentTimeIso?: string;
+    timezone?: string;
+  } = {},
+) {
+  const timeContext = resolvePromptTimeContext(options);
   return [
     "You rewrite public web research queries for Google.",
     "Return JSON only.",
     'Schema: {"searchQuery":"...","reason":"..."}',
+    `Current absolute time: ${timeContext.currentTimeIso}`,
+    `User timezone: ${timeContext.timezone}`,
     "Rules:",
     "- Rewrite directly from the user goal.",
     "- Keep the query concise and information-seeking.",
     "- Prefer key entities, topic words, and comparison terms when present.",
+    "- Resolve relative time words such as today, yesterday, this week, recent, latest, 当前, 今天, 最近, 最新 against the current absolute time.",
     "- Do not add site filters unless the user explicitly asks for them.",
     "- Do not add words like recommendation, best, buy, price unless the goal clearly needs them.",
     "- Keep the query short enough for a normal Google search box.",
-    ...(conversationContext ? [`Recent conversation context:\n${conversationContext}`] : []),
+    ...(options.conversationContext ? [`Recent conversation context:\n${options.conversationContext}`] : []),
     `User goal: ${goal}`,
   ].join("\n");
 }
@@ -178,6 +207,7 @@ export function buildFinalResultPrompt(options: {
   unresolvedIssues?: string[];
   conversationContext?: string;
 }) {
+  const timeContext = resolvePromptTimeContext(options.taskSpec);
   return [
     "Task: synthesize the provided structured evidence into the final user-facing answer.",
     "",
@@ -193,6 +223,10 @@ export function buildFinalResultPrompt(options: {
     "5. Attach source links to important factual claims. If evidence is insufficient, say so briefly.",
     "6. Include caveats only when they affect the answer.",
     "7. For site_overview, state pages read, failed/partial pages, and coverage limits.",
+    "8. Resolve relative time wording in the user goal against the current absolute time; do not silently treat old evidence as current.",
+    "",
+    `Current absolute time: ${timeContext.currentTimeIso}`,
+    `User timezone: ${timeContext.timezone}`,
     "",
     "Style guidance:",
     "- Use a table only when it makes comparison easier.",
@@ -216,6 +250,7 @@ export function buildFinalResultPrompt(options: {
 }
 
 export function buildFinalMarkdownPrompt(options: FinalSynthesisInput) {
+  const timeContext = resolvePromptTimeContext(options.taskSpec);
   return [
     "Task: synthesize the provided structured evidence into the final user-facing answer.",
     "",
@@ -230,6 +265,10 @@ export function buildFinalMarkdownPrompt(options: FinalSynthesisInput) {
     "5. Attach source links to important factual claims when URLs are present in evidence.",
     "6. Include caveats only when they affect the answer.",
     "7. For site_overview, state pages read, failed/partial pages, and coverage limits.",
+    "8. Resolve relative time wording in the user goal against the current absolute time; do not silently treat old evidence as current.",
+    "",
+    `Current absolute time: ${timeContext.currentTimeIso}`,
+    `User timezone: ${timeContext.timezone}`,
     "",
     "Style guidance:",
     "- Use short sections and bullets when helpful.",

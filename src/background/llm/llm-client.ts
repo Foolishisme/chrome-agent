@@ -570,10 +570,16 @@ export async function refineCommerceSearchQuery(
   goal: string,
   options: RequestOptions & {
     conversationContext?: string;
+    currentTimeIso?: string;
+    timezone?: string;
   } = {},
 ) {
   const response = await requestProviderJson(
-    buildCommerceQueryRefinementPrompt(goal, options.conversationContext),
+    buildCommerceQueryRefinementPrompt(goal, {
+      conversationContext: options.conversationContext,
+      currentTimeIso: options.currentTimeIso,
+      timezone: options.timezone,
+    }),
     queryRefinementSchema,
     "simple",
     options,
@@ -627,10 +633,16 @@ export async function refineResearchQuery(
   goal: string,
   options: RequestOptions & {
     conversationContext?: string;
+    currentTimeIso?: string;
+    timezone?: string;
   } = {},
 ) {
   const response = await requestProviderJson(
-    buildResearchQueryRefinementPrompt(goal, options.conversationContext),
+    buildResearchQueryRefinementPrompt(goal, {
+      conversationContext: options.conversationContext,
+      currentTimeIso: options.currentTimeIso,
+      timezone: options.timezone,
+    }),
     queryRefinementSchema,
     "simple",
     options,

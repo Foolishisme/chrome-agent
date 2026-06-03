@@ -12,6 +12,10 @@ import {
   setActiveLlmProfile,
   streamFinalMarkdown,
 } from "../src/background/llm/llm-client";
+import {
+  buildFinalMarkdownPrompt,
+  buildResearchQueryRefinementPrompt,
+} from "../src/background/llm/llm-prompt-builders";
 
 afterEach(() => {
   setActiveLlmProfile("external");
@@ -40,6 +44,46 @@ describe("llm client helpers", () => {
     expect(body.stream).toBe(true);
     expect(body.response_format).toBeUndefined();
     expect(body.messages[0]?.content).toBe("hello");
+  });
+
+  it("includes current time in research query refinement prompts", () => {
+    const prompt = buildResearchQueryRefinementPrompt("今天 OpenAI 有什么新闻", {
+      currentTimeIso: "2026-06-03T04:00:00.000Z",
+      timezone: "Asia/Shanghai",
+    });
+
+    expect(prompt).toContain("Current absolute time: 2026-06-03T04:00:00.000Z");
+    expect(prompt).toContain("User timezone: Asia/Shanghai");
+    expect(prompt).toContain("Resolve relative time words");
+  });
+
+  it("includes current time in final markdown prompts", () => {
+    const prompt = buildFinalMarkdownPrompt({
+      goal: "总结今天的新闻",
+      taskType: "public_research",
+      taskSpec: {
+        taskType: "public_research",
+        originalGoal: "总结今天的新闻",
+        outputMode: "inline",
+        currentTimeIso: "2026-06-03T04:00:00.000Z",
+        timezone: "Asia/Shanghai",
+        searchQuery: "OpenAI news June 3 2026",
+        querySource: "llm-lite",
+        notes: [],
+        searchEngine: "google",
+        candidateLimit: 5,
+        sourceTargetCount: 3,
+      },
+      evidence: {
+        kind: "public_research",
+        sources: [],
+      },
+      unresolvedIssues: [],
+    });
+
+    expect(prompt).toContain("Current absolute time: 2026-06-03T04:00:00.000Z");
+    expect(prompt).toContain("User timezone: Asia/Shanghai");
+    expect(prompt).toContain("do not silently treat old evidence as current");
   });
 
   it("parses OpenAI-compatible stream events", () => {

@@ -102,6 +102,8 @@ export async function createInitialSession(
       const refined = await refineCommerceSearchQuery(routeGoal, {
         signal: options.signal,
         conversationContext,
+        currentTimeIso,
+        timezone,
       });
       return {
         searchQuery: refined.searchQuery,
@@ -112,6 +114,8 @@ export async function createInitialSession(
       const refined = await refineResearchQuery(routeGoal, {
         signal: options.signal,
         conversationContext,
+        currentTimeIso,
+        timezone,
       });
       return {
         searchQuery: refined.searchQuery,

@@ -13,7 +13,7 @@ import type {
 } from "../../shared/agent-domain-model";
 
 interface RefineSearchQuery {
-  (goal: string): Promise<{ searchQuery: string; reason: string } | undefined>;
+  (goal: string, context?: { currentTimeIso: string; timezone: string }): Promise<{ searchQuery: string; reason: string } | undefined>;
 }
 
 interface ClassifyTaskType {
@@ -106,6 +106,13 @@ function resolveCurrentTimeIso(currentTimeIso?: string) {
 
 function resolveTimezone(timezone?: string) {
   return timezone ?? (Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+}
+
+function resolveRuntimeTimeContext(options: { currentTimeIso?: string; timezone?: string } = {}) {
+  return {
+    currentTimeIso: resolveCurrentTimeIso(options.currentTimeIso),
+    timezone: resolveTimezone(options.timezone),
+  };
 }
 
 function buildFallbackResearchQuery(goal: string) {
@@ -250,15 +257,23 @@ function extractSiteName(goal: string) {
   return matched?.[1]?.trim().replace(/\s+/g, " ");
 }
 
-export function compileSiteOverviewTask(goal: string): SiteOverviewTaskSpec {
+export function compileSiteOverviewTask(
+  goal: string,
+  options: {
+    currentTimeIso?: string;
+    timezone?: string;
+  } = {},
+): SiteOverviewTaskSpec {
   const entryUrl = extractExplicitUrl(goal);
   const siteName = normalizeDomainFromUrl(entryUrl) ?? extractSiteName(goal);
   const officialSearchQuery = siteName ? `${siteName} official website` : buildFallbackResearchQuery(goal);
+  const runtimeTime = resolveRuntimeTimeContext(options);
 
   return {
     taskType: "site_overview",
     originalGoal: goal,
     outputMode: detectOutputMode(goal),
+    ...runtimeTime,
     entryMode: entryUrl ? "explicit_url" : "resolve_official_home",
     entryUrl,
     siteName,
@@ -302,16 +317,19 @@ async function compileCommerceTask(
   options: {
     refineWithLiteModel?: RefineSearchQuery;
     conversationContext?: string;
+    currentTimeIso?: string;
+    timezone?: string;
   } = {},
 ): Promise<CommerceTaskSpec> {
   const topK = extractTopK(goal);
   const llmInputLimit = buildLlmInputLimit(topK);
   const extractLimit = buildExtractLimit(llmInputLimit);
+  const runtimeTime = resolveRuntimeTimeContext(options);
   if (!options.refineWithLiteModel) {
     throw new RuntimeError("Search query planning requires the lite model.", "SEARCH_QUERY_PLANNER_MISSING");
   }
 
-  const refined = await options.refineWithLiteModel(goal);
+  const refined = await options.refineWithLiteModel(goal, runtimeTime);
   const searchQuery = refined?.searchQuery?.trim();
   if (!searchQuery) {
     throw new RuntimeError("The lite model did not return a usable search query.", "SEARCH_QUERY_EMPTY");
@@ -321,6 +339,7 @@ async function compileCommerceTask(
     taskType: "commerce_search",
     originalGoal: goal,
     outputMode: detectOutputMode(goal),
+    ...runtimeTime,
     topK,
     llmInputLimit,
     extractLimit,
@@ -337,13 +356,17 @@ export async function compilePublicResearchTask(
   options: {
     refineWithLiteModel?: RefineSearchQuery;
     conversationContext?: string;
+    currentTimeIso?: string;
+    timezone?: string;
   } = {},
 ): Promise<PublicResearchTaskSpec> {
+  const runtimeTime = resolveRuntimeTimeContext(options);
   if (!options.refineWithLiteModel) {
     return {
       taskType: "public_research",
       originalGoal: goal,
       outputMode: detectOutputMode(goal),
+      ...runtimeTime,
       searchQuery: buildFallbackResearchQuery(goal),
       querySource: "rule",
       notes: ["小模型不可用，回退到规则生成 Google 查询词"],
@@ -354,7 +377,7 @@ export async function compilePublicResearchTask(
   }
 
   try {
-    const refined = await options.refineWithLiteModel(goal);
+    const refined = await options.refineWithLiteModel(goal, runtimeTime);
     const searchQuery = refined?.searchQuery?.trim();
     if (!searchQuery) {
       throw new RuntimeError("The lite model did not return a usable research query.", "RESEARCH_QUERY_EMPTY");
@@ -364,6 +387,7 @@ export async function compilePublicResearchTask(
       taskType: "public_research",
       originalGoal: goal,
       outputMode: detectOutputMode(goal),
+      ...runtimeTime,
       searchQuery,
       querySource: "llm-lite",
       notes: [refined?.reason ?? "lite model generated the Google query"],
@@ -377,6 +401,7 @@ export async function compilePublicResearchTask(
       taskType: "public_research",
       originalGoal: goal,
       outputMode: detectOutputMode(goal),
+      ...runtimeTime,
       searchQuery: buildFallbackResearchQuery(goal),
       querySource: "rule",
       notes: [`小模型不可用，回退到规则生成 Google 查询词：${message}`],
@@ -432,6 +457,8 @@ export async function compileTaskSpec(
   if (taskType === "commerce_search") {
     const taskSpec = await compileCommerceTask(goal, {
       refineWithLiteModel: options.refineCommerceWithLiteModel,
+      currentTimeIso: options.currentTimeIso,
+      timezone: options.timezone,
     });
     return {
       taskType,
@@ -440,7 +467,10 @@ export async function compileTaskSpec(
   }
 
   if (taskType === "site_overview") {
-    const taskSpec = compileSiteOverviewTask(goal);
+    const taskSpec = compileSiteOverviewTask(goal, {
+      currentTimeIso: options.currentTimeIso,
+      timezone: options.timezone,
+    });
     return {
       taskType,
       taskSpec,
@@ -449,6 +479,8 @@ export async function compileTaskSpec(
 
   const taskSpec = await compilePublicResearchTask(goal, {
     refineWithLiteModel: options.refineResearchWithLiteModel,
+    currentTimeIso: options.currentTimeIso,
+    timezone: options.timezone,
   });
   return {
     taskType,

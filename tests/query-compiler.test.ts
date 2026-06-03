@@ -13,13 +13,23 @@ import {
 describe("query compiler", () => {
   it("builds the search query directly from the lite model", async () => {
     const task = await compileSearchTask("帮我找 5000 元左右的笔记本电脑，对比前 5 个推荐", {
-      refineWithLiteModel: async () => ({
-        searchQuery: "轻薄本 5000元",
-        reason: "保留预算并收敛到更适合站内搜索的商品词",
-      }),
+      refineWithLiteModel: async (_goal, context) => {
+        expect(context).toEqual({
+          currentTimeIso: "2026-06-03T04:00:00.000Z",
+          timezone: "Asia/Shanghai",
+        });
+        return {
+          searchQuery: "轻薄本 5000元",
+          reason: "保留预算并收敛到更适合站内搜索的商品词",
+        };
+      },
+      currentTimeIso: "2026-06-03T04:00:00.000Z",
+      timezone: "Asia/Shanghai",
     });
 
     expect(task.taskType).toBe("commerce_search");
+    expect(task.currentTimeIso).toBe("2026-06-03T04:00:00.000Z");
+    expect(task.timezone).toBe("Asia/Shanghai");
     expect(task.topK).toBe(5);
     expect(task.llmInputLimit).toBe(10);
     expect(task.extractLimit).toBeGreaterThanOrEqual(12);
@@ -180,9 +190,13 @@ describe("query compiler", () => {
       refineWithLiteModel: async () => {
         throw new Error("provider unavailable");
       },
+      currentTimeIso: "2026-06-03T04:00:00.000Z",
+      timezone: "Asia/Shanghai",
     });
 
     expect(task.querySource).toBe("rule");
+    expect(task.currentTimeIso).toBe("2026-06-03T04:00:00.000Z");
+    expect(task.timezone).toBe("Asia/Shanghai");
     expect(task.searchQuery).toContain("Playwright");
     expect(task.searchQuery).toContain("Selenium");
     expect(task.notes[0]).toContain("回退到规则");
@@ -235,11 +249,15 @@ describe("query compiler", () => {
   it("builds a site overview task spec with entry resolution", async () => {
     const compiled = await compileTaskSpec("OpenAI 的产品有哪些", {
       taskType: "site_overview",
+      currentTimeIso: "2026-06-03T04:00:00.000Z",
+      timezone: "Asia/Shanghai",
     });
 
     expect(compiled.taskType).toBe("site_overview");
     expect(compiled.taskSpec).toMatchObject({
       taskType: "site_overview",
+      currentTimeIso: "2026-06-03T04:00:00.000Z",
+      timezone: "Asia/Shanghai",
       entryMode: "resolve_official_home",
       siteName: "OpenAI",
       candidateLimit: 6,
