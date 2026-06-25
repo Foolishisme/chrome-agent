@@ -73,7 +73,9 @@ function renderLiveConversationTurn(renderState: RenderState) {
   const liveCopyText = renderState.finalResultDisplayMarkdown;
   const hasLiveMarkdown = Boolean(renderState.finalResultDisplayMarkdown);
   const assistantBody = hasLiveMarkdown
-    ? renderMarkdownBlock(renderState.finalResultDisplayMarkdown, renderState.messages.resultsHint)
+    ? `${renderMarkdownBlock(renderState.finalResultDisplayMarkdown, renderState.messages.resultsHint)}${
+        renderState.currentState.finalResult ? "" : '<span class="streaming-caret" aria-hidden="true"></span>'
+      }`
     : `<p class="muted">${escapeHtml(renderState.currentProgressText)}</p>`;
 
   return `
@@ -85,29 +87,23 @@ function renderLiveConversationTurn(renderState: RenderState) {
       </div>
       <div class="conversation-turn-row conversation-turn-row-assistant">
         <div class="conversation-turn conversation-turn-assistant">
-          <div class="conversation-turn-body">
+          <div class="conversation-turn-body" data-live-markdown-body>
             ${
               renderState.currentState.finalResult
                 ? assistantBody
                 : `<div class="conversation-turn-body-pending">${assistantBody}</div>`
             }
           </div>
-          ${
-            liveCopyText
-              ? `
-                <div class="conversation-turn-assistant-footer">
-                  <button
-                    type="button"
-                    class="action-icon-button"
-                    title="${escapeHtml(renderState.messages.resultCopyButton)}"
-                    data-copy-live-result="true"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                  </button>
-                </div>
-              `
-              : ""
-          }
+          <div class="conversation-turn-assistant-footer${liveCopyText ? "" : " hidden"}" data-live-markdown-footer>
+            <button
+              type="button"
+              class="action-icon-button"
+              title="${escapeHtml(renderState.messages.resultCopyButton)}"
+              data-copy-live-result="true"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>

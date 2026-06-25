@@ -38,8 +38,8 @@ export interface FinalizeTaskResultOutput {
   finalStatus: FinalResult["status"];
 }
 
-const FINAL_DRAFT_FLUSH_INTERVAL_MS = 250;
-const FINAL_DRAFT_FLUSH_CHAR_DELTA = 80;
+const FINAL_DRAFT_FLUSH_INTERVAL_MS = 80;
+const FINAL_DRAFT_FLUSH_CHAR_DELTA = 32;
 
 function compactText(text: string | undefined, maxLength: number) {
   const normalized = (text ?? "").replace(/\s+/g, " ").trim();

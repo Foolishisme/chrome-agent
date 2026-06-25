@@ -121,7 +121,9 @@ describe("runtime bootstrap", () => {
 
   it("streams the direct answer from the lite router without compiling a runtime plan", async () => {
     streamTaskPlanOrDirectAnswerMock.mockImplementationOnce(async (_goal, options) => {
-      await options.onDirectAnswerDelta?.("事件循环负责调度任务。");
+      for (const delta of ["事件", "循环", "负责", "调度", "任务", "。"]) {
+        await options.onDirectAnswerDelta?.(delta);
+      }
       return {
         kind: "direct_answer",
         markdown: "事件循环负责调度任务。",
@@ -161,7 +163,7 @@ describe("runtime bootstrap", () => {
     expect(planTaskWithLiteModelMock).not.toHaveBeenCalled();
     expect(detectTaskTypeWithLiteModelMock).not.toHaveBeenCalled();
     expect(compileTaskSpecMock).not.toHaveBeenCalled();
-    expect(publishBootstrapState).toHaveBeenCalled();
+    expect(publishBootstrapState).toHaveBeenCalledTimes(3);
     expect(result.session.memory.finalResult?.markdown).toBe("事件循环负责调度任务。");
     expect(result.session.memory.runtimeMeta.status).toBe("done");
     expect(result.session.memory.plan).toEqual([]);

@@ -26,11 +26,100 @@ import {
   persistDraftLlmProfile,
   toggleDraftSearchPreference,
 } from "./sidepanel-ui-state";
+import { renderMarkdownBlock } from "./renderers/markdown";
 
 const app = document.getElementById("app")!;
+let lastRenderedStructureKey = "";
+let pendingLiveMarkdown: string | undefined;
+let pendingLiveStructureKey = "";
+let liveRenderFrame: number | undefined;
+
+function getRenderStructureKey(renderState: ReturnType<typeof getRenderState>) {
+  return JSON.stringify({
+    currentState: {
+      ...renderState.currentState,
+      streamingFinalDraft: undefined,
+      updatedAt: undefined,
+    },
+    draftGoal: renderState.draftGoal,
+    uiNotice: renderState.uiNotice,
+    uiNoticeTone: renderState.uiNoticeTone,
+    showConversationDrawer: renderState.showConversationDrawer,
+    pendingSessionSubmission: renderState.pendingSessionSubmission,
+    activeSearchPreference: renderState.activeSearchPreference,
+    selectedLlmProfile: renderState.selectedLlmProfile,
+  });
+}
+
+function requestRenderFrame(callback: FrameRequestCallback) {
+  return typeof window.requestAnimationFrame === "function"
+    ? window.requestAnimationFrame(callback)
+    : window.setTimeout(() => callback(performance.now()), 16);
+}
+
+function cancelRenderFrame(frame: number) {
+  if (typeof window.cancelAnimationFrame === "function") {
+    window.cancelAnimationFrame(frame);
+    return;
+  }
+
+  window.clearTimeout(frame);
+}
+
+function cancelLiveMarkdownRender() {
+  pendingLiveMarkdown = undefined;
+  pendingLiveStructureKey = "";
+  if (liveRenderFrame !== undefined) {
+    cancelRenderFrame(liveRenderFrame);
+    liveRenderFrame = undefined;
+  }
+}
+
+function scheduleLiveMarkdownRender(markdown: string, structureKey: string, emptyText: string) {
+  pendingLiveMarkdown = markdown;
+  pendingLiveStructureKey = structureKey;
+  if (liveRenderFrame !== undefined) {
+    return;
+  }
+
+  liveRenderFrame = requestRenderFrame(() => {
+    liveRenderFrame = undefined;
+    const nextMarkdown = pendingLiveMarkdown;
+    const nextStructureKey = pendingLiveStructureKey;
+    pendingLiveMarkdown = undefined;
+    pendingLiveStructureKey = "";
+    if (nextMarkdown === undefined || nextStructureKey !== lastRenderedStructureKey) {
+      return;
+    }
+
+    const body = app.querySelector<HTMLElement>("[data-live-markdown-body]");
+    const footer = app.querySelector<HTMLElement>("[data-live-markdown-footer]");
+    if (!body || !footer) {
+      return;
+    }
+
+    body.innerHTML = `<div class="conversation-turn-body-pending">${renderMarkdownBlock(
+      nextMarkdown,
+      emptyText,
+    )}<span class="streaming-caret" aria-hidden="true"></span></div>`;
+    footer.classList.toggle("hidden", !nextMarkdown);
+  });
+}
 
 function render() {
   const renderState = getRenderState();
+  const structureKey = getRenderStructureKey(renderState);
+  if (
+    structureKey === lastRenderedStructureKey &&
+    renderState.currentState.status === "running" &&
+    !renderState.currentState.finalResult &&
+    app.querySelector("[data-live-markdown-body]")
+  ) {
+    scheduleLiveMarkdownRender(renderState.finalResultDisplayMarkdown, structureKey, renderState.messages.resultsHint);
+    return;
+  }
+
+  cancelLiveMarkdownRender();
   const showResultsSection =
     Boolean(renderState.currentState.finalResult) &&
     (renderState.currentState.finalResult?.outputMode === "artifact" || renderState.documentArtifacts.length > 0);
@@ -39,7 +128,7 @@ function render() {
 
   app.innerHTML = `
     ${isRunning ? '<div class="global-progress-bar"></div>' : ''}
-    <div class="panel-shell">
+    <div class="panel-shell${isRunning ? " panel-shell-running" : ""}">
       <section class="hero">
         <div class="hero-layout">
           <div class="hero-icon">
@@ -83,6 +172,7 @@ function render() {
       }
     </div>
   `;
+  lastRenderedStructureKey = structureKey;
 }
 
 app.addEventListener("input", (event) => {
@@ -272,4 +362,3 @@ document.getElementById("save-settings-button")?.addEventListener("click", () =>
 
 render();
 void bootstrap();
-

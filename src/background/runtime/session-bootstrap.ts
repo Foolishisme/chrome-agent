@@ -9,6 +9,9 @@ import { appendLog, createSessionId } from "./runtime-session-state";
 import { getOrPrepareSessionTab } from "./tab-host";
 import { createFinalResult, deriveKeyResultsFromMarkdown, deriveSummaryFromMarkdown } from "../tools/final-result-builders";
 
+const DIRECT_ANSWER_DRAFT_FLUSH_INTERVAL_MS = 80;
+const DIRECT_ANSWER_DRAFT_FLUSH_CHAR_DELTA = 32;
+
 async function getSessionAnchorTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) {
@@ -124,6 +127,8 @@ export async function createInitialSession(
 
   let route: LiteTaskPlan;
   try {
+    let lastPublishedDraft = "";
+    let lastPublishedAt = 0;
     const routed = await streamTaskPlanOrDirectAnswer(goal, {
       signal: options.signal,
       conversationContext,
@@ -138,7 +143,16 @@ export async function createInitialSession(
           updatedAt: Date.now(),
         };
         memory.liveStepSummary = "Streaming the direct answer.";
-        await options.publishBootstrapState?.(session);
+        const draft = memory.streamingFinalDraft.markdown;
+        const now = Date.now();
+        if (
+          now - lastPublishedAt >= DIRECT_ANSWER_DRAFT_FLUSH_INTERVAL_MS ||
+          draft.length - lastPublishedDraft.length >= DIRECT_ANSWER_DRAFT_FLUSH_CHAR_DELTA
+        ) {
+          lastPublishedAt = now;
+          lastPublishedDraft = draft;
+          await options.publishBootstrapState?.(session);
+        }
       },
     });
 

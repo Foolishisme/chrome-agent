@@ -489,6 +489,43 @@ describe("sidepanel result actions", () => {
     });
   });
 
+  it("updates streamed markdown without rebuilding the side panel shell", async () => {
+    await loadSidepanel();
+    const runningState = createRunningState();
+    onRuntimeMessage?.({
+      type: "SESSION_UPDATE",
+      payload: runningState,
+    });
+
+    const panelShell = document.querySelector(".panel-shell");
+    const liveTurn = document.querySelector(".conversation-turn-pair-live");
+    const goalInput = document.getElementById("goal-input");
+    const liveBody = document.querySelector("[data-live-markdown-body]");
+
+    onRuntimeMessage?.({
+      type: "SESSION_UPDATE",
+      payload: {
+        ...runningState,
+        streamingFinalDraft: {
+          markdown: "## 结论\n第一段流式内容。",
+          updatedAt: Date.now(),
+        },
+        updatedAt: Date.now(),
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(document.body.textContent).toContain("第一段流式内容。");
+    });
+
+    expect(document.querySelector(".panel-shell")).toBe(panelShell);
+    expect(document.querySelector(".conversation-turn-pair-live")).toBe(liveTurn);
+    expect(document.getElementById("goal-input")).toBe(goalInput);
+    expect(document.querySelector("[data-live-markdown-body]")).toBe(liveBody);
+    expect(document.querySelector("[data-live-markdown-footer]")?.classList.contains("hidden")).toBe(false);
+    expect(document.querySelector(".streaming-caret")).not.toBeNull();
+  });
+
   it("does not submit stop when Enter is pressed during a running session", async () => {
     await loadSidepanel();
     onRuntimeMessage?.({

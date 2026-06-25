@@ -78,9 +78,11 @@ Runtime 负责 session 生命周期、stop、最小状态广播、conversation a
 
 Runner 当前按任务族执行 bounded round：
 
-`taskSpec -> bounded round execution -> decideRoundAction -> finalize | replan | abort`
+`taskSpec -> bounded round execution -> evidence bundle -> decideRoundAction -> finalize | replan | abort`
 
 这里的 plan 是当前轮局部计划，不是持久 workflow engine，也不是无限 DAG。
+
+public research 的跨模块边界是聚合证据包，而不是内部候选准备过程。runner 可以内部执行搜索、规则过滤、LLM-lite 重排、并发读取、失败归并和恢复；后续 LLM 只接收 `ResearchEvidenceBundle` 这类脱水后的证据摘要。
 
 ### BrowserDriver 和 Content Bridge
 
@@ -92,6 +94,24 @@ Runner 当前按任务族执行 bounded round：
 
 Memory 保存结构化工作状态、候选、来源、失败、工具级 run log 和 conversation archive 所需终态信息。页面噪音进入 LLM 前必须被裁剪或结构化。思考链或中间推理过程不进入前端状态、conversation archive 或 run log。
 
+### 阶段 I/O 暴露层级
+
+当前主链按以下层级隔离复杂度：
+
+- `TaskSpec`：任务语义，例如用户目标、搜索 query、明确 URL、时间上下文和输出模式。
+- `RuntimePolicy`：内部执行策略，例如候选池大小、默认读取页数、并发、正文裁剪长度、最大轮次、重试和恢复策略。
+- `EvidenceBundle`：LLM 可见证据，例如 public research 的裁剪页面结果、关键事实、来源 URL 和影响结论的 caveats。
+- `FinalResult`：用户可见终态结果，只包含答案、必要引用、必要错误或阻塞说明。
+- `DebugBundle/run log`：显式调试材料，可包含过滤诊断、工具事件和错误上下文，但不作为普通产品输出。
+
+模块调用方默认只能看到稳定阶段输入和阶段输出。内部过程可以细分，但不得把过滤、重排、等待、重试、恢复、并发、默认数量或 selector/action 细节提升为跨模块 contract。
+
+### LLM 输入契约
+
+LLM prompt 必须通过显式 prompt DTO 构造，不能直接 `JSON.stringify(taskSpec)`、`JSON.stringify(memory)` 或传入 raw tool result。prompt builder 负责把 task spec 脱敏为语义字段，把页面结果裁剪为 evidence bundle。
+
+round decision 只负责判断 `finalize / replan / abort`，并且只允许调整 query/notes。候选数、读取数、并发、裁剪长度、extract limit、retry 和恢复策略由 runtime policy 决定。
+
 ## 5. 不变量
 
 - runtime-visible tool result 必须可结构化消费。
@@ -99,10 +119,11 @@ Memory 保存结构化工作状态、候选、来源、失败、工具级 run lo
 - raw DOM、selector、等待、重试和局部恢复细节留在 content action、tool 或 runtime driver 内部。
 - 每轮 bounded execution 必须受 action、step、time 和 failure policy 约束。
 - 终态结果始终是 `success / partial / failed / blocked`。
+- 用户普通结果只展示最终答案和必要引用；过程细节只在显式 debug 路径可见。
 - 未接入当前主链的 driver、facade、bridge、helper、adapter 或测试不进入当前事实源。
 
 ## 6. UI 契约
 
 Side Panel 只负责启动/停止会话、维护会话历史、展示最小运行占位、简短失败提示、最终回答和 artifact 操作。前端不展示 runtime debug panel、执行 timeline、调试日志、当前 step/tool 或 thinking 过程。路由和执行决策留给 runtime、runner 和 LLM 边界。
 
-更新日期：2026-05-20
+更新日期：2026-06-03

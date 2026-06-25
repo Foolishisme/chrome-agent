@@ -540,6 +540,10 @@ body {
   margin-top: 6px;
 }
 
+.conversation-turn-assistant-footer.hidden {
+  display: none;
+}
+
 .action-icon-button {
   display: inline-flex;
   align-items: center;
@@ -569,6 +573,12 @@ body {
   background: transparent;
 }
 
+.panel-shell-running .section,
+.panel-shell-running .section-body,
+.panel-shell-running .conversation-turn {
+  animation: none;
+}
+
 .conversation-turn-actions {
   display: flex;
   gap: 6px;
@@ -595,6 +605,29 @@ body {
 
 .conversation-turn-body-pending .muted {
   animation: breathe 2.4s ease-in-out infinite;
+}
+
+.streaming-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: -0.12em;
+  border-radius: 1px;
+  background: currentColor;
+  animation: streamingCaretBlink 900ms steps(1) infinite;
+}
+
+@keyframes streamingCaretBlink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+
+  46%,
+  100% {
+    opacity: 0;
+  }
 }
 
 .goal-input-shell {
@@ -896,6 +929,39 @@ body {
   font-family: Consolas, "SFMono-Regular", Monaco, monospace;
 }
 
+.markdown-output pre {
+  margin: 12px 0;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface-muted);
+}
+
+.markdown-output pre code {
+  display: block;
+  min-width: max-content;
+  padding: 12px 14px;
+  border-radius: 0;
+  background: transparent;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.markdown-output blockquote {
+  margin: 12px 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--color-border-accent);
+  color: var(--color-text-muted);
+}
+
+.markdown-output blockquote > :first-child {
+  margin-top: 0;
+}
+
+.markdown-output blockquote > :last-child {
+  margin-bottom: 0;
+}
+
 .markdown-list {
   margin: 10px 0;
   padding-left: 20px;
@@ -903,6 +969,10 @@ body {
 
 .markdown-list li + li {
   margin-top: 6px;
+}
+
+.markdown-list .markdown-list {
+  margin: 6px 0 0;
 }
 
 .markdown-table-wrap {
